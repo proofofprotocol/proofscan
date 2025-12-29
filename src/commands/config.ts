@@ -4,7 +4,9 @@
 
 import { Command } from 'commander';
 import { createInterface } from 'readline';
+import { readFile } from 'fs/promises';
 import { ConfigManager } from '../config/index.js';
+import { readClipboard } from '../utils/clipboard.js';
 import {
   parseConnectorJson,
   toConnector,
@@ -138,17 +140,49 @@ Supported JSON formats:
   Array:           [ { "id": "...", "command": "...", ... }, ... ]
 
 Examples:
+  pfscan config add --clip             # Read from clipboard
+  pfscan config add --clip --dry-run   # Preview clipboard content
+  pfscan config add --file mcp.json    # Read from file
   pfscan config add                    # Paste JSON interactively
-  pfscan config add --dry-run          # Preview without writing
-  pfscan config add --overwrite        # Update existing connectors
-  cat mcp.json | pfscan config add     # Pipe from file
+  cat mcp.json | pfscan config add     # Pipe from stdin
 `)
+    .option('--clip', 'Read JSON from system clipboard')
+    .option('--file <path>', 'Read JSON from file')
     .option('--overwrite', 'Overwrite existing connector IDs')
     .option('--dry-run', 'Parse and show what would be added, without writing')
     .action(async (options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
-        const jsonInput = await readStdinJson();
+
+        // Read input: --clip > --file > stdin/interactive
+        let jsonInput: string;
+        if (options.clip) {
+          try {
+            jsonInput = readClipboard();
+            if (!jsonInput || jsonInput.trim().length === 0) {
+              outputError('Clipboard is empty\nHint: Use --file <path> or pipe JSON via stdin.');
+              process.exit(1);
+            }
+          } catch (error) {
+            outputError(
+              'Failed to read clipboard',
+              error instanceof Error ? error : undefined
+            );
+            process.exit(1);
+          }
+        } else if (options.file) {
+          try {
+            jsonInput = await readFile(options.file, 'utf-8');
+          } catch (error) {
+            outputError(
+              `Failed to read file: ${options.file}`,
+              error instanceof Error ? error : undefined
+            );
+            process.exit(1);
+          }
+        } else {
+          jsonInput = await readStdinJson();
+        }
 
         // Parse JSON
         const parseResult = parseConnectorJson(jsonInput);
