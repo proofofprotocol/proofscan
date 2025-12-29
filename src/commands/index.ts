@@ -12,3 +12,6 @@ export * from './tree.js';
 export * from './explore.js';
 export * from './status.js';
 export * from './events.js';
+
+// Phase 2.2 new commands
+export * from './rpc.js';

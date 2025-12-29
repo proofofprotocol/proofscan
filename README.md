@@ -24,7 +24,7 @@ Or run without installing:
 npx proofscan --help
 ```
 
-## CLI Commands (v0.3.0)
+## CLI Commands (v0.4.0)
 
 The CLI is available as both `pfscan` (short) and `proofscan` (full).
 
@@ -37,6 +37,7 @@ Common Commands:
   explore, e    Interactive data browser
   scan, s       Run a new scan
   status, st    Show system status
+  rpc           View RPC call details (list, show)
 
 Management:
   archive, a    Archive and prune old data
@@ -178,6 +179,89 @@ $ pfscan explore
 ```bash
 pfscan explore                    # Start from connectors
 pfscan explore --session abc123   # Jump to specific session
+```
+
+## RPC Command (Phase 2.2)
+
+The `rpc` command provides detailed inspection of individual RPC calls.
+
+### List RPCs for a Session
+
+```bash
+$ pfscan rpc list --session f2442c
+Time         St RPC      Method                         Latency
+----------------------------------------------------------------
+21:01:59.037 ✓ 2        tools/list                     12ms
+21:01:58.743 ✓ 1        initialize                     269ms
+
+2 RPCs: 2 OK, 0 ERR, 0 pending
+hint: Use `pfscan rpc show --session <ses> --id <rpc>` for details
+```
+
+### Show RPC Details
+
+```bash
+$ pfscan rpc show --session f2442c --id 2
+════════════════════════════════════════════════════════════
+RPC: tools/list
+════════════════════════════════════════════════════════════
+
+Info:
+  RPC ID:      2
+  Session:     f2442c9b...
+  Connector:   time
+  Status:      OK
+
+Timing:
+  Request:     2025-12-28T12:01:59.037Z
+  Response:    2025-12-28T12:01:59.049Z
+  Latency:     12ms
+
+Size:
+  Request:     58B
+  Response:    1.0KB
+
+────────────────────────────────────────────────────────────
+Request:
+────────────────────────────────────────────────────────────
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list"
+}
+
+────────────────────────────────────────────────────────────
+Response:
+────────────────────────────────────────────────────────────
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "tools": [...]
+  }
+}
+```
+
+### RPC Options
+
+```bash
+pfscan rpc list --session <id>          # List RPCs (partial session ID OK)
+pfscan rpc list --session <id> --limit 50  # Show 50 RPCs
+pfscan rpc list --session <id> --fulltime  # Full timestamps
+pfscan rpc show --session <id> --id <rpc>  # Show request/response JSON
+pfscan rpc list --json                  # JSON output
+pfscan rpc show --json                  # JSON output
+```
+
+### Workflow: From view to RPC details
+
+```bash
+# 1. View events with pairs mode to see RPC IDs
+pfscan view --pairs
+# Output shows: ... rpc=2        ses=f2442c... ...
+
+# 2. Get details for specific RPC
+pfscan rpc show --session f2442c --id 2
 ```
 
 ## Status Command (Phase 2.1)

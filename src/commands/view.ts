@@ -96,6 +96,9 @@ function renderPairLine(pair: EventLinePair, options: { fulltime?: boolean }): s
     pair.method.slice(0, 30).padEnd(30),
   ];
 
+  // RPC ID (for easy copy-paste to rpc show command)
+  parts.push(`rpc=${String(pair.rpc_id).slice(0, 8).padEnd(8)}`);
+
   // Session ID (shortened)
   if (pair.request.session_id) {
     parts.push(`ses=${shortenId(pair.request.session_id, 6)}`);
@@ -196,10 +199,13 @@ export function createViewCommand(getConfigPath: () => string): Command {
 
           // Print header for pairs
           const header = options.fulltime
-            ? 'Time                    ↔ St Method                         Session      Latency    Size'
-            : 'Time         ↔ St Method                         Session      Latency    Size';
+            ? 'Time                    ↔ St Method                         RPC      Session      Latency    Size'
+            : 'Time         ↔ St Method                         RPC      Session      Latency    Size';
           console.log(header);
           console.log('-'.repeat(header.length));
+
+          // Print hint about rpc show command
+          console.log('(use: pfscan rpc show --session <ses> --id <rpc> for details)');
 
           // Print pairs
           for (const pair of limitedPairs) {

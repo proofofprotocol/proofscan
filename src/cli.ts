@@ -33,6 +33,7 @@ import {
   createExploreCommand,
   createStatusCommand,
   createEventsCommand,
+  createRpcCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -55,6 +56,7 @@ Common Commands:
   explore, e    Interactive data browser
   scan, s       Run a new scan
   status, st    Show system status
+  rpc           View RPC call details (list, show)
 
 Management:
   archive, a    Archive and prune old data
@@ -68,15 +70,16 @@ Examples:
   pfscan                      # View recent events (default)
   pfscan view --limit 50      # View last 50 events
   pfscan view --pairs         # View request/response pairs
+  pfscan rpc list --session <ses>  # List RPCs for a session
+  pfscan rpc show --session <ses> --id <rpc>  # Show RPC details
   pfscan tree                 # Show structure overview
   pfscan scan start --id mcp  # Start scanning connector 'mcp'
-  pfscan status               # Show system status
 `;
 
 program
   .name('pfscan')
   .description('MCP Server scanner - eliminate black boxes by capturing JSON-RPC')
-  .version('0.3.9')
+  .version('0.4.0')
   .option('-c, --config <path>', 'Path to config file')
   .option('--json', 'Output in JSON format')
   .option('-v, --verbose', 'Verbose output')
@@ -173,6 +176,9 @@ program.addCommand(createMonitorCommand(getConfigPath));
 // events (Phase 2.1: events ls, export events)
 program.addCommand(createEventsCommand(getConfigPath));
 
+// rpc (Phase 2.2: rpc list, rpc show)
+program.addCommand(createRpcCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -187,7 +193,7 @@ function hasSubcommand(): boolean {
   const knownCommands = new Set([
     'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
     'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'sessions', 'monitor', 'events', 'help'
+    'connectors', 'sessions', 'monitor', 'events', 'rpc', 'help'
   ]);
 
   for (let i = 2; i < process.argv.length; i++) {

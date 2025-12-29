@@ -24,6 +24,11 @@ jobs:
       - run: npm install -g npm@latest
 
       - run: npm ci
+
+      # Lint (warning only - don't fail CI)
+      - name: Run lint
+        run: npm run lint || true
+
       - run: npm test --if-present
 
       - name: Publish to npm
