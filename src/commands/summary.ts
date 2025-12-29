@@ -6,14 +6,14 @@
  * Shows:
  * - できること（capability）: tools from tools/list
  * - やったこと（tool call）: tools/call invocations
- * - 注意点: security concerns (max 3 lines)
+ * - 注意点: security notes (max 3 lines)
  *
  * Categories:
- * - 読み取り (read)
- * - 書き込み (write)
- * - ネット接続 (network)
- * - コマンド実行 (exec)
- * - その他操作 (other)
+ * - 読み取り（Read）
+ * - 書き込み（Write）
+ * - ネット接続（Network）
+ * - コマンド実行（Exec）
+ * - その他操作（Other）
  */
 
 import { Command } from 'commander';
@@ -34,13 +34,13 @@ import { shortenId } from '../eventline/types.js';
 /** Operation category */
 export type OperationCategory = 'read' | 'write' | 'network' | 'exec' | 'other';
 
-/** Japanese labels for categories */
+/** Japanese labels for categories (Phase 3 UX format) */
 const CATEGORY_LABELS: Record<OperationCategory, string> = {
-  read: '読み取り (read)',
-  write: '書き込み (write)',
-  network: 'ネット接続 (network)',
-  exec: 'コマンド実行 (exec)',
-  other: 'その他操作 (other)',
+  read: '読み取り（Read）',
+  write: '書き込み（Write）',
+  network: 'ネット接続（Network）',
+  exec: 'コマンド実行（Exec）',
+  other: 'その他操作（Other）',
 };
 
 /** Tool info extracted from tools/list response */
@@ -57,6 +57,18 @@ export interface ToolCallRecord {
   category: OperationCategory;
 }
 
+/** Note severity levels */
+export type NoteSeverity = 'info' | 'warn' | 'critical';
+
+/** Note structure for JSON output */
+export interface SummaryNote {
+  code: string;
+  severity: NoteSeverity;
+  category?: OperationCategory;
+  tool?: string;
+  called?: boolean;
+}
+
 /** Summary data structure */
 export interface SummaryData {
   schema_version: string;
@@ -68,6 +80,7 @@ export interface SummaryData {
   capabilities: {
     tools: ToolInfo[];
     by_category: Record<OperationCategory, string[]>;
+    total_count: number;
   };
 
   /** Tool calls from tools/call */
@@ -77,107 +90,218 @@ export interface SummaryData {
     total_count: number;
   };
 
-  /** Security concerns (max 3) */
-  concerns: string[];
+  /** Security notes (English codes for JSON) */
+  notes: SummaryNote[];
 }
 
 // ============================================================
-// Category Classification
+// Category Classification (v1 rules)
 // ============================================================
 
-/** Keywords for category classification */
-const CATEGORY_KEYWORDS: Record<OperationCategory, RegExp[]> = {
-  read: [
-    /read/i,
-    /get/i,
-    /list/i,
-    /search/i,
-    /query/i,
-    /fetch/i,
-    /find/i,
-    /show/i,
-    /view/i,
-    /cat/i,
-    /head/i,
-    /tail/i,
-    /ls/i,
-    /dir/i,
-  ],
-  write: [
-    /write/i,
-    /create/i,
-    /update/i,
-    /delete/i,
-    /remove/i,
-    /edit/i,
-    /modify/i,
-    /set/i,
-    /put/i,
-    /post/i,
-    /save/i,
-    /mkdir/i,
-    /touch/i,
-    /mv/i,
-    /cp/i,
-    /rm/i,
-  ],
-  network: [
-    /http/i,
-    /https/i,
-    /fetch/i,
-    /request/i,
-    /api/i,
-    /url/i,
-    /web/i,
-    /net/i,
-    /socket/i,
-    /connect/i,
-    /download/i,
-    /upload/i,
-    /curl/i,
-    /wget/i,
-  ],
-  exec: [
-    /exec/i,
-    /run/i,
-    /shell/i,
-    /bash/i,
-    /cmd/i,
-    /command/i,
-    /spawn/i,
-    /process/i,
-    /script/i,
-    /terminal/i,
-  ],
-  other: [],
-};
+/**
+ * Word boundary pattern for underscore-separated identifiers
+ * Matches: start of string, underscore, or space
+ */
+const WB = '(?:^|_|\\s)';
+const WBE = '(?:$|_|\\s)';
+
+/**
+ * Create regex that matches word in underscore-separated or space-separated text
+ */
+function wordPattern(word: string): RegExp {
+  return new RegExp(`${WB}${word}${WBE}`, 'i');
+}
+
+/**
+ * Keywords that force "other" category (time/misc tools)
+ * These take priority over weak matches like "get"
+ */
+const MISC_KEYWORDS: RegExp[] = [
+  wordPattern('time'),
+  wordPattern('timezone'),
+  wordPattern('datetime'),
+  wordPattern('clock'),
+  wordPattern('date'),
+  wordPattern('calendar'),
+];
+
+/**
+ * Strong exec keywords (highest priority)
+ * Note: "run" alone is ambiguous; only exec when combined with command/shell/etc.
+ */
+const EXEC_KEYWORDS: RegExp[] = [
+  wordPattern('exec'),
+  wordPattern('execute'),
+  wordPattern('shell'),
+  wordPattern('bash'),
+  wordPattern('powershell'),
+  wordPattern('cmd'),
+  wordPattern('command'),
+  wordPattern('spawn'),
+  wordPattern('terminal'),
+  // "run" is checked separately with context
+];
+
+/**
+ * Strong network keywords
+ */
+const NETWORK_KEYWORDS: RegExp[] = [
+  wordPattern('http'),
+  wordPattern('https'),
+  wordPattern('request'),
+  wordPattern('url'),
+  wordPattern('browser'),
+  wordPattern('socket'),
+  wordPattern('websocket'),
+  wordPattern('download'),
+  wordPattern('upload'),
+  wordPattern('curl'),
+  wordPattern('wget'),
+  wordPattern('fetch'),
+];
+
+/**
+ * Strong write keywords
+ */
+const WRITE_KEYWORDS: RegExp[] = [
+  wordPattern('write'),
+  wordPattern('create'),
+  wordPattern('update'),
+  wordPattern('delete'),
+  wordPattern('remove'),
+  wordPattern('edit'),
+  wordPattern('modify'),
+  wordPattern('save'),
+  wordPattern('mkdir'),
+  wordPattern('touch'),
+  wordPattern('mv'),
+  wordPattern('cp'),
+  wordPattern('rm'),
+  wordPattern('put'),
+  wordPattern('post'),
+  wordPattern('patch'),
+  wordPattern('insert'),
+  wordPattern('append'),
+];
+
+/**
+ * Strong read keywords (NOT including "get" alone)
+ * "get" is too ambiguous - get_current_time is not a read operation
+ * "search/query/find" are checked separately with file context
+ */
+const READ_KEYWORDS: RegExp[] = [
+  wordPattern('read'),
+  wordPattern('list'),
+  wordPattern('load'),
+  wordPattern('cat'),
+  wordPattern('head'),
+  wordPattern('tail'),
+  wordPattern('ls'),
+  wordPattern('dir'),
+  wordPattern('view'),
+  wordPattern('show'),
+  // "search/query/find" are checked separately with file context
+];
+
+/**
+ * File/path related keywords that strengthen "read" classification
+ * If tool has "get" + file-related term, classify as read
+ */
+const FILE_RELATED_KEYWORDS: RegExp[] = [
+  wordPattern('file'),
+  wordPattern('files'),
+  wordPattern('path'),
+  wordPattern('directory'),
+  wordPattern('folder'),
+  wordPattern('content'),
+  wordPattern('document'),
+  wordPattern('documents'),
+];
+
+/**
+ * Check if text matches any pattern in the list
+ */
+function matchesAny(text: string, patterns: RegExp[]): boolean {
+  return patterns.some(pattern => pattern.test(text));
+}
 
 /**
  * Classify a tool into a category based on name and description
+ *
+ * Priority: exec > network > write > read > other
+ * Special handling for time/misc tools to avoid false "read" classification
  */
+/**
+ * Keywords that indicate exec context for "run"
+ */
+const RUN_EXEC_CONTEXT: RegExp[] = [
+  wordPattern('command'),
+  wordPattern('shell'),
+  wordPattern('terminal'),
+  wordPattern('cmd'),
+  wordPattern('script'),
+  wordPattern('bash'),
+  wordPattern('powershell'),
+];
+
+/**
+ * Ambiguous keywords that need file context to be "read"
+ * search, query, find → only read if file/path/directory context exists
+ */
+const AMBIGUOUS_READ_KEYWORDS: RegExp[] = [
+  wordPattern('search'),
+  wordPattern('query'),
+  wordPattern('find'),
+];
+
 export function classifyTool(name: string, description?: string): OperationCategory {
-  const text = `${name} ${description || ''}`.toLowerCase();
+  const text = `${name} ${description || ''}`;
 
-  // Check exec first (highest risk)
-  for (const pattern of CATEGORY_KEYWORDS.exec) {
-    if (pattern.test(text)) return 'exec';
+  // Priority 1: Check exec (highest risk)
+  if (matchesAny(text, EXEC_KEYWORDS)) {
+    return 'exec';
   }
 
-  // Check network
-  for (const pattern of CATEGORY_KEYWORDS.network) {
-    if (pattern.test(text)) return 'network';
+  // Priority 1b: Check "run" + exec context
+  const runPattern = wordPattern('run');
+  if (runPattern.test(text) && matchesAny(text, RUN_EXEC_CONTEXT)) {
+    return 'exec';
   }
 
-  // Check write
-  for (const pattern of CATEGORY_KEYWORDS.write) {
-    if (pattern.test(text)) return 'write';
+  // Priority 2: Check network
+  if (matchesAny(text, NETWORK_KEYWORDS)) {
+    return 'network';
   }
 
-  // Check read
-  for (const pattern of CATEGORY_KEYWORDS.read) {
-    if (pattern.test(text)) return 'read';
+  // Priority 3: Check write
+  if (matchesAny(text, WRITE_KEYWORDS)) {
+    return 'write';
   }
 
+  // Priority 4: Check if it's a time/misc tool (before read check)
+  // This prevents "get_current_time" from being classified as "read"
+  if (matchesAny(text, MISC_KEYWORDS)) {
+    return 'other';
+  }
+
+  // Priority 5: Check read with strong keywords
+  if (matchesAny(text, READ_KEYWORDS)) {
+    return 'read';
+  }
+
+  // Priority 6: Check ambiguous read keywords (search/query/find) + file context
+  if (matchesAny(text, AMBIGUOUS_READ_KEYWORDS) && matchesAny(text, FILE_RELATED_KEYWORDS)) {
+    return 'read';
+  }
+
+  // Priority 7: Check "get" + file-related (weak read signal)
+  // Only classify as read if "get" is combined with file-related terms
+  const getPattern = wordPattern('get');
+  if (getPattern.test(name) && matchesAny(text, FILE_RELATED_KEYWORDS)) {
+    return 'read';
+  }
+
+  // Default: other
   return 'other';
 }
 
@@ -284,38 +408,76 @@ function extractToolCalls(configDir: string, sessionId: string): ToolCallRecord[
 }
 
 /**
- * Generate concerns based on capabilities and tool calls
+ * Generate notes based on capabilities and tool calls
  */
-function generateConcerns(
+function generateNotes(
   capabilities: ToolInfo[],
   toolCalls: ToolCallRecord[]
-): string[] {
-  const concerns: string[] = [];
+): SummaryNote[] {
+  const notes: SummaryNote[] = [];
 
-  // Check for exec capability
+  // Check for exec
   const hasExecCapability = capabilities.some(t => t.category === 'exec');
   const hasExecCall = toolCalls.some(t => t.category === 'exec');
+  const execTool = toolCalls.find(t => t.category === 'exec')?.name
+    || capabilities.find(t => t.category === 'exec')?.name;
 
   if (hasExecCall) {
-    concerns.push('コマンド実行が行われました');
+    notes.push({
+      code: 'exec_called',
+      severity: 'critical',
+      category: 'exec',
+      tool: execTool,
+      called: true,
+    });
   } else if (hasExecCapability) {
-    concerns.push('コマンド実行可能');
+    notes.push({
+      code: 'exec_capable',
+      severity: 'warn',
+      category: 'exec',
+      tool: execTool,
+      called: false,
+    });
   }
 
   // Check for write
   const hasWriteCall = toolCalls.some(t => t.category === 'write');
+  const writeTool = toolCalls.find(t => t.category === 'write')?.name;
+
   if (hasWriteCall) {
-    concerns.push('書き込み操作あり');
+    notes.push({
+      code: 'write_called',
+      severity: 'warn',
+      category: 'write',
+      tool: writeTool,
+      called: true,
+    });
   }
 
   // Check for network
   const hasNetworkCall = toolCalls.some(t => t.category === 'network');
+  const networkTool = toolCalls.find(t => t.category === 'network')?.name;
+
   if (hasNetworkCall) {
-    concerns.push('外部ネットワーク接続あり');
+    notes.push({
+      code: 'network_called',
+      severity: 'warn',
+      category: 'network',
+      tool: networkTool,
+      called: true,
+    });
   }
 
-  // Limit to 3 concerns
-  return concerns.slice(0, 3);
+  // If no sensitive operations were called, add info note
+  if (!hasExecCall && !hasWriteCall && !hasNetworkCall) {
+    notes.push({
+      code: 'no_sensitive_calls',
+      severity: 'info',
+    });
+  }
+
+  // Limit to 3 notes
+  return notes.slice(0, 3);
 }
 
 /**
@@ -354,7 +516,7 @@ function generateSummary(
 ): SummaryData {
   const capabilities = extractToolsFromSession(configDir, sessionId);
   const toolCalls = extractToolCalls(configDir, sessionId);
-  const concerns = generateConcerns(capabilities, toolCalls);
+  const notes = generateNotes(capabilities, toolCalls);
 
   // Group capabilities by category
   const capabilitiesByCategory = groupByCategory(capabilities);
@@ -384,74 +546,103 @@ function generateSummary(
     capabilities: {
       tools: capabilities,
       by_category: capabilitiesSimple,
+      total_count: capabilities.length,
     },
     tool_calls: {
       records: toolCalls,
       by_category: toolCallsSimple,
       total_count: toolCalls.reduce((sum, t) => sum + t.count, 0),
     },
-    concerns,
+    notes,
   };
 }
 
 // ============================================================
-// Rendering
+// Rendering (Phase 3 UX)
 // ============================================================
 
 /**
- * Render summary to terminal
+ * Note code to Japanese message mapping
+ */
+const NOTE_MESSAGES: Record<string, string> = {
+  exec_called: 'コマンド実行が行われました',
+  exec_capable: 'コマンド実行可能なツールがあります',
+  write_called: '書き込み操作が行われました',
+  network_called: '外部ネットワーク接続が行われました',
+  no_sensitive_calls: '重要な操作（書き込み・ネット接続・コマンド実行）は実行されていません',
+};
+
+/**
+ * Render summary to terminal (Phase 3 UX format)
  */
 function renderSummary(data: SummaryData): void {
   console.log(`${data.connector_id} (session: ${shortenId(data.session_id, 8)}...)`);
   console.log();
 
-  // できること (capabilities)
-  console.log('├── できること（capability）:');
-  const capabilityNames = data.capabilities.tools.map(t => t.name);
-  if (capabilityNames.length > 0) {
-    // Show up to 5 tools, then "..." if more
-    const shown = capabilityNames.slice(0, 5);
-    const extra = capabilityNames.length - shown.length;
-    const suffix = extra > 0 ? ` (+${extra} more)` : '';
-    console.log(`│   ${shown.join(', ')}${suffix}`);
-  } else {
-    console.log('│   (なし)');
-  }
+  // ============================================================
+  // 【できること（capability）】
+  // ============================================================
+  console.log(`【できること（capability）】 ${data.capabilities.total_count} 種類`);
+  console.log();
 
-  // Show by category if verbose or many tools
-  if (data.capabilities.tools.length > 3) {
-    for (const [cat, label] of Object.entries(CATEGORY_LABELS) as [OperationCategory, string][]) {
-      const tools = data.capabilities.by_category[cat];
-      if (tools.length > 0) {
-        console.log(`│   - ${label}: ${tools.join(', ')}`);
-      }
+  // Show tools by category
+  const categoryOrder: OperationCategory[] = ['exec', 'network', 'write', 'read', 'other'];
+  let hasAnyCapability = false;
+
+  for (const cat of categoryOrder) {
+    const tools = data.capabilities.by_category[cat];
+    if (tools.length > 0) {
+      hasAnyCapability = true;
+      console.log(`  ${CATEGORY_LABELS[cat]}: ${tools.join(', ')}`);
     }
   }
 
-  // やったこと (tool calls)
-  console.log('├── やったこと（tool call）:');
-  if (data.tool_calls.total_count > 0) {
-    const callStrings = data.tool_calls.records.map(t =>
-      t.count > 1 ? `${t.name} (${t.count}回)` : t.name
-    );
-    // Show up to 5 calls, then "..." if more
-    const shown = callStrings.slice(0, 5);
-    const extra = callStrings.length - shown.length;
-    const suffix = extra > 0 ? ` (+${extra} more)` : '';
-    console.log(`│   ${shown.join(', ')}${suffix}`);
-  } else {
-    console.log('│   (なし)');
+  if (!hasAnyCapability) {
+    console.log('  (なし)');
   }
 
-  // 注意点 (concerns)
-  if (data.concerns.length > 0) {
-    console.log('└── 注意点:');
-    for (let i = 0; i < data.concerns.length; i++) {
-      const prefix = i === data.concerns.length - 1 ? '    ' : '│   ';
-      console.log(`${prefix}⚠ ${data.concerns[i]}`);
+  console.log();
+
+  // ============================================================
+  // 【やったこと（tool call）】
+  // ============================================================
+  console.log(`【やったこと（tool call）】 ${data.tool_calls.total_count} 回`);
+  console.log();
+
+  let hasAnyCall = false;
+
+  for (const cat of categoryOrder) {
+    const calls = data.tool_calls.by_category[cat];
+    if (calls.length > 0) {
+      hasAnyCall = true;
+      const callStrings = calls.map(c =>
+        c.count > 1 ? `${c.name} (${c.count}回)` : c.name
+      );
+      console.log(`  ${CATEGORY_LABELS[cat]}: ${callStrings.join(', ')}`);
+    }
+  }
+
+  if (!hasAnyCall) {
+    console.log('  (なし)');
+  }
+
+  console.log();
+
+  // ============================================================
+  // 【注意点】
+  // ============================================================
+  console.log('【注意点】');
+  console.log();
+
+  if (data.notes.length > 0) {
+    for (const note of data.notes) {
+      const message = NOTE_MESSAGES[note.code] || note.code;
+      const icon = note.severity === 'critical' ? '🔴' :
+                   note.severity === 'warn' ? '⚠️' : 'ℹ️';
+      console.log(`  ${icon} ${message}`);
     }
   } else {
-    console.log('└── 注意点: (なし)');
+    console.log('  (なし)');
   }
 }
 
