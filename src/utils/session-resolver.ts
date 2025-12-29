@@ -138,7 +138,7 @@ function findSessionByPartialId(db: ReturnType<typeof getEventsDb>, partialId: s
   const session = db.prepare(`
     SELECT * FROM sessions
     WHERE session_id LIKE ?
-    ORDER BY start_ts DESC
+    ORDER BY started_at DESC
     LIMIT 1
   `).get(partialId + '%') as Session | undefined;
 
@@ -155,13 +155,13 @@ function findLatestSession(db: ReturnType<typeof getEventsDb>, connectorId?: str
     session = db.prepare(`
       SELECT * FROM sessions
       WHERE connector_id = ?
-      ORDER BY start_ts DESC
+      ORDER BY started_at DESC
       LIMIT 1
     `).get(connectorId) as Session | undefined;
   } else {
     session = db.prepare(`
       SELECT * FROM sessions
-      ORDER BY start_ts DESC
+      ORDER BY started_at DESC
       LIMIT 1
     `).get() as Session | undefined;
   }
