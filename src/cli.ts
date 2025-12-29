@@ -76,7 +76,7 @@ Examples:
 program
   .name('pfscan')
   .description('MCP Server scanner - eliminate black boxes by capturing JSON-RPC')
-  .version('0.3.8')
+  .version('0.3.9')
   .option('-c, --config <path>', 'Path to config file')
   .option('--json', 'Output in JSON format')
   .option('-v, --verbose', 'Verbose output')
