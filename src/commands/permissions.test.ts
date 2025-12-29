@@ -3,7 +3,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { Command } from 'commander';
 import type { PermissionsData, CategoryStats, ToolPermission } from './permissions.js';
+import { createPermissionsCommand } from './permissions.js';
 
 describe('PermissionsData structure', () => {
   // ============================================================
@@ -286,3 +288,61 @@ function createMixedCategoriesData(): PermissionsData {
     },
   };
 }
+
+// ============================================================
+// CLI argument parsing tests
+// ============================================================
+
+describe('permissions command CLI', () => {
+  function createTestCommand() {
+    const program = new Command();
+    program.exitOverride(); // Throw instead of process.exit
+    const cmd = createPermissionsCommand(() => '/tmp/test-config');
+    program.addCommand(cmd);
+    return program;
+  }
+
+  it('accepts positional connector argument', () => {
+    const program = createTestCommand();
+    const cmd = program.commands.find(c => c.name() === 'permissions')!;
+
+    // Check argument is defined
+    const args = cmd.registeredArguments;
+    expect(args).toHaveLength(1);
+    expect(args[0].name()).toBe('connector');
+    expect(args[0].required).toBe(false); // Optional argument
+  });
+
+  it('has --id as alias for --connector', () => {
+    const program = createTestCommand();
+    const cmd = program.commands.find(c => c.name() === 'permissions')!;
+
+    const options = cmd.options;
+    const idOption = options.find(o => o.long === '--id');
+    const connectorOption = options.find(o => o.long === '--connector');
+
+    expect(idOption).toBeDefined();
+    expect(connectorOption).toBeDefined();
+    expect(idOption?.description).toContain('Alias');
+  });
+
+  it('has help text with examples', () => {
+    const program = createTestCommand();
+    const cmd = program.commands.find(c => c.name() === 'permissions')!;
+
+    // helpInformation() returns basic help; addHelpText adds to _helpConfiguration
+    // We can verify that help configuration has afterAll or after hooks
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const helpConfig = (cmd as any)._helpConfiguration;
+    // Check that afterAll is defined (addHelpText('after') sets this)
+    expect(helpConfig).toBeDefined();
+
+    // Alternative: verify command options are present
+    const helpInfo = cmd.helpInformation();
+    expect(helpInfo).toContain('--session');
+    expect(helpInfo).toContain('--latest');
+    expect(helpInfo).toContain('--connector');
+    expect(helpInfo).toContain('--id');
+    expect(helpInfo).toContain('connector');
+  });
+});

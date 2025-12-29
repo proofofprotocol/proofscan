@@ -301,19 +301,32 @@ function renderPermissions(data: PermissionsData): void {
 export function createPermissionsCommand(getConfigPath: () => string): Command {
   const cmd = new Command('permissions')
     .description('Show detailed permission stats per category and tool')
+    .addHelpText('after', `
+Examples:
+  pfscan permissions time              # Latest session for 'time' connector
+  pfscan permissions --session abc123  # Specific session by ID
+  pfscan permissions --latest          # Latest session across all connectors
+  pfscan permissions --id mcp          # Alias for: permissions mcp
+`)
+    .argument('[connector]', 'Connector ID (uses latest session for connector)')
     .option('--session <id>', 'Session ID (partial match supported)')
     .option('--latest', 'Use the latest session')
     .option('--connector <id>', 'Filter by connector (with --latest)')
-    .action(async (options) => {
+    .option('--id <id>', 'Alias for --connector')
+    .action(async (connectorArg: string | undefined, options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
         const configDir = manager.getConfigDir();
 
+        // Resolve connector from positional arg, --connector, or --id
+        const connectorId = connectorArg || options.connector || options.id;
+
         // Resolve session
+        // If connector is provided (positional or option), treat as --latest for that connector
         const result = resolveSession({
           sessionId: options.session,
-          latest: options.latest,
-          connectorId: options.connector,
+          latest: options.latest || !!connectorId,
+          connectorId,
           configDir,
         });
 
