@@ -42,6 +42,7 @@ import {
   createRpcCommand,
   createSummaryCommand,
   createPermissionsCommand,
+  createRecordCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -195,6 +196,9 @@ program.addCommand(createSummaryCommand(getConfigPath));
 // permissions (Phase 3: detailed permission stats)
 program.addCommand(createPermissionsCommand(getConfigPath));
 
+// record (Phase 3: record dry-run)
+program.addCommand(createRecordCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -209,7 +213,7 @@ function hasSubcommand(): boolean {
   const knownCommands = new Set([
     'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
     'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'help'
+    'connectors', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'help'
   ]);
 
   for (let i = 2; i < process.argv.length; i++) {
