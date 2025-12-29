@@ -6,7 +6,7 @@
 import type { Connector, StdioTransport } from '../types/index.js';
 import { StdioConnection, JsonRpcMessage, JsonRpcResponse } from '../transports/stdio.js';
 import { EventsStore } from '../db/events-store.js';
-import type { ExitReason, EventDirection, EventKind } from '../db/types.js';
+import type { EventDirection, EventKind } from '../db/types.js';
 
 export interface ScanResult {
   success: boolean;
@@ -35,14 +35,6 @@ export class Scanner {
     const timeout = (options.timeout || 30) * 1000;
     const dryRun = options.dryRun || false;
     let eventCount = 0;
-
-    // Helper functions for dry-run mode
-    const saveEvent = dryRun
-      ? () => { eventCount++; }
-      : (sessionId: string, direction: EventDirection, kind: EventKind, opts: { rpcId?: string; rawJson?: string }) => {
-          this.eventsStore.saveEvent(sessionId, direction, kind, opts);
-          eventCount++;
-        };
 
     if (connector.transport.type !== 'stdio') {
       if (!dryRun) {
@@ -172,9 +164,8 @@ export class Scanner {
       eventCount++;
 
       // MCP handshake: initialize
-      let initializeResponse: JsonRpcResponse;
       try {
-        initializeResponse = await connection.sendRequest('initialize', {
+        await connection.sendRequest('initialize', {
           protocolVersion: '2024-11-05',
           capabilities: {},
           clientInfo: {

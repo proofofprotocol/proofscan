@@ -11,7 +11,7 @@ import type {
   ProtocolType,
 } from './IProtocolAdapter.js';
 import { computePayloadHash } from './IProtocolAdapter.js';
-import type { EventLineKind, EventLineDirection, EventLineStatus } from '../eventline/types.js';
+import type { EventLineDirection, EventLineStatus } from '../eventline/types.js';
 
 /**
  * JSON-RPC 2.0 message types

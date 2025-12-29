@@ -5,7 +5,8 @@
  * Phase 2.1: Skeleton implementation, full implementation in Phase 3
  */
 
-import type { EventLine, EventLineKind, EventLineDirection, EventLineStatus } from '../eventline/types.js';
+import { createHash } from 'node:crypto';
+import type { EventLineKind, EventLineDirection, EventLineStatus } from '../eventline/types.js';
 
 /**
  * Protocol type identifier
@@ -146,8 +147,6 @@ export class ProtocolAdapterRegistry {
  * Compute SHA-256 hash of payload (first 16 chars)
  */
 export function computePayloadHash(json: string): string {
-  // Use Node.js crypto
-  const crypto = require('crypto');
-  const hash = crypto.createHash('sha256').update(json).digest('hex');
+  const hash = createHash('sha256').update(json).digest('hex');
   return hash.slice(0, 16);
 }

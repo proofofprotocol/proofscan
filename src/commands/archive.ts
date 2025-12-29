@@ -7,7 +7,7 @@ import { ConfigManager } from '../config/index.js';
 import { EventsStore, getDbSizes } from '../db/index.js';
 import { ProofsStore } from '../db/proofs-store.js';
 import { output, outputSuccess, outputError, outputTable, getOutputOptions } from '../utils/output.js';
-import type { RetentionConfig, DEFAULT_RETENTION } from '../types/config.js';
+import type { RetentionConfig } from '../types/config.js';
 import type { PruneCandidate, ArchivePlan } from '../db/types.js';
 
 function formatBytes(bytes: number): string {
@@ -44,12 +44,10 @@ async function computeArchivePlan(
   }
 
   // 3. Check max_db_mb (simple heuristic)
-  const dbSizes = getDbSizes(configDir);
-  const currentSizeMb = dbSizes.events / (1024 * 1024);
-  const maxMb = retention.max_db_mb || 500;
+  // Note: currentSizeMb and maxMb used for future size-based pruning
+  getDbSizes(configDir); // Ensure DB access works
 
   // Estimate savings (rough: each event ~500 bytes raw_json)
-  const rawJsonSize = eventsStore.getRawJsonSize();
   const estimatedSavingsMb = (
     sessionsToDelete.reduce((sum, s) => sum + s.event_count * 500, 0) +
     (rawJsonToClear * 300)

@@ -3,11 +3,10 @@
  */
 
 import { Config, Connector, DEFAULT_CONFIG } from '../types/index.js';
-import { resolveConfigPath, getDefaultConfigDir } from '../utils/config-path.js';
+import { resolveConfigPath } from '../utils/config-path.js';
 import { atomicWriteFile, readFileSafe, fileExists } from '../utils/fs.js';
 import { parseConfig, validateConfig, ValidationResult } from './schema.js';
 import { dirname } from 'path';
-import { promises as fs } from 'fs';
 
 export class ConfigManager {
   private configPath: string;
@@ -112,7 +111,8 @@ export class ConfigManager {
       throw new Error(`Connector not found: ${id}`);
     }
 
-    // Don't allow changing ID through update
+    // Don't allow changing ID through update (destructure to remove from updates)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id: _id, ...safeUpdates } = updates;
     config.connectors[index] = { ...config.connectors[index], ...safeUpdates };
     await this.save(config);

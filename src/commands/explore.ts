@@ -9,8 +9,8 @@ import { createInterface, Interface } from 'readline';
 import { ConfigManager } from '../config/index.js';
 import { EventLineStore } from '../eventline/store.js';
 import { formatTimestamp, formatDuration, shortenId } from '../eventline/types.js';
-import { output, getOutputOptions } from '../utils/output.js';
-import type { SessionWithStats, RpcCall, Event } from '../db/types.js';
+import { getOutputOptions } from '../utils/output.js';
+import type { SessionWithStats, RpcCall } from '../db/types.js';
 
 type ExploreState =
   | { level: 'connectors' }
@@ -39,13 +39,13 @@ function printHeader(ctx: ExploreContext): void {
   // Breadcrumb
   const parts: string[] = ['connectors'];
   if (ctx.state.level !== 'connectors') {
-    parts.push((ctx.state as any).connectorId);
+    parts.push((ctx.state as { connectorId: string }).connectorId);
   }
   if (ctx.state.level === 'rpcs' || ctx.state.level === 'detail') {
-    parts.push(shortenId((ctx.state as any).sessionId, 8));
+    parts.push(shortenId((ctx.state as { sessionId: string }).sessionId, 8));
   }
   if (ctx.state.level === 'detail') {
-    parts.push(`rpc:${(ctx.state as any).rpcId}`);
+    parts.push(`rpc:${(ctx.state as { rpcId: string }).rpcId}`);
   }
 
   console.log('  Path: ' + parts.join(' > '));
@@ -83,7 +83,7 @@ function printConnectors(ctx: ExploreContext): void {
 
 function printSessions(ctx: ExploreContext): void {
   console.log();
-  console.log(`  Sessions for connector: ${(ctx.state as any).connectorId}`);
+  console.log(`  Sessions for connector: ${(ctx.state as { connectorId: string }).connectorId}`);
   console.log();
 
   if (ctx.sessions.length === 0) {
@@ -105,7 +105,7 @@ function printSessions(ctx: ExploreContext): void {
 
 function printRpcs(ctx: ExploreContext): void {
   console.log();
-  console.log(`  RPC calls for session: ${shortenId((ctx.state as any).sessionId, 12)}`);
+  console.log(`  RPC calls for session: ${shortenId((ctx.state as { sessionId: string }).sessionId, 12)}`);
   console.log();
 
   if (ctx.rpcs.length === 0) {
@@ -191,10 +191,10 @@ function loadData(ctx: ExploreContext): void {
       ctx.connectors = ctx.store.getConnectors();
       break;
     case 'sessions':
-      ctx.sessions = ctx.store.getSessions((ctx.state as any).connectorId, 20);
+      ctx.sessions = ctx.store.getSessions((ctx.state as { connectorId: string }).connectorId, 20);
       break;
     case 'rpcs':
-      ctx.rpcs = ctx.store.getRpcCalls((ctx.state as any).sessionId);
+      ctx.rpcs = ctx.store.getRpcCalls((ctx.state as { sessionId: string }).sessionId);
       break;
   }
 }
@@ -227,13 +227,13 @@ function handleInput(ctx: ExploreContext, input: string): boolean {
         ctx.state = { level: 'connectors' };
         break;
       case 'rpcs':
-        ctx.state = { level: 'sessions', connectorId: (ctx.state as any).connectorId };
+        ctx.state = { level: 'sessions', connectorId: (ctx.state as { connectorId: string }).connectorId };
         break;
       case 'detail':
         ctx.state = {
           level: 'rpcs',
-          connectorId: (ctx.state as any).connectorId,
-          sessionId: (ctx.state as any).sessionId,
+          connectorId: (ctx.state as { connectorId: string }).connectorId,
+          sessionId: (ctx.state as { sessionId: string }).sessionId,
         };
         break;
     }
@@ -270,7 +270,7 @@ function handleInput(ctx: ExploreContext, input: string): boolean {
           const session = ctx.sessions[num - 1];
           ctx.state = {
             level: 'rpcs',
-            connectorId: (ctx.state as any).connectorId,
+            connectorId: (ctx.state as { connectorId: string }).connectorId,
             sessionId: session.session_id,
           };
           loadData(ctx);
@@ -281,8 +281,8 @@ function handleInput(ctx: ExploreContext, input: string): boolean {
           const rpc = ctx.rpcs[num - 1];
           ctx.state = {
             level: 'detail',
-            connectorId: (ctx.state as any).connectorId,
-            sessionId: (ctx.state as any).sessionId,
+            connectorId: (ctx.state as { connectorId: string }).connectorId,
+            sessionId: (ctx.state as { sessionId: string }).sessionId,
             rpcId: rpc.rpc_id,
           };
         }
@@ -295,6 +295,7 @@ function handleInput(ctx: ExploreContext, input: string): boolean {
 
   // Pair view in RPC list
   if (cmd === 'p' && ctx.state.level === 'rpcs') {
+    const currentState = ctx.state as { connectorId: string; sessionId: string };
     console.log('  Enter RPC number to view: ');
     ctx.rl.question('  > ', (answer) => {
       const n = parseInt(answer, 10);
@@ -302,8 +303,8 @@ function handleInput(ctx: ExploreContext, input: string): boolean {
         const rpc = ctx.rpcs[n - 1];
         ctx.state = {
           level: 'detail',
-          connectorId: (ctx.state as any).connectorId,
-          sessionId: (ctx.state as any).sessionId,
+          connectorId: currentState.connectorId,
+          sessionId: currentState.sessionId,
           rpcId: rpc.rpc_id,
         };
       }

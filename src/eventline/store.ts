@@ -15,7 +15,7 @@ import {
   parseTimestamp,
 } from './normalizer.js';
 import type { EventLine, TreeNode } from './types.js';
-import type { Event, Session, SessionWithStats, RpcCall, Proof } from '../db/types.js';
+import type { Event, SessionWithStats, RpcCall, Proof } from '../db/types.js';
 import { discoverSchema, type SchemaInfo } from './schema-discovery.js';
 
 export interface ViewOptions {

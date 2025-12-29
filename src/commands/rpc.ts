@@ -1,8 +1,13 @@
 /**
  * RPC command - View RPC call details
  *
- * pfscan rpc list --session <sid>  # List RPC calls for a session
- * pfscan rpc show --session <sid> --id <rpc_id>  # Show RPC details with request/response
+ * pfscan rpc list [--session <sid>] [--latest]  # List RPC calls
+ * pfscan rpc show [--session <sid>] --id <rpc_id>  # Show RPC details
+ *
+ * Session resolution priority:
+ * 1. --session <id> if specified
+ * 2. --latest flag
+ * 3. Current session from state file
  */
 
 import { Command } from 'commander';
@@ -14,6 +19,11 @@ import {
   shortenId,
 } from '../eventline/types.js';
 import { output, getOutputOptions } from '../utils/output.js';
+import {
+  resolveSession,
+  isSessionError,
+  formatSessionError,
+} from '../utils/session-resolver.js';
 import type { RpcCall, Event } from '../db/types.js';
 
 interface RpcListItem {
@@ -50,9 +60,9 @@ function getRpcList(configDir: string, sessionId: string): RpcListItem[] {
 
   const rpcs = db.prepare(`
     SELECT * FROM rpc_calls
-    WHERE session_id LIKE ?
+    WHERE session_id = ?
     ORDER BY request_ts DESC
-  `).all(sessionId + '%') as RpcCall[];
+  `).all(sessionId) as RpcCall[];
 
   return rpcs.map(rpc => {
     let latency_ms: number | null = null;
@@ -87,12 +97,12 @@ function getRpcList(configDir: string, sessionId: string): RpcListItem[] {
 function getRpcDetail(configDir: string, sessionId: string, rpcId: string): RpcDetail | null {
   const db = getEventsDb(configDir);
 
-  // Find the session (support partial match)
+  // Find the session
   const session = db.prepare(`
     SELECT session_id, connector_id FROM sessions
-    WHERE session_id LIKE ?
+    WHERE session_id = ?
     LIMIT 1
-  `).get(sessionId + '%') as { session_id: string; connector_id: string } | undefined;
+  `).get(sessionId) as { session_id: string; connector_id: string } | undefined;
 
   if (!session) {
     return null;
@@ -267,11 +277,13 @@ export function createRpcCommand(getConfigPath: () => string): Command {
   const cmd = new Command('rpc')
     .description('View RPC call details');
 
-  // rpc list --session <sid>
+  // rpc list [--session <sid>] [--latest] [--connector <id>]
   cmd
     .command('list')
     .description('List RPC calls for a session')
-    .requiredOption('--session <id>', 'Session ID (partial match supported)')
+    .option('--session <id>', 'Session ID (partial match supported)')
+    .option('--latest', 'Use the latest session')
+    .option('--connector <id>', 'Filter by connector (with --latest)')
     .option('--fulltime', 'Show full timestamp')
     .option('--limit <n>', 'Number of RPCs to show', '20')
     .action(async (options) => {
@@ -279,11 +291,24 @@ export function createRpcCommand(getConfigPath: () => string): Command {
         const manager = new ConfigManager(getConfigPath());
         const configDir = manager.getConfigDir();
 
-        const rpcs = getRpcList(configDir, options.session);
+        // Resolve session
+        const result = resolveSession({
+          sessionId: options.session,
+          latest: options.latest,
+          connectorId: options.connector,
+          configDir,
+        });
+
+        if (isSessionError(result)) {
+          console.error(formatSessionError(result));
+          process.exit(1);
+        }
+
+        const rpcs = getRpcList(configDir, result.sessionId);
 
         if (rpcs.length === 0) {
-          console.log('No RPC calls found for this session.');
-          console.log('hint: Use a valid session ID from `pfscan view --pairs`');
+          console.log(`No RPC calls found for session ${shortenId(result.sessionId, 8)}...`);
+          console.log(`(resolved by: ${result.resolvedBy})`);
           return;
         }
 
@@ -294,6 +319,10 @@ export function createRpcCommand(getConfigPath: () => string): Command {
           output(limitedRpcs);
           return;
         }
+
+        // Print session info
+        console.log(`Session: ${shortenId(result.sessionId, 12)}... (${result.resolvedBy})`);
+        console.log();
 
         // Print header
         const header = options.fulltime
@@ -314,7 +343,7 @@ export function createRpcCommand(getConfigPath: () => string): Command {
         const pendingCount = limitedRpcs.filter(r => r.status === 'pending').length;
         console.log(`${limitedRpcs.length} RPCs: ${okCount} OK, ${errCount} ERR, ${pendingCount} pending`);
         console.log();
-        console.log('hint: Use `pfscan rpc show --session <ses> --id <rpc>` for details');
+        console.log('hint: Use `pfscan rpc show --id <rpc>` for details');
 
       } catch (error) {
         if (error instanceof Error && error.message.includes('no such table')) {
@@ -326,22 +355,38 @@ export function createRpcCommand(getConfigPath: () => string): Command {
       }
     });
 
-  // rpc show --session <sid> --id <rpc_id>
+  // rpc show [--session <sid>] --id <rpc_id>
   cmd
     .command('show')
     .description('Show RPC call details with request/response JSON')
-    .requiredOption('--session <id>', 'Session ID (partial match supported)')
+    .option('--session <id>', 'Session ID (partial match supported)')
+    .option('--latest', 'Use the latest session')
+    .option('--connector <id>', 'Filter by connector (with --latest)')
     .requiredOption('--id <rpc_id>', 'RPC ID')
     .action(async (options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
         const configDir = manager.getConfigDir();
 
-        const detail = getRpcDetail(configDir, options.session, options.id);
+        // Resolve session
+        const result = resolveSession({
+          sessionId: options.session,
+          latest: options.latest,
+          connectorId: options.connector,
+          configDir,
+        });
+
+        if (isSessionError(result)) {
+          console.error(formatSessionError(result));
+          process.exit(1);
+        }
+
+        const detail = getRpcDetail(configDir, result.sessionId, options.id);
 
         if (!detail) {
           console.log('RPC call not found.');
-          console.log('hint: Use `pfscan rpc list --session <ses>` to see available RPCs');
+          console.log(`Session: ${shortenId(result.sessionId, 8)}... (${result.resolvedBy})`);
+          console.log('hint: Use `pfscan rpc list` to see available RPCs');
           return;
         }
 

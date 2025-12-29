@@ -30,6 +30,7 @@ export class A2aAdapter implements IProtocolAdapter {
    *
    * Currently always returns false (stub)
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   canHandle(_raw: RawMessage): boolean {
     // TODO: Implement A2A detection in Phase 3
     // Expected format TBD
@@ -41,6 +42,7 @@ export class A2aAdapter implements IProtocolAdapter {
    *
    * Currently returns null (stub)
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   parse(_raw: RawMessage): ParsedMessage | null {
     // TODO: Implement A2A parsing in Phase 3
     return null;
@@ -51,6 +53,7 @@ export class A2aAdapter implements IProtocolAdapter {
    *
    * Currently returns empty string (stub)
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   summarize(_parsed: ParsedMessage, _raw: RawMessage): string {
     // TODO: Implement A2A summary in Phase 3
     return '';

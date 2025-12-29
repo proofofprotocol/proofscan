@@ -5,7 +5,8 @@
 import { Command } from 'commander';
 import { ConfigManager } from '../config/index.js';
 import { Scanner } from '../scanner/index.js';
-import { output, outputSuccess, outputError, getOutputOptions } from '../utils/output.js';
+import { output, outputError, getOutputOptions } from '../utils/output.js';
+import { setCurrentSession } from '../utils/state.js';
 
 export function createScanCommand(getConfigPath: () => string): Command {
   const cmd = new Command('scan')
@@ -64,6 +65,11 @@ export function createScanCommand(getConfigPath: () => string): Command {
         });
 
         if (result.success) {
+          // Save as current session for future commands
+          if (!dryRun) {
+            setCurrentSession(result.sessionId, result.connectorId);
+          }
+
           const toolCount = result.tools?.length || 0;
           const toolNames = result.tools?.map((t: unknown) => {
             if (typeof t === 'object' && t !== null && 'name' in t) {

@@ -6,7 +6,7 @@ import { Command } from 'commander';
 import { ConfigManager } from '../config/index.js';
 import { EventLineStore } from '../eventline/store.js';
 import { getDbSizes } from '../db/connection.js';
-import { formatBytes, formatDuration } from '../eventline/types.js';
+import { formatBytes } from '../eventline/types.js';
 import { output, getOutputOptions } from '../utils/output.js';
 
 export function createStatusCommand(getConfigPath: () => string): Command {

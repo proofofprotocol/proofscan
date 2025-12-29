@@ -289,7 +289,7 @@ export class EventsStore {
         byConnector.get(s.connector_id)!.push(s);
       }
 
-      for (const [cid, connectorSessions] of byConnector) {
+      for (const [, connectorSessions] of byConnector) {
         // Skip the first N (most recent) sessions
         for (let i = keepLast; i < connectorSessions.length; i++) {
           const s = connectorSessions[i];

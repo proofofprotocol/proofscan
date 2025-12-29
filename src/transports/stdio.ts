@@ -83,7 +83,7 @@ export class StdioConnection extends EventEmitter {
 
     this.process.on('close', (code, signal) => {
       // Reject all pending requests
-      for (const [id, pending] of this.pendingRequests) {
+      for (const [, pending] of this.pendingRequests) {
         clearTimeout(pending.timeout);
         pending.reject(new Error(`Process exited with code ${code}`));
       }
@@ -137,7 +137,7 @@ export class StdioConnection extends EventEmitter {
           pending.resolve(msg as JsonRpcResponse);
         }
       }
-    } catch (error) {
+    } catch {
       this.emit('error', new Error(`Failed to parse JSON-RPC message: ${line}`));
     }
   }

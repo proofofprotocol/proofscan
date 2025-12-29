@@ -5,53 +5,14 @@
 
 import { Command } from 'commander';
 import { ConfigManager } from '../config/index.js';
-import { EventsStore } from '../db/events-store.js';
 import { EventLineStore } from '../eventline/store.js';
 import { output, outputError, getOutputOptions } from '../utils/output.js';
 import {
   formatTimestamp,
-  formatBytes,
   getKindSymbol,
   shortenId,
   type EventLine,
 } from '../eventline/types.js';
-import type { Event } from '../db/types.js';
-
-function formatEvent(event: Event): string {
-  const time = new Date(event.ts).toLocaleTimeString();
-  const dir = event.direction === 'client_to_server' ? '→' : '←';
-
-  // Determine status from raw_json if it's a response
-  let status = ' ';
-  let summary = '';
-
-  if (event.raw_json) {
-    try {
-      const raw = JSON.parse(event.raw_json);
-
-      // Check for response success/error
-      if (event.kind === 'response') {
-        status = raw.error ? '✗' : '✓';
-        if (raw.error) {
-          summary = `(${raw.error.code}: ${raw.error.message})`;
-        }
-      } else if (event.kind === 'request' && raw.method) {
-        summary = raw.method;
-      } else if (event.kind === 'notification' && raw.method) {
-        summary = raw.method;
-      } else if (event.kind === 'transport_event') {
-        summary = `[${raw.type || 'transport'}]`;
-        if (raw.error) summary += ` ${raw.error}`;
-        if (raw.data) summary += ` ${String(raw.data).slice(0, 50)}`;
-        if (raw.message) summary += ` ${raw.message}`;
-      }
-    } catch {
-      summary = '[parse error]';
-    }
-  }
-
-  return `${time} ${dir} ${status} ${event.kind.padEnd(15)} ${summary}`;
-}
 
 export function createMonitorCommand(getConfigPath: () => string): Command {
   const cmd = new Command('monitor')
@@ -132,7 +93,7 @@ export function createMonitorCommand(getConfigPath: () => string): Command {
                 }
                 lastTs = newEvents[newEvents.length - 1].ts_ms;
               }
-            } catch (error) {
+            } catch {
               // Ignore errors during polling
             }
           };
@@ -141,6 +102,7 @@ export function createMonitorCommand(getConfigPath: () => string): Command {
           setInterval(poll, interval);
 
           // Keep process alive
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
           await new Promise(() => {});
         }
       } catch (error) {

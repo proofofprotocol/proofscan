@@ -7,7 +7,7 @@ import { ConfigManager } from '../config/index.js';
 import { EventsStore } from '../db/events-store.js';
 import { ProofsStore } from '../db/proofs-store.js';
 import { output, outputSuccess, outputError, outputTable, getOutputOptions } from '../utils/output.js';
-import type { SessionWithStats, PruneCandidate } from '../db/types.js';
+import type { SessionWithStats } from '../db/types.js';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '-';
