@@ -19,8 +19,14 @@
  */
 
 import { Command } from 'commander';
+import { createRequire } from 'module';
 import { resolveConfigPath } from './utils/config-path.js';
 import { setOutputOptions } from './utils/output.js';
+
+// Read version from package.json
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json');
+const VERSION = packageJson.version;
 import {
   createConfigCommand,
   createConnectorsCommand,
@@ -81,7 +87,7 @@ Examples:
 program
   .name('pfscan')
   .description('MCP Server scanner - eliminate black boxes by capturing JSON-RPC')
-  .version('0.4.0')
+  .version(VERSION)
   .option('-c, --config <path>', 'Path to config file')
   .option('--json', 'Output in JSON format')
   .option('-v, --verbose', 'Verbose output')
