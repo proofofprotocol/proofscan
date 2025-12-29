@@ -18,3 +18,4 @@ export * from './rpc.js';
 
 // Phase 3 new commands
 export * from './summary.js';
+export * from './permissions.js';
