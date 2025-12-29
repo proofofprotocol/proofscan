@@ -34,6 +34,7 @@ import {
   createStatusCommand,
   createEventsCommand,
   createRpcCommand,
+  createSummaryCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -57,6 +58,7 @@ Common Commands:
   scan, s       Run a new scan
   status, st    Show system status
   rpc           View RPC call details (list, show)
+  summary       Show session summary (Phase 3)
 
 Management:
   archive, a    Archive and prune old data
@@ -179,6 +181,9 @@ program.addCommand(createEventsCommand(getConfigPath));
 // rpc (Phase 2.2: rpc list, rpc show)
 program.addCommand(createRpcCommand(getConfigPath));
 
+// summary (Phase 3: capabilities, tool calls, concerns)
+program.addCommand(createSummaryCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -193,7 +198,7 @@ function hasSubcommand(): boolean {
   const knownCommands = new Set([
     'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
     'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'sessions', 'monitor', 'events', 'rpc', 'help'
+    'connectors', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'help'
   ]);
 
   for (let i = 2; i < process.argv.length; i++) {
