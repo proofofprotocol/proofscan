@@ -1,5 +1,7 @@
 # proofscan
 
+> **Languages:** English | [日本語](README.ja.md)
+
 MCP Server scanner - eliminate black boxes by capturing JSON-RPC from connection to tools/list.
 
 ## Overview
