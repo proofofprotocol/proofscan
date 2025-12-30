@@ -58,7 +58,7 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   config: ['init', 'show', 'validate', 'path', 'ls', 'list', 'snapshot', 'restore'],
   connectors: ['list', 'show', 'add', 'enable', 'disable', 'remove', 'import'],
   connector: ['list', 'show', 'add', 'enable', 'disable', 'remove', 'import'],
-  sessions: ['list', 'use', 'current', 'clear'],
+  sessions: ['list', 'show', 'prune'],
   archive: ['run', 'status'],
   events: ['ls', 'export'],
   rpc: ['list', 'show'],
