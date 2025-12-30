@@ -477,21 +477,17 @@ Tips:
     }
 
     // Spawn pfscan process
-    // Use shell: false for security - avoids shell injection
-    // On Windows, npm installs .cmd wrapper scripts which need shell,
-    // but we use the binary directly via npx or global install
+    // Windows requires shell: true for .cmd wrapper scripts (npm global installs)
+    // Security is ensured by isValidArg() validation above which blocks dangerous characters
+    const isWindows = process.platform === 'win32';
     return new Promise((resolve) => {
       const proc = spawn('pfscan', cmdArgs, {
         stdio: 'inherit',
-        shell: false,
+        shell: isWindows,
       });
 
       proc.on('error', (err) => {
         printError(`Failed to run command: ${err.message}`);
-        // On Windows, if shell: false fails, it may be due to .cmd wrapper
-        if (process.platform === 'win32') {
-          printInfo('Try running "npx pfscan" or ensure pfscan is globally installed.');
-        }
         resolve();
       });
 
