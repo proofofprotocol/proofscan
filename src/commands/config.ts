@@ -224,24 +224,28 @@ Examples:
           updated: [],
           skipped: [],
           duplicates,
+          secret_refs_sanitized: 0,
         };
 
         // Process connectors
         const existingIds = new Set(config.connectors.map(c => c.id));
 
         for (const parsed of parseResult.connectors) {
+          const { connector, secretRefCount } = toConnector(parsed);
+          result.secret_refs_sanitized += secretRefCount;
+
           if (existingIds.has(parsed.id)) {
             if (options.overwrite) {
               // Update existing
               const index = config.connectors.findIndex(c => c.id === parsed.id);
-              config.connectors[index] = toConnector(parsed);
+              config.connectors[index] = connector;
               result.updated.push(parsed.id);
             } else {
               result.skipped.push(parsed.id);
             }
           } else {
             // Add new
-            config.connectors.push(toConnector(parsed));
+            config.connectors.push(connector);
             result.added.push(parsed.id);
           }
         }
@@ -256,6 +260,7 @@ Examples:
             added: result.added,
             updated: result.updated,
             skipped: result.skipped,
+            secret_refs_sanitized: result.secret_refs_sanitized,
           });
         } else {
           console.log(summary);
@@ -529,6 +534,12 @@ function formatAddSummary(
 
   if (result.skipped.length > 0) {
     lines.push(`Skipped (already exists): ${result.skipped.join(', ')}`);
+  }
+
+  // Phase 3.4: Show secret sanitization info
+  if (result.secret_refs_sanitized > 0) {
+    lines.push('');
+    lines.push(`Secret refs sanitized: ${result.secret_refs_sanitized} (stored as "secret://***")`);
   }
 
   return lines.join('\n');
