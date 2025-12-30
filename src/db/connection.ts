@@ -20,11 +20,47 @@ export function getDbDir(configDir?: string): string {
 }
 
 /**
+ * Print helpful error message for DB failures
+ */
+function printDbError(dbPath: string, err: unknown, operation: 'open' | 'migrate'): void {
+  console.error('');
+  console.error('═══════════════════════════════════════════════════════════');
+  console.error(`  Database ${operation} failed`);
+  console.error('═══════════════════════════════════════════════════════════');
+  console.error(`  Path: ${dbPath}`);
+  if (err instanceof Error) {
+    console.error(`  Error: ${err.message}`);
+  }
+  console.error('');
+  console.error('  Recovery options:');
+  console.error('');
+  console.error('  1. Backup and recreate (loses existing data):');
+  console.error(`     mv "${dbPath}" "${dbPath}.bak"`);
+  console.error('     pfscan status   # will recreate fresh DB');
+  console.error('');
+  console.error('  2. Run diagnostics:');
+  console.error('     pfscan doctor');
+  console.error('');
+  console.error('  3. Try manual repair:');
+  console.error('     pfscan doctor --fix');
+  console.error('');
+  console.error('═══════════════════════════════════════════════════════════');
+  console.error('');
+}
+
+/**
  * Initialize events.db with migrations
  */
 function initEventsDb(dir: string): Database.Database {
   const dbPath = join(dir, 'events.db');
-  const db = new Database(dbPath);
+
+  let db: Database.Database;
+  try {
+    db = new Database(dbPath);
+  } catch (err) {
+    printDbError(dbPath, err, 'open');
+    throw err;
+  }
 
   // Enable foreign keys
   db.pragma('foreign_keys = ON');
@@ -32,23 +68,59 @@ function initEventsDb(dir: string): Database.Database {
   // Check version
   const currentVersion = db.pragma('user_version', { simple: true }) as number;
 
-  if (currentVersion === 0) {
-    // Fresh database - create full schema
-    db.exec(EVENTS_DB_SCHEMA);
-    db.pragma(`user_version = ${EVENTS_DB_VERSION}`);
-  } else if (currentVersion < EVENTS_DB_VERSION) {
-    // Run incremental migrations
-    runEventsMigrations(db, currentVersion);
-    db.pragma(`user_version = ${EVENTS_DB_VERSION}`);
+  try {
+    if (currentVersion === 0) {
+      // Fresh database - create full schema
+      db.exec(EVENTS_DB_SCHEMA);
+      db.pragma(`user_version = ${EVENTS_DB_VERSION}`);
+    } else if (currentVersion < EVENTS_DB_VERSION) {
+      // Run incremental migrations
+      runEventsMigrations(db, currentVersion);
+      db.pragma(`user_version = ${EVENTS_DB_VERSION}`);
+    }
+  } catch (err) {
+    // Close DB before re-throwing to prevent resource leak
+    db.close();
+    printDbError(dbPath, err, 'migrate');
+    throw err;
   }
 
   return db;
 }
 
 /**
+ * Ensure critical tables exist (guard against partial migrations)
+ * This runs BEFORE version-based migrations to handle edge cases
+ */
+function ensureCriticalTables(db: Database.Database): void {
+  // Phase 3.4: Ensure actors table exists (may be missing if migration failed partway)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS actors (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
+      CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
+    `);
+  } catch (err) {
+    // Only ignore "table already exists" errors - warn on other errors
+    if (err instanceof Error && !err.message.includes('already exists')) {
+      console.warn('Warning: Failed to create critical tables:', err.message);
+    }
+  }
+}
+
+/**
  * Run incremental migrations for events.db
  */
 function runEventsMigrations(db: Database.Database, fromVersion: number): void {
+  // Guard: Ensure critical tables exist before running migrations
+  ensureCriticalTables(db);
+
   // Migration 1 → 2: Add seq, summary, payload_hash columns
   if (fromVersion < 2) {
     try {
@@ -215,4 +287,177 @@ export function getDbSizes(configDir?: string): { events: number; proofs: number
   }
 
   return { events: eventsSize, proofs: proofsSize };
+}
+
+/**
+ * Get database paths
+ */
+export function getDbPaths(configDir?: string): { events: string; proofs: string } {
+  const dir = getDbDir(configDir);
+  return {
+    events: join(dir, 'events.db'),
+    proofs: join(dir, 'proofs.db'),
+  };
+}
+
+/**
+ * Database diagnostic result
+ */
+export interface DbDiagnostic {
+  path: string;
+  exists: boolean;
+  readable: boolean;
+  userVersion: number | null;
+  tables: string[];
+  missingTables: string[];
+  missingColumns: { table: string; column: string }[];
+  error?: string;
+}
+
+/**
+ * Run diagnostics on events.db without modifying it
+ */
+export function diagnoseEventsDb(configDir?: string): DbDiagnostic {
+  const dir = getDbDir(configDir);
+  const dbPath = join(dir, 'events.db');
+
+  const result: DbDiagnostic = {
+    path: dbPath,
+    exists: false,
+    readable: false,
+    userVersion: null,
+    tables: [],
+    missingTables: [],
+    missingColumns: [],
+  };
+
+  // Check if file exists
+  try {
+    statSync(dbPath);
+    result.exists = true;
+  } catch {
+    return result;
+  }
+
+  // Try to open and read
+  let db: Database.Database | undefined;
+  try {
+    db = new Database(dbPath, { readonly: true });
+    result.readable = true;
+
+    // Get user_version
+    result.userVersion = db.pragma('user_version', { simple: true }) as number;
+
+    // Get existing tables
+    const tablesResult = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    ).all() as { name: string }[];
+    result.tables = tablesResult.map(t => t.name).sort();
+
+    // Check for required tables
+    const requiredTables = ['sessions', 'rpc_calls', 'events', 'actors'];
+    result.missingTables = requiredTables.filter(t => !result.tables.includes(t));
+
+    // Check for required columns in sessions table (Phase 3.4)
+    if (result.tables.includes('sessions')) {
+      const columnsResult = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+      const existingColumns = new Set(columnsResult.map(c => c.name));
+      const requiredSessionColumns = ['actor_id', 'actor_kind', 'actor_label', 'secret_ref_count'];
+      for (const col of requiredSessionColumns) {
+        if (!existingColumns.has(col)) {
+          result.missingColumns.push({ table: 'sessions', column: col });
+        }
+      }
+    }
+
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err);
+  } finally {
+    db?.close();
+  }
+
+  return result;
+}
+
+/** Valid column names for sessions table (Phase 3.4) - security: prevent SQL injection */
+const VALID_SESSION_COLUMNS = new Map<string, string>([
+  ['actor_id', 'TEXT'],
+  ['actor_kind', 'TEXT'],
+  ['actor_label', 'TEXT'],
+  ['secret_ref_count', 'INTEGER NOT NULL DEFAULT 0'],
+]);
+
+/**
+ * Attempt to fix missing tables and columns in events.db
+ *
+ * @param configDir - Optional config directory path
+ * @returns Object with success status, list of fixed items, and optional error
+ */
+export function fixEventsDb(configDir?: string): { success: boolean; fixed: string[]; error?: string } {
+  const dir = getDbDir(configDir);
+  const dbPath = join(dir, 'events.db');
+  const fixed: string[] = [];
+
+  let db: Database.Database | undefined;
+  try {
+    db = new Database(dbPath);
+
+    // Wrap all fix operations in a transaction to prevent partial fixes
+    db.exec('BEGIN TRANSACTION');
+
+    try {
+      // Check if actors table exists before trying to create
+      const actorsExists = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='actors'"
+      ).get();
+
+      if (!actorsExists) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS actors (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            label TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            revoked_at TEXT
+          );
+          CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
+          CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
+        `);
+        fixed.push('table:actors');
+      }
+
+      // Check if sessions table exists before trying to add columns
+      const sessionsExists = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+      ).get();
+
+      if (sessionsExists) {
+        // Add missing columns to sessions table (Phase 3.4)
+        const columnsResult = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+        const existingColumns = new Set(columnsResult.map(c => c.name));
+
+        for (const [colName, colDef] of VALID_SESSION_COLUMNS) {
+          if (!existingColumns.has(colName)) {
+            // Security: column names validated against VALID_SESSION_COLUMNS whitelist
+            db.exec(`ALTER TABLE sessions ADD COLUMN ${colName} ${colDef}`);
+            fixed.push(`column:sessions.${colName}`);
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+      return { success: true, fixed };
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  } catch (err) {
+    return {
+      success: false,
+      fixed: [], // On rollback, nothing was actually fixed
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    db?.close();
+  }
 }

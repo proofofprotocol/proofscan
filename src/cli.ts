@@ -43,6 +43,7 @@ import {
   createSummaryCommand,
   createPermissionsCommand,
   createRecordCommand,
+  createDoctorCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -73,6 +74,7 @@ Management:
   archive, a    Archive and prune old data
   config, c     Configuration management
   connectors    Connector management
+  doctor        Diagnose and fix database issues
 
 Shortcuts:
   v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
@@ -199,6 +201,9 @@ program.addCommand(createPermissionsCommand(getConfigPath));
 // record (Phase 3: record dry-run)
 program.addCommand(createRecordCommand(getConfigPath));
 
+// doctor (Phase 3.4: diagnostics and repair)
+program.addCommand(createDoctorCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -213,7 +218,7 @@ function hasSubcommand(): boolean {
   const knownCommands = new Set([
     'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
     'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'help'
+    'connectors', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'help'
   ]);
 
   for (let i = 2; i < process.argv.length; i++) {
