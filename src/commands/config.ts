@@ -232,7 +232,6 @@ Examples:
 
         for (const parsed of parseResult.connectors) {
           const { connector, secretRefCount } = toConnector(parsed);
-          result.secret_refs_sanitized += secretRefCount;
 
           if (existingIds.has(parsed.id)) {
             if (options.overwrite) {
@@ -240,13 +239,16 @@ Examples:
               const index = config.connectors.findIndex(c => c.id === parsed.id);
               config.connectors[index] = connector;
               result.updated.push(parsed.id);
+              result.secret_refs_sanitized += secretRefCount;
             } else {
+              // Skipped: do NOT count secret refs (not actually saved)
               result.skipped.push(parsed.id);
             }
           } else {
             // Add new
             config.connectors.push(connector);
             result.added.push(parsed.id);
+            result.secret_refs_sanitized += secretRefCount;
           }
         }
 

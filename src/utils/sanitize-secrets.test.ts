@@ -26,6 +26,25 @@ describe('sanitizeSecrets', () => {
     expect(sanitizeSecrets('secret')).toEqual({ value: 'secret', count: 0 });
   });
 
+  it('does not count already-sanitized secret://*** values', () => {
+    // Already sanitized value should NOT be counted again
+    expect(sanitizeSecrets('secret://***')).toEqual({ value: 'secret://***', count: 0 });
+
+    // Mix of new secrets and already-sanitized
+    const input = {
+      new_secret: 'secret://local/new/KEY',
+      already_sanitized: 'secret://***',
+      normal: 'hello',
+    };
+    const result = sanitizeSecrets(input);
+    expect(result.value).toEqual({
+      new_secret: 'secret://***',
+      already_sanitized: 'secret://***',
+      normal: 'hello',
+    });
+    expect(result.count).toBe(1); // Only the new one counts
+  });
+
   it('sanitizes secret in simple object', () => {
     const input = {
       env: {

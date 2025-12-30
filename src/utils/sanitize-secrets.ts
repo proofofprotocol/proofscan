@@ -14,8 +14,8 @@ export interface SanitizeResult {
   count: number;
 }
 
-/** Secret reference pattern: "secret://..." */
-const SECRET_REF_PATTERN = /^secret:\/\//;
+/** Secret reference pattern: "secret://..." (but NOT already masked "secret://***") */
+const SECRET_REF_PATTERN = /^secret:\/\/(?!\*\*\*$)/;
 
 /** Masked secret reference */
 const SECRET_MASKED = 'secret://***';
