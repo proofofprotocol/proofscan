@@ -33,10 +33,26 @@ export function createScanCommand(getConfigPath: () => string): Command {
   cmd
     .command('start')
     .description('Start scanning a connector')
-    .requiredOption('--id <id>', 'Connector ID')
+    .argument('[connectorId]', 'Connector ID (alternative to --id)')
+    .option('--id <id>', 'Connector ID')
     .option('--timeout <seconds>', 'Timeout in seconds', '30')
     .option('--dry-run', 'Run scan without saving to database')
-    .action(async (options) => {
+    .action(async (connectorIdArg, options) => {
+      // Support both positional argument and --id option
+      const connectorId = options.id || connectorIdArg;
+
+      if (!connectorId) {
+        console.error('Error: Connector ID is required.\n');
+        console.error('Usage:');
+        console.error('  pfscan scan start <connectorId>');
+        console.error('  pfscan scan start --id <connectorId>\n');
+        console.error('To list available connectors:');
+        console.error('  pfscan connectors list');
+        process.exit(1);
+      }
+
+      // Use connectorId instead of options.id from here
+      options.id = connectorId;
       try {
         const manager = new ConfigManager(getConfigPath());
         const connector = await manager.getConnector(options.id);
@@ -114,7 +130,33 @@ export function createScanCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
       } catch (error) {
-        outputError('Scan failed', error instanceof Error ? error : undefined);
+        const opts = getOutputOptions();
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        if (opts.json) {
+          output({
+            success: false,
+            error: errorMessage,
+            stack: opts.verbose && error instanceof Error ? error.stack : undefined,
+          });
+        } else {
+          // Always show short error summary
+          console.error(`\n✗ Scan failed: ${errorMessage}\n`);
+
+          // Show stack trace only in verbose mode
+          if (opts.verbose && error instanceof Error && error.stack) {
+            console.error('Stack trace:');
+            console.error(error.stack);
+            console.error();
+          }
+
+          // Always show next steps guidance
+          console.error('Next steps:');
+          console.error('  pfscan doctor              Check database health');
+          console.error('  pfscan status              Show system status');
+          console.error('  pfscan connectors list     Verify connector exists');
+          console.error('  pfscan view --errors       Check recent errors');
+        }
         process.exit(1);
       }
     });

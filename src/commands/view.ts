@@ -156,9 +156,19 @@ export function createViewCommand(getConfigPath: () => string): Command {
     .option('--connector <id>', 'Filter by connector ID')
     .option('--session <id>', 'Filter by session ID (partial match)')
     .option('--fulltime', 'Show full timestamp (YYYY-MM-DD HH:MM:SS.mmm)')
+    .option('--full-time', 'Alias for --fulltime')
+    .option('--time-full', 'Alias for --fulltime')
     .option('--with-sessions', 'Include session start/end events')
     .option('--pairs', 'Show request/response pairs instead of individual events')
+    .option('--pair', 'Alias for --pairs')
     .action(async (options) => {
+      // Normalize option aliases
+      if (options.fullTime || options.timeFull) {
+        options.fulltime = true;
+      }
+      if (options.pair) {
+        options.pairs = true;
+      }
       try {
         const manager = new ConfigManager(getConfigPath());
         const store = new EventLineStore(manager.getConfigDir());

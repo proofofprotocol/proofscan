@@ -359,6 +359,12 @@ Examples:
       }
     });
 
+  // Alias: config list = config ls
+  cmd.command('list').description('Alias for ls').action(async () => {
+    // Forward to ls command
+    await cmd.commands.find(c => c.name() === 'ls')?.parseAsync([]);
+  });
+
   // ============================================================
   // config load - load snapshot
   // ============================================================
