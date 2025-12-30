@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -80,8 +80,35 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
     }
   }
 
-  // Future migrations go here:
-  // if (fromVersion < 3) { ... }
+  // Migration 2 → 3: Add actor columns, secret_ref_count, actors table (Phase 3.4)
+  if (fromVersion < 3) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      const statements = EVENTS_DB_MIGRATION_2_TO_3
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Ignore "duplicate column" and "table already exists" errors
+          if (err instanceof Error &&
+              !err.message.includes('duplicate column') &&
+              !err.message.includes('already exists')) {
+            throw err;
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
 }
 
 /**
