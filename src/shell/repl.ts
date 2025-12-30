@@ -327,63 +327,87 @@ Tips:
           return;
         }
 
-        const manager = new ConfigManager(this.configPath);
-        const store = new EventLineStore(manager.getConfigDir());
-        const sessions = store.getSessions(this.context.connector, 10);
+        try {
+          const manager = new ConfigManager(this.configPath);
+          const store = new EventLineStore(manager.getConfigDir());
+          const sessions = store.getSessions(this.context.connector, 10);
 
-        if (sessions.length === 0) {
-          printError('No sessions found. Run a scan first.');
-          return;
-        }
-
-        const selected = await selectSession(
-          sessions.map(s => ({ id: s.session_id, connector_id: s.connector_id }))
-        );
-
-        if (selected) {
-          this.context.session = selected;
-          // Also set connector from session
-          const session = sessions.find(s => s.session_id === selected);
-          if (session) {
-            this.context.connector = session.connector_id;
+          if (sessions.length === 0) {
+            printError('No sessions found. Run a scan first.');
+            return;
           }
-          setCurrentSession(selected, this.context.connector);
-          printSuccess(`Session set to: ${shortenSessionId(selected)}`);
+
+          const selected = await selectSession(
+            sessions.map(s => ({ id: s.session_id, connector_id: s.connector_id }))
+          );
+
+          if (selected) {
+            this.context.session = selected;
+            // Also set connector from session
+            const session = sessions.find(s => s.session_id === selected);
+            if (session) {
+              this.context.connector = session.connector_id;
+            }
+            setCurrentSession(selected, this.context.connector);
+            printSuccess(`Session set to: ${shortenSessionId(selected)}`);
+          }
+        } catch (err) {
+          printError(`Failed to load sessions: ${err instanceof Error ? err.message : String(err)}`);
         }
         return;
       }
 
       // Find session by prefix
       const prefix = args[1];
-      const manager = new ConfigManager(this.configPath);
-      const store = new EventLineStore(manager.getConfigDir());
-      const sessions = store.getSessions(this.context.connector, 100);
-      const matches = sessions.filter(s => s.session_id.startsWith(prefix));
+      try {
+        const manager = new ConfigManager(this.configPath);
+        const store = new EventLineStore(manager.getConfigDir());
+        const sessions = store.getSessions(this.context.connector, 100);
+        const matches = sessions.filter(s => s.session_id.startsWith(prefix));
 
-      if (matches.length === 0) {
-        printError(`Session not found: ${prefix}`);
-        return;
-      }
-
-      if (matches.length > 1) {
-        // Ambiguous prefix - show all matches
-        printError(`Ambiguous session prefix: ${prefix}`);
-        printInfo('Matching sessions:');
-        matches.slice(0, 10).forEach(s => {
-          console.log(`  ${shortenSessionId(s.session_id)} (${s.connector_id})`);
-        });
-        if (matches.length > 10) {
-          printInfo(`  ... and ${matches.length - 10} more`);
+        if (matches.length === 0) {
+          printError(`Session not found: ${prefix}`);
+          return;
         }
-        printInfo('Provide a longer prefix to disambiguate.');
-        return;
-      }
 
-      const match = matches[0];
-      this.context.session = match.session_id;
-      this.context.connector = match.connector_id;
-      setCurrentSession(match.session_id, match.connector_id);
-      printSuccess(`Session set to: ${shortenSessionId(match.session_id)} (${match.connector_id})`);
+        if (matches.length > 1) {
+          // Ambiguous prefix - offer interactive selection if possible
+          if (canInteract()) {
+            printInfo(`Multiple sessions match "${prefix}". Select one:`);
+            const selected = await selectSession(
+              matches.slice(0, 20).map(s => ({ id: s.session_id, connector_id: s.connector_id }))
+            );
+            if (selected) {
+              this.context.session = selected;
+              const session = matches.find(s => s.session_id === selected);
+              if (session) {
+                this.context.connector = session.connector_id;
+              }
+              setCurrentSession(selected, this.context.connector);
+              printSuccess(`Session set to: ${shortenSessionId(selected)} (${this.context.connector})`);
+            }
+          } else {
+            printError(`Ambiguous session prefix: ${prefix}`);
+            printInfo('Matching sessions:');
+            matches.slice(0, 10).forEach(s => {
+              console.log(`  ${shortenSessionId(s.session_id)} (${s.connector_id})`);
+            });
+            if (matches.length > 10) {
+              printInfo(`  ... and ${matches.length - 10} more`);
+            }
+            printInfo('Provide a longer prefix to disambiguate.');
+          }
+          return;
+        }
+
+        const match = matches[0];
+        this.context.session = match.session_id;
+        this.context.connector = match.connector_id;
+        setCurrentSession(match.session_id, match.connector_id);
+        printSuccess(`Session set to: ${shortenSessionId(match.session_id)} (${match.connector_id})`);
+      } catch (err) {
+        printError(`Failed to load sessions: ${err instanceof Error ? err.message : String(err)}`);
+      }
       return;
     }
 
@@ -423,6 +447,17 @@ Tips:
   }
 
   /**
+   * Validate and sanitize an argument for safe command execution
+   * Prevents shell injection by rejecting dangerous characters
+   */
+  private isValidArg(arg: string): boolean {
+    // Allow alphanumeric, dash, underscore, dot, slash, colon
+    // Reject shell metacharacters: & | ; ` $ ( ) < > " ' \ newlines
+    const safePattern = /^[\w\-./:\\]+$/;
+    return safePattern.test(arg);
+  }
+
+  /**
    * Execute a pfscan command
    */
   private async executeCommand(tokens: string[]): Promise<void> {
@@ -430,22 +465,40 @@ Tips:
     const cmdArgs = this.buildCommandArgs(tokens);
     const command = tokens[0];
 
+    // Validate all arguments for safety
+    const invalidArgs = cmdArgs.filter(arg => !this.isValidArg(arg));
+    if (invalidArgs.length > 0) {
+      printError(`Invalid characters in arguments: ${invalidArgs.join(', ')}`);
+      printInfo('Arguments must only contain alphanumeric characters, dashes, underscores, dots, slashes, and colons.');
+      return;
+    }
+
     // Spawn pfscan process
+    // Use shell: false for security - avoids shell injection
+    // On Windows, npm installs .cmd wrapper scripts which need shell,
+    // but we use the binary directly via npx or global install
     return new Promise((resolve) => {
       const proc = spawn('pfscan', cmdArgs, {
         stdio: 'inherit',
-        shell: process.platform === 'win32',
+        shell: false,
       });
 
       proc.on('error', (err) => {
         printError(`Failed to run command: ${err.message}`);
+        // On Windows, if shell: false fails, it may be due to .cmd wrapper
+        if (process.platform === 'win32') {
+          printInfo('Try running "npx pfscan" or ensure pfscan is globally installed.');
+        }
         resolve();
       });
 
-      proc.on('close', () => {
+      proc.on('close', (code) => {
         // Invalidate cache after data-modifying commands
         if (['scan', 's', 'archive', 'a'].includes(command)) {
           this.invalidateCache();
+        }
+        if (code !== 0 && code !== null) {
+          printError(`Command exited with code ${code}`);
         }
         resolve();
       });
