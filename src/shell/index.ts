@@ -2,7 +2,7 @@
  * Shell module exports
  */
 
-export { ShellRepl } from './repl.js';
+export { ShellRepl, isValidArg } from './repl.js';
 export { generatePrompt, supportsColor } from './prompt.js';
 export { getHistoryPath, loadHistory, saveHistory } from './history.js';
 export { createCompleter, getCompletions, type DynamicDataProvider } from './completer.js';

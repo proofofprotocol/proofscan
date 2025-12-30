@@ -22,6 +22,20 @@ import {
 const CACHE_TTL_MS = 5000;
 
 /**
+ * Validate an argument for safe command execution.
+ * Since we use shell: false, most injection vectors are blocked.
+ * We only reject the most dangerous shell metacharacters as defense-in-depth.
+ *
+ * Blocked characters: & | ; ` $ (command chaining and substitution)
+ *                     \n \r (newline injection)
+ *                     \0 (null byte injection)
+ */
+export function isValidArg(arg: string): boolean {
+  const dangerousPattern = /[&|;`$\n\r\0]/;
+  return !dangerousPattern.test(arg);
+}
+
+/**
  * Simple cache entry with expiration
  */
 interface CacheEntry<T> {
@@ -447,17 +461,6 @@ Tips:
   }
 
   /**
-   * Validate and sanitize an argument for safe command execution
-   * Prevents shell injection by rejecting dangerous characters
-   */
-  private isValidArg(arg: string): boolean {
-    // Allow alphanumeric, dash, underscore, dot, slash, colon
-    // Reject shell metacharacters: & | ; ` $ ( ) < > " ' \ newlines
-    const safePattern = /^[\w\-./:\\]+$/;
-    return safePattern.test(arg);
-  }
-
-  /**
    * Execute a pfscan command
    */
   private async executeCommand(tokens: string[]): Promise<void> {
@@ -465,11 +468,11 @@ Tips:
     const cmdArgs = this.buildCommandArgs(tokens);
     const command = tokens[0];
 
-    // Validate all arguments for safety
-    const invalidArgs = cmdArgs.filter(arg => !this.isValidArg(arg));
+    // Validate all arguments for safety (defense-in-depth with shell: false)
+    const invalidArgs = cmdArgs.filter(arg => !isValidArg(arg));
     if (invalidArgs.length > 0) {
       printError(`Invalid characters in arguments: ${invalidArgs.join(', ')}`);
-      printInfo('Arguments must only contain alphanumeric characters, dashes, underscores, dots, slashes, and colons.');
+      printInfo('Arguments cannot contain shell metacharacters: & | ; ` $');
       return;
     }
 
@@ -494,7 +497,13 @@ Tips:
 
       proc.on('close', (code) => {
         // Invalidate cache after data-modifying commands
-        if (['scan', 's', 'archive', 'a'].includes(command)) {
+        const dataModifyingCommands = [
+          'scan', 's',           // Creates new sessions/events
+          'archive', 'a',        // Removes old data
+          'connectors', 'connector', // Adds/removes connectors
+          'config', 'c',         // Config changes may affect connectors
+        ];
+        if (dataModifyingCommands.includes(command)) {
           this.invalidateCache();
         }
         if (code !== 0 && code !== null) {

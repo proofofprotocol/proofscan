@@ -93,7 +93,7 @@ function getBuiltinCompletions(
       }
       if (tokens.length === 2 && tokens[1] === 'session') {
         // `use session <sessionPrefix>`
-        return dataProvider.getSessionPrefixes(undefined, 10);
+        return dataProvider.getSessionPrefixes(undefined, 50);
       }
       return [];
 
@@ -146,7 +146,7 @@ function getCommandCompletions(
 
     // --session expects session prefix
     if (prevToken === '--session') {
-      return dataProvider.getSessionPrefixes(context.connector, 10);
+      return dataProvider.getSessionPrefixes(context.connector, 50);
     }
 
     // --connector expects connector id

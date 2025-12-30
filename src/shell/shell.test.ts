@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { generatePrompt, generatePlainPrompt, supportsColor, shortenSessionId } from './prompt.js';
 import { getCompletions } from './completer.js';
 import { loadHistory, saveHistory, addToHistory, getHistoryPath } from './history.js';
+import { isValidArg } from './repl.js';
 import type { ShellContext } from './types.js';
 import type { DynamicDataProvider } from './completer.js';
 import { join } from 'path';
@@ -147,6 +148,82 @@ describe('history', () => {
     it('should trim whitespace', () => {
       const history = addToHistory([], '  view  ');
       expect(history).toEqual(['view']);
+    });
+  });
+});
+
+describe('isValidArg', () => {
+  describe('should allow safe arguments', () => {
+    it('should allow simple commands', () => {
+      expect(isValidArg('view')).toBe(true);
+      expect(isValidArg('tree')).toBe(true);
+    });
+
+    it('should allow options with dashes', () => {
+      expect(isValidArg('--limit')).toBe(true);
+      expect(isValidArg('-v')).toBe(true);
+      expect(isValidArg('--connector')).toBe(true);
+    });
+
+    it('should allow option values with equals', () => {
+      expect(isValidArg('--format=json')).toBe(true);
+      expect(isValidArg('--limit=50')).toBe(true);
+    });
+
+    it('should allow file paths', () => {
+      expect(isValidArg('/path/to/file')).toBe(true);
+      expect(isValidArg('./relative/path')).toBe(true);
+      expect(isValidArg('C:\\Windows\\path')).toBe(true);
+    });
+
+    it('should allow quoted strings with spaces', () => {
+      expect(isValidArg('"My Connector"')).toBe(true);
+      expect(isValidArg("'test name'")).toBe(true);
+      expect(isValidArg('name with spaces')).toBe(true);
+    });
+
+    it('should allow parentheses and angle brackets', () => {
+      expect(isValidArg('(test)')).toBe(true);
+      expect(isValidArg('<value>')).toBe(true);
+    });
+
+    it('should allow colons for URLs and ports', () => {
+      expect(isValidArg('http://localhost:8080')).toBe(true);
+      expect(isValidArg('mcp:session')).toBe(true);
+    });
+  });
+
+  describe('should block dangerous arguments', () => {
+    it('should block command chaining with &', () => {
+      expect(isValidArg('view & rm -rf /')).toBe(false);
+      expect(isValidArg('test&&evil')).toBe(false);
+    });
+
+    it('should block piping with |', () => {
+      expect(isValidArg('view | cat /etc/passwd')).toBe(false);
+    });
+
+    it('should block command separation with ;', () => {
+      expect(isValidArg('view; rm -rf /')).toBe(false);
+    });
+
+    it('should block command substitution with backticks', () => {
+      expect(isValidArg('`whoami`')).toBe(false);
+    });
+
+    it('should block variable expansion with $', () => {
+      expect(isValidArg('$HOME')).toBe(false);
+      expect(isValidArg('$(whoami)')).toBe(false);
+      expect(isValidArg('${PATH}')).toBe(false);
+    });
+
+    it('should block newline injection', () => {
+      expect(isValidArg('view\nrm -rf /')).toBe(false);
+      expect(isValidArg('view\r\nrm -rf /')).toBe(false);
+    });
+
+    it('should block null byte injection', () => {
+      expect(isValidArg('view\0rm')).toBe(false);
     });
   });
 });
