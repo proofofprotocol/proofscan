@@ -156,21 +156,28 @@ export function createViewCommand(getConfigPath: () => string): Command {
     .option('--connector <id>', 'Filter by connector ID')
     .option('--session <id>', 'Filter by session ID (partial match)')
     .option('--fulltime', 'Show full timestamp (YYYY-MM-DD HH:MM:SS.mmm)')
+    .option('--full-time', 'Alias for --fulltime')
+    .option('--time-full', 'Alias for --fulltime')
     .option('--with-sessions', 'Include session start/end events')
     .option('--pairs', 'Show request/response pairs instead of individual events')
+    .option('--pair', 'Alias for --pairs')
     .action(async (options) => {
+      // Compute effective options from aliases (avoid mutating options object)
+      // Commander converts --full-time to options['full-time'], not options.fullTime
+      const showFulltime = options.fulltime || options['full-time'] || options['time-full'];
+      const showPairs = options.pairs || options.pair;
       try {
         const manager = new ConfigManager(getConfigPath());
         const store = new EventLineStore(manager.getConfigDir());
 
         const events = store.getRecentEvents({
-          limit: parseInt(options.limit, 10) * (options.pairs ? 2 : 1), // Get more events for pairing
+          limit: parseInt(options.limit, 10) * (showPairs ? 2 : 1), // Get more events for pairing
           since: options.since,
           errors: options.errors,
           method: options.method,
           connector: options.connector,
           session: options.session,
-          includeSessionEvents: options.withSessions && !options.pairs,
+          includeSessionEvents: options.withSessions && !showPairs,
         });
 
         if (events.length === 0) {
@@ -181,7 +188,7 @@ export function createViewCommand(getConfigPath: () => string): Command {
         }
 
         // Pair mode
-        if (options.pairs) {
+        if (showPairs) {
           const pairs = groupEventsToPairs(events);
 
           if (pairs.length === 0) {
@@ -198,7 +205,7 @@ export function createViewCommand(getConfigPath: () => string): Command {
           }
 
           // Print header for pairs
-          const header = options.fulltime
+          const header = showFulltime
             ? 'Time                    ↔ St Method                         RPC      Session      Latency    Size'
             : 'Time         ↔ St Method                         RPC      Session      Latency    Size';
           console.log(header);
@@ -209,7 +216,7 @@ export function createViewCommand(getConfigPath: () => string): Command {
 
           // Print pairs
           for (const pair of limitedPairs) {
-            console.log(renderPairLine(pair, { fulltime: options.fulltime }));
+            console.log(renderPairLine(pair, { fulltime: showFulltime }));
           }
 
           // Print summary
@@ -228,7 +235,7 @@ export function createViewCommand(getConfigPath: () => string): Command {
         }
 
         // Print header
-        const header = options.fulltime
+        const header = showFulltime
           ? 'Time                    Sym Dir St Method                         Session      Extra'
           : 'Time         Sym Dir St Method                         Session      Extra';
         console.log(header);
@@ -236,7 +243,7 @@ export function createViewCommand(getConfigPath: () => string): Command {
 
         // Print events
         for (const event of events) {
-          console.log(renderEventLine(event, { fulltime: options.fulltime }));
+          console.log(renderEventLine(event, { fulltime: showFulltime }));
         }
 
         // Print hint

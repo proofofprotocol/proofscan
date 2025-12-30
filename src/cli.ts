@@ -177,8 +177,13 @@ const cCmd = createConfigCommand(getConfigPath);
 cCmd.name('c').description('Alias for config');
 program.addCommand(cCmd);
 
-// connectors (no short alias - too long)
+// connectors
 program.addCommand(createConnectorsCommand(getConfigPath));
+
+// Alias: connector = connectors (common typo)
+const connectorCmd = createConnectorsCommand(getConfigPath);
+connectorCmd.name('connector').description('Alias for connectors');
+program.addCommand(connectorCmd);
 
 // sessions (kept for compatibility, but sessions list → view --with-sessions)
 program.addCommand(createSessionsCommand(getConfigPath));
@@ -218,7 +223,7 @@ function hasSubcommand(): boolean {
   const knownCommands = new Set([
     'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
     'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'help'
+    'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'help'
   ]);
 
   for (let i = 2; i < process.argv.length; i++) {
