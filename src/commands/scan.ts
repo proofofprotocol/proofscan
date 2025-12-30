@@ -51,19 +51,19 @@ export function createScanCommand(getConfigPath: () => string): Command {
         process.exit(1);
       }
 
-      // Use connectorId instead of options.id from here
-      options.id = connectorId;
+      // Use connectorId throughout (avoid mutating options object)
+      const effectiveId = connectorId;
       try {
         const manager = new ConfigManager(getConfigPath());
-        const connector = await manager.getConnector(options.id);
+        const connector = await manager.getConnector(effectiveId);
 
         if (!connector) {
-          outputError(`Connector not found: ${options.id}`);
+          outputError(`Connector not found: ${effectiveId}`);
           process.exit(1);
         }
 
         if (!connector.enabled) {
-          outputError(`Connector '${options.id}' is disabled. Enable it first.`);
+          outputError(`Connector '${effectiveId}' is disabled. Enable it first.`);
           process.exit(1);
         }
 
@@ -71,7 +71,7 @@ export function createScanCommand(getConfigPath: () => string): Command {
         const dryRun = options.dryRun || false;
 
         if (!opts.json) {
-          console.log(`${dryRun ? '[DRY RUN] ' : ''}Scanning connector: ${options.id}...`);
+          console.log(`${dryRun ? '[DRY RUN] ' : ''}Scanning connector: ${effectiveId}...`);
         }
 
         const scanner = new Scanner(manager.getConfigDir());
