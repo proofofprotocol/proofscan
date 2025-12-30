@@ -1,15 +1,18 @@
 /**
- * Database types for Phase2
+ * Database types for Phase2 + Phase 3.4
  */
 
 // Session exit reasons
 export type ExitReason = 'normal' | 'error' | 'killed';
 
+// Actor kinds (Phase 3.4)
+export type ActorKind = 'human' | 'agent' | 'system';
+
 // Event directions and kinds (same as Phase1)
 export type EventDirection = 'client_to_server' | 'server_to_client';
 export type EventKind = 'request' | 'response' | 'notification' | 'transport_event';
 
-// Sessions table
+// Sessions table (Phase 3.4: added actor_*, secret_ref_count)
 export interface Session {
   session_id: string;
   connector_id: string;
@@ -18,6 +21,21 @@ export interface Session {
   exit_reason: ExitReason | null;
   protected: number; // 0 or 1 (SQLite doesn't have boolean)
   created_at: string;
+  // Phase 3.4: Actor info
+  actor_id: string | null;
+  actor_kind: string | null; // ActorKind when present
+  actor_label: string | null;
+  // Phase 3.4: Secret reference count
+  secret_ref_count: number;
+}
+
+// Actors table (Phase 3.4)
+export interface Actor {
+  id: string;
+  kind: ActorKind;
+  label: string;
+  created_at: string;
+  revoked_at: string | null;
 }
 
 // RPC calls table

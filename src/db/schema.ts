@@ -1,14 +1,15 @@
 /**
  * Database schema definitions and migrations
  * Phase 2.1: Schema version 2 with seq, summary, payload_hash
+ * Phase 3.4: Schema version 3 with actor columns, secret_ref_count, actors table
  */
 
-export const EVENTS_DB_VERSION = 2;
+export const EVENTS_DB_VERSION = 3;
 export const PROOFS_DB_VERSION = 1;
 
-// events.db schema (version 2)
+// events.db schema (version 3)
 export const EVENTS_DB_SCHEMA = `
--- Sessions table
+-- Sessions table (Phase 3.4: added actor_id, actor_kind, actor_label, secret_ref_count)
 CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY,
   connector_id TEXT NOT NULL,
@@ -16,7 +17,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   ended_at TEXT,
   exit_reason TEXT CHECK(exit_reason IN ('normal', 'error', 'killed')),
   protected INTEGER DEFAULT 0,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  actor_id TEXT,
+  actor_kind TEXT,
+  actor_label TEXT,
+  secret_ref_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_connector ON sessions(connector_id);
@@ -59,6 +64,18 @@ CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 CREATE INDEX IF NOT EXISTS idx_events_rpc ON events(rpc_id);
 CREATE INDEX IF NOT EXISTS idx_events_seq ON events(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_events_payload_hash ON events(payload_hash);
+
+-- Actors table (Phase 3.4: registry of known actors, not required for operation)
+CREATE TABLE IF NOT EXISTS actors (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  label TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
+CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
 `;
 
 /**
@@ -80,6 +97,34 @@ CREATE INDEX IF NOT EXISTS idx_events_seq ON events(session_id, seq);
 
 -- Create index for payload_hash lookups
 CREATE INDEX IF NOT EXISTS idx_events_payload_hash ON events(payload_hash);
+`;
+
+/**
+ * Migration from version 2 to version 3
+ * Phase 3.4: Adds actor columns and secret_ref_count to sessions, creates actors table
+ */
+export const EVENTS_DB_MIGRATION_2_TO_3 = `
+-- Add actor columns to sessions
+ALTER TABLE sessions ADD COLUMN actor_id TEXT;
+
+ALTER TABLE sessions ADD COLUMN actor_kind TEXT;
+
+ALTER TABLE sessions ADD COLUMN actor_label TEXT;
+
+ALTER TABLE sessions ADD COLUMN secret_ref_count INTEGER NOT NULL DEFAULT 0;
+
+-- Create actors table
+CREATE TABLE IF NOT EXISTS actors (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  label TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  revoked_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
+
+CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
 `;
 
 // proofs.db schema

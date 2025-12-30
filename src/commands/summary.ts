@@ -19,6 +19,7 @@
 import { Command } from 'commander';
 import { ConfigManager } from '../config/index.js';
 import { getEventsDb } from '../db/connection.js';
+import type { Session } from '../db/types.js';
 import { output, getOutputOptions } from '../utils/output.js';
 import {
   resolveSession,
@@ -69,12 +70,22 @@ export interface SummaryNote {
   called?: boolean;
 }
 
-/** Summary data structure */
+/** Actor info (Phase 3.4) */
+export interface ActorInfo {
+  id: string;
+  kind: string;
+  label: string;
+}
+
+/** Summary data structure (Phase 3.4: v2 with actor and secret_ref_count) */
 export interface SummaryData {
   schema_version: string;
   session_id: string;
   connector_id: string;
   resolved_by: 'option' | 'latest' | 'current';
+
+  /** Phase 3.4: Actor info (null if not set) */
+  actor: ActorInfo | null;
 
   /** Capabilities from tools/list */
   capabilities: {
@@ -92,6 +103,9 @@ export interface SummaryData {
 
   /** Security notes (English codes for JSON) */
   notes: SummaryNote[];
+
+  /** Phase 3.4: Secret reference count */
+  secret_ref_count: number;
 }
 
 // ============================================================
@@ -506,7 +520,17 @@ function groupByCategory<T extends { category: OperationCategory }>(
 // ============================================================
 
 /**
+ * Get session data from database
+ */
+function getSession(configDir: string, sessionId: string): Session | null {
+  const db = getEventsDb(configDir);
+  const stmt = db.prepare(`SELECT * FROM sessions WHERE session_id = ?`);
+  return stmt.get(sessionId) as Session | null;
+}
+
+/**
  * Generate summary data for a session
+ * Phase 3.4: Now includes actor and secret_ref_count
  */
 function generateSummary(
   configDir: string,
@@ -517,6 +541,19 @@ function generateSummary(
   const capabilities = extractToolsFromSession(configDir, sessionId);
   const toolCalls = extractToolCalls(configDir, sessionId);
   const notes = generateNotes(capabilities, toolCalls);
+
+  // Get session for actor and secret_ref_count
+  const session = getSession(configDir, sessionId);
+
+  // Build actor info if available
+  let actor: ActorInfo | null = null;
+  if (session?.actor_id && session?.actor_kind && session?.actor_label) {
+    actor = {
+      id: session.actor_id,
+      kind: session.actor_kind,
+      label: session.actor_label,
+    };
+  }
 
   // Group capabilities by category
   const capabilitiesByCategory = groupByCategory(capabilities);
@@ -539,10 +576,11 @@ function generateSummary(
   };
 
   return {
-    schema_version: 'phase3.summary.v1',
+    schema_version: 'phase3.summary.v2',
     session_id: sessionId,
     connector_id: connectorId,
     resolved_by: resolvedBy,
+    actor,
     capabilities: {
       tools: capabilities,
       by_category: capabilitiesSimple,
@@ -554,6 +592,7 @@ function generateSummary(
       total_count: toolCalls.reduce((sum, t) => sum + t.count, 0),
     },
     notes,
+    secret_ref_count: session?.secret_ref_count ?? 0,
   };
 }
 
@@ -574,9 +613,16 @@ const NOTE_MESSAGES: Record<string, string> = {
 
 /**
  * Render summary to terminal (Phase 3 UX format)
+ * Phase 3.4: Now shows actor and secret_ref_count
  */
 function renderSummary(data: SummaryData): void {
   console.log(`${data.connector_id} (session: ${shortenId(data.session_id, 8)}...)`);
+
+  // Phase 3.4: Show actor if present
+  if (data.actor) {
+    console.log(`actor: ${data.actor.kind} "${data.actor.label}" (${shortenId(data.actor.id, 8)}...)`);
+  }
+
   console.log();
 
   // ============================================================
@@ -643,6 +689,12 @@ function renderSummary(data: SummaryData): void {
     }
   } else {
     console.log('  (なし)');
+  }
+
+  // Phase 3.4: Show secret refs if any
+  if (data.secret_ref_count > 0) {
+    console.log();
+    console.log(`secret refs: ${data.secret_ref_count}`);
   }
 }
 

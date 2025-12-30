@@ -28,7 +28,11 @@ export class EventsStore {
 
   // ==================== Sessions ====================
 
-  createSession(connectorId: string): Session {
+  createSession(connectorId: string, options?: {
+    actorId?: string;
+    actorKind?: string;
+    actorLabel?: string;
+  }): Session {
     const session: Session = {
       session_id: randomUUID(),
       connector_id: connectorId,
@@ -37,11 +41,15 @@ export class EventsStore {
       exit_reason: null,
       protected: 0,
       created_at: new Date().toISOString(),
+      actor_id: options?.actorId || null,
+      actor_kind: options?.actorKind || null,
+      actor_label: options?.actorLabel || null,
+      secret_ref_count: 0,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (session_id, connector_id, started_at, ended_at, exit_reason, protected, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (session_id, connector_id, started_at, ended_at, exit_reason, protected, created_at, actor_id, actor_kind, actor_label, secret_ref_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -51,7 +59,11 @@ export class EventsStore {
       session.ended_at,
       session.exit_reason,
       session.protected,
-      session.created_at
+      session.created_at,
+      session.actor_id,
+      session.actor_kind,
+      session.actor_label,
+      session.secret_ref_count
     );
 
     return session;
@@ -103,6 +115,23 @@ export class EventsStore {
   protectSession(sessionId: string): void {
     const stmt = this.db.prepare(`UPDATE sessions SET protected = 1 WHERE session_id = ?`);
     stmt.run(sessionId);
+  }
+
+  /**
+   * Increment secret_ref_count for a session (Phase 3.4)
+   */
+  incrementSecretRefCount(sessionId: string, count: number): void {
+    if (count <= 0) return;
+    const stmt = this.db.prepare(`UPDATE sessions SET secret_ref_count = secret_ref_count + ? WHERE session_id = ?`);
+    stmt.run(count, sessionId);
+  }
+
+  /**
+   * Update actor info for a session (Phase 3.4)
+   */
+  updateSessionActor(sessionId: string, actor: { id: string; kind: string; label: string }): void {
+    const stmt = this.db.prepare(`UPDATE sessions SET actor_id = ?, actor_kind = ?, actor_label = ? WHERE session_id = ?`);
+    stmt.run(actor.id, actor.kind, actor.label, sessionId);
   }
 
   // ==================== Events ====================

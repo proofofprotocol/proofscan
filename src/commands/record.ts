@@ -12,6 +12,7 @@ import { Command } from 'commander';
 import { createHash } from 'crypto';
 import { ConfigManager } from '../config/index.js';
 import { getEventsDb } from '../db/connection.js';
+import type { Session } from '../db/types.js';
 import { output, getOutputOptions } from '../utils/output.js';
 import {
   resolveSession,
@@ -19,7 +20,7 @@ import {
   formatSessionError,
 } from '../utils/session-resolver.js';
 import { shortenId } from '../eventline/types.js';
-import { classifyTool, OperationCategory } from './summary.js';
+import { classifyTool, OperationCategory, ActorInfo } from './summary.js';
 
 // ============================================================
 // Types
@@ -74,7 +75,7 @@ export interface Candidate {
   timing?: CandidateTiming;
 }
 
-/** Dry-run output structure */
+/** Dry-run output structure (Phase 3.4: v2 with actor and secret_ref_count) */
 export interface DryRunData {
   schema_version: string;
   options: {
@@ -86,10 +87,14 @@ export interface DryRunData {
     connector_id: string;
     resolved_by: 'option' | 'latest' | 'current';
   };
+  /** Phase 3.4: Actor info */
+  actor: ActorInfo | null;
   candidates: Candidate[];
   summary: {
     candidate_count: number;
     importance_max: number;
+    /** Phase 3.4: Secret reference count */
+    secret_ref_count: number;
   };
 }
 
@@ -402,7 +407,17 @@ function extractCapabilityCatalog(
 // ============================================================
 
 /**
+ * Get session data from database
+ */
+function getSession(configDir: string, sessionId: string): Session | null {
+  const db = getEventsDb(configDir);
+  const stmt = db.prepare(`SELECT * FROM sessions WHERE session_id = ?`);
+  return stmt.get(sessionId) as Session | null;
+}
+
+/**
  * Generate dry-run data for a session
+ * Phase 3.4: Now includes actor and secret_ref_count
  */
 function generateDryRun(
   configDir: string,
@@ -425,13 +440,26 @@ function generateDryRun(
   const toolCalls = extractToolCallCandidates(configDir, sessionId);
   candidates.push(...toolCalls);
 
+  // Get session for actor and secret_ref_count
+  const session = getSession(configDir, sessionId);
+
+  // Build actor info if available
+  let actor: ActorInfo | null = null;
+  if (session?.actor_id && session?.actor_kind && session?.actor_label) {
+    actor = {
+      id: session.actor_id,
+      kind: session.actor_kind,
+      label: session.actor_label,
+    };
+  }
+
   // Calculate summary
   const importanceMax = candidates.length > 0
     ? Math.max(...candidates.map(c => c.importance))
     : 0;
 
   return {
-    schema_version: 'phase3.record_dry_run.v1',
+    schema_version: 'phase3.record_dry_run.v2',
     options: {
       include_capabilities: includeCapabilities,
       redaction_mode: 'digest_only',
@@ -441,10 +469,12 @@ function generateDryRun(
       connector_id: connectorId,
       resolved_by: resolvedBy,
     },
+    actor,
     candidates,
     summary: {
       candidate_count: candidates.length,
       importance_max: importanceMax,
+      secret_ref_count: session?.secret_ref_count ?? 0,
     },
   };
 }
@@ -470,9 +500,16 @@ const CATEGORY_LABELS: Record<OperationCategory, string> = {
 
 /**
  * Render dry-run to terminal
+ * Phase 3.4: Now shows actor and secret_ref_count
  */
 function renderDryRun(data: DryRunData): void {
   console.log(`dry-run: ${data.session.connector_id} (session: ${shortenId(data.session.id, 8)}...)`);
+
+  // Phase 3.4: Show actor if present
+  if (data.actor) {
+    console.log(`actor: ${data.actor.kind} "${data.actor.label}" (${shortenId(data.actor.id, 8)}...)`);
+  }
+
   console.log(`redaction: ${data.options.redaction_mode}`);
   console.log();
 
@@ -505,6 +542,11 @@ function renderDryRun(data: DryRunData): void {
 
   console.log();
   console.log(`importance_max: ${data.summary.importance_max}`);
+
+  // Phase 3.4: Show secret refs if any
+  if (data.summary.secret_ref_count > 0) {
+    console.log(`secret refs: ${data.summary.secret_ref_count}`);
+  }
 }
 
 // ============================================================

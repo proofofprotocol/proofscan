@@ -8,6 +8,7 @@
  */
 
 import type { Connector, StdioTransport } from '../types/index.js';
+import { sanitizeSecrets } from '../utils/sanitize-secrets.js';
 
 // ============================================================
 // Types
@@ -34,6 +35,8 @@ export interface AddResult {
   updated: string[];
   skipped: string[];
   duplicates: string[];
+  /** Phase 3.4: Number of secret references sanitized */
+  secret_refs_sanitized: number;
 }
 
 // ============================================================
@@ -201,10 +204,21 @@ export function parseConnectorJson(jsonString: string): ParseResult {
 // Connector Conversion
 // ============================================================
 
+/** Result of toConnector with secret sanitization */
+export interface ToConnectorResult {
+  connector: Connector;
+  secretRefCount: number;
+}
+
 /**
  * Convert ParsedConnector to Connector type
+ * Phase 3.4: Sanitizes secret references in env values
+ *
+ * @returns Connector with sanitized env and count of secret refs found
  */
-export function toConnector(parsed: ParsedConnector): Connector {
+export function toConnector(parsed: ParsedConnector): ToConnectorResult {
+  let secretRefCount = 0;
+
   const transport: StdioTransport = {
     type: 'stdio',
     command: parsed.command,
@@ -215,13 +229,19 @@ export function toConnector(parsed: ParsedConnector): Connector {
   }
 
   if (parsed.env && Object.keys(parsed.env).length > 0) {
-    transport.env = parsed.env;
+    // Sanitize secret references in env
+    const sanitizeResult = sanitizeSecrets(parsed.env);
+    transport.env = sanitizeResult.value as Record<string, string>;
+    secretRefCount = sanitizeResult.count;
   }
 
   return {
-    id: parsed.id,
-    enabled: true,
-    transport,
+    connector: {
+      id: parsed.id,
+      enabled: true,
+      transport,
+    },
+    secretRefCount,
   };
 }
 
