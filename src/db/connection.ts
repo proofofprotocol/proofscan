@@ -335,7 +335,7 @@ export function diagnoseEventsDb(configDir?: string): DbDiagnostic {
   }
 
   // Try to open and read
-  let db: Database.Database | null = null;
+  let db: Database.Database | undefined;
   try {
     db = new Database(dbPath, { readonly: true });
     result.readable = true;
@@ -368,28 +368,41 @@ export function diagnoseEventsDb(configDir?: string): DbDiagnostic {
   } catch (err) {
     result.error = err instanceof Error ? err.message : String(err);
   } finally {
-    if (db) {
-      try { db.close(); } catch { /* ignore */ }
-    }
+    db?.close();
   }
 
   return result;
 }
 
+/** Valid column names for sessions table (Phase 3.4) - security: prevent SQL injection */
+const VALID_SESSION_COLUMNS = new Map<string, string>([
+  ['actor_id', 'TEXT'],
+  ['actor_kind', 'TEXT'],
+  ['actor_label', 'TEXT'],
+  ['secret_ref_count', 'INTEGER NOT NULL DEFAULT 0'],
+]);
+
 /**
  * Attempt to fix missing tables and columns in events.db
+ *
+ * @param configDir - Optional config directory path
+ * @returns Object with success status, list of fixed items, and optional error
  */
 export function fixEventsDb(configDir?: string): { success: boolean; fixed: string[]; error?: string } {
   const dir = getDbDir(configDir);
   const dbPath = join(dir, 'events.db');
   const fixed: string[] = [];
 
-  let db: Database.Database | null = null;
+  let db: Database.Database | undefined;
   try {
     db = new Database(dbPath);
 
-    // Create actors table if missing
-    try {
+    // Check if actors table exists before trying to create
+    const actorsExists = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='actors'"
+    ).get();
+
+    if (!actorsExists) {
       db.exec(`
         CREATE TABLE IF NOT EXISTS actors (
           id TEXT PRIMARY KEY,
@@ -402,29 +415,17 @@ export function fixEventsDb(configDir?: string): { success: boolean; fixed: stri
         CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
       `);
       fixed.push('table:actors');
-    } catch {
-      // Ignore if already exists
     }
 
     // Add missing columns to sessions table (Phase 3.4)
     const columnsResult = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
     const existingColumns = new Set(columnsResult.map(c => c.name));
 
-    const columnsToAdd = [
-      { name: 'actor_id', def: 'TEXT' },
-      { name: 'actor_kind', def: 'TEXT' },
-      { name: 'actor_label', def: 'TEXT' },
-      { name: 'secret_ref_count', def: 'INTEGER NOT NULL DEFAULT 0' },
-    ];
-
-    for (const col of columnsToAdd) {
-      if (!existingColumns.has(col.name)) {
-        try {
-          db.exec(`ALTER TABLE sessions ADD COLUMN ${col.name} ${col.def}`);
-          fixed.push(`column:sessions.${col.name}`);
-        } catch {
-          // Ignore if already exists
-        }
+    for (const [colName, colDef] of VALID_SESSION_COLUMNS) {
+      if (!existingColumns.has(colName)) {
+        // Security: column names validated against VALID_SESSION_COLUMNS whitelist
+        db.exec(`ALTER TABLE sessions ADD COLUMN ${colName} ${colDef}`);
+        fixed.push(`column:sessions.${colName}`);
       }
     }
 
@@ -436,8 +437,6 @@ export function fixEventsDb(configDir?: string): { success: boolean; fixed: stri
       error: err instanceof Error ? err.message : String(err),
     };
   } finally {
-    if (db) {
-      try { db.close(); } catch { /* ignore */ }
-    }
+    db?.close();
   }
 }
