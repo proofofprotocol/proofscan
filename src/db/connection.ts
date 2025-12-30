@@ -79,6 +79,8 @@ function initEventsDb(dir: string): Database.Database {
       db.pragma(`user_version = ${EVENTS_DB_VERSION}`);
     }
   } catch (err) {
+    // Close DB before re-throwing to prevent resource leak
+    db.close();
     printDbError(dbPath, err, 'migrate');
     throw err;
   }
@@ -104,8 +106,11 @@ function ensureCriticalTables(db: Database.Database): void {
       CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
       CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
     `);
-  } catch {
-    // Ignore errors - table creation is best-effort guard
+  } catch (err) {
+    // Only ignore "table already exists" errors - warn on other errors
+    if (err instanceof Error && !err.message.includes('already exists')) {
+      console.warn('Warning: Failed to create critical tables:', err.message);
+    }
   }
 }
 
@@ -417,15 +422,22 @@ export function fixEventsDb(configDir?: string): { success: boolean; fixed: stri
       fixed.push('table:actors');
     }
 
-    // Add missing columns to sessions table (Phase 3.4)
-    const columnsResult = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
-    const existingColumns = new Set(columnsResult.map(c => c.name));
+    // Check if sessions table exists before trying to add columns
+    const sessionsExists = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+    ).get();
 
-    for (const [colName, colDef] of VALID_SESSION_COLUMNS) {
-      if (!existingColumns.has(colName)) {
-        // Security: column names validated against VALID_SESSION_COLUMNS whitelist
-        db.exec(`ALTER TABLE sessions ADD COLUMN ${colName} ${colDef}`);
-        fixed.push(`column:sessions.${colName}`);
+    if (sessionsExists) {
+      // Add missing columns to sessions table (Phase 3.4)
+      const columnsResult = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+      const existingColumns = new Set(columnsResult.map(c => c.name));
+
+      for (const [colName, colDef] of VALID_SESSION_COLUMNS) {
+        if (!existingColumns.has(colName)) {
+          // Security: column names validated against VALID_SESSION_COLUMNS whitelist
+          db.exec(`ALTER TABLE sessions ADD COLUMN ${colName} ${colDef}`);
+          fixed.push(`column:sessions.${colName}`);
+        }
       }
     }
 

@@ -221,11 +221,37 @@ describe('fixEventsDb', () => {
     expect(result.fixed).toEqual([]);
   });
 
-  it('should handle non-existent database gracefully', () => {
-    const result = fixEventsDb(testDir);
+  it('should handle non-existent database directory gracefully', () => {
+    // Use a directory that doesn't exist
+    const nonExistentDir = join(testDir, 'nonexistent', 'deep', 'path');
+    const result = fixEventsDb(nonExistentDir);
 
+    // better-sqlite3 will fail to create file in non-existent directory
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
+  });
+
+  it('should handle missing sessions table gracefully', () => {
+    // Create database with only actors table (no sessions)
+    const dbPath = join(testDir, 'events.db');
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE actors (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        label TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT
+      );
+    `);
+    db.close();
+
+    const result = fixEventsDb(testDir);
+
+    // Should succeed without trying to add columns to non-existent sessions table
+    expect(result.success).toBe(true);
+    // Should not include any column fixes since sessions doesn't exist
+    expect(result.fixed.filter(f => f.startsWith('column:'))).toEqual([]);
   });
 });
 
