@@ -11,7 +11,7 @@ export function createDoctorCommand(getConfigPath: () => string): Command {
   const cmd = new Command('doctor')
     .description('Diagnose database issues and optionally fix them')
     .option('--fix', 'Attempt to fix detected issues')
-    .action(async (options) => {
+    .action((options) => {
       const manager = new ConfigManager(getConfigPath());
       const configDir = manager.getConfigDir();
       const dbPaths = getDbPaths(configDir);
@@ -99,6 +99,13 @@ export function createDoctorCommand(getConfigPath: () => string): Command {
 
           if (fixResult.success && fixResult.fixed.length > 0) {
             outputSuccess(`Fixed: ${fixResult.fixed.join(', ')}`);
+
+            // Verify fix worked
+            const postFixDiag = diagnoseEventsDb(configDir);
+            if (postFixDiag.missingTables.length > 0 || postFixDiag.missingColumns.length > 0) {
+              console.log();
+              outputError('Some issues remain after fix. Manual intervention may be required.');
+            }
           } else if (fixResult.success) {
             console.log('No fixes needed.');
           } else {

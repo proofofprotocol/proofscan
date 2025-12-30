@@ -402,50 +402,59 @@ export function fixEventsDb(configDir?: string): { success: boolean; fixed: stri
   try {
     db = new Database(dbPath);
 
-    // Check if actors table exists before trying to create
-    const actorsExists = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='actors'"
-    ).get();
+    // Wrap all fix operations in a transaction to prevent partial fixes
+    db.exec('BEGIN TRANSACTION');
 
-    if (!actorsExists) {
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS actors (
-          id TEXT PRIMARY KEY,
-          kind TEXT NOT NULL,
-          label TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          revoked_at TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
-        CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
-      `);
-      fixed.push('table:actors');
-    }
+    try {
+      // Check if actors table exists before trying to create
+      const actorsExists = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='actors'"
+      ).get();
 
-    // Check if sessions table exists before trying to add columns
-    const sessionsExists = db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
-    ).get();
+      if (!actorsExists) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS actors (
+            id TEXT PRIMARY KEY,
+            kind TEXT NOT NULL,
+            label TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            revoked_at TEXT
+          );
+          CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
+          CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
+        `);
+        fixed.push('table:actors');
+      }
 
-    if (sessionsExists) {
-      // Add missing columns to sessions table (Phase 3.4)
-      const columnsResult = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
-      const existingColumns = new Set(columnsResult.map(c => c.name));
+      // Check if sessions table exists before trying to add columns
+      const sessionsExists = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'"
+      ).get();
 
-      for (const [colName, colDef] of VALID_SESSION_COLUMNS) {
-        if (!existingColumns.has(colName)) {
-          // Security: column names validated against VALID_SESSION_COLUMNS whitelist
-          db.exec(`ALTER TABLE sessions ADD COLUMN ${colName} ${colDef}`);
-          fixed.push(`column:sessions.${colName}`);
+      if (sessionsExists) {
+        // Add missing columns to sessions table (Phase 3.4)
+        const columnsResult = db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[];
+        const existingColumns = new Set(columnsResult.map(c => c.name));
+
+        for (const [colName, colDef] of VALID_SESSION_COLUMNS) {
+          if (!existingColumns.has(colName)) {
+            // Security: column names validated against VALID_SESSION_COLUMNS whitelist
+            db.exec(`ALTER TABLE sessions ADD COLUMN ${colName} ${colDef}`);
+            fixed.push(`column:sessions.${colName}`);
+          }
         }
       }
-    }
 
-    return { success: true, fixed };
+      db.exec('COMMIT');
+      return { success: true, fixed };
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
   } catch (err) {
     return {
       success: false,
-      fixed,
+      fixed: [], // On rollback, nothing was actually fixed
       error: err instanceof Error ? err.message : String(err),
     };
   } finally {
