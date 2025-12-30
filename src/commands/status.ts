@@ -5,7 +5,7 @@
 import { Command } from 'commander';
 import { ConfigManager } from '../config/index.js';
 import { EventLineStore } from '../eventline/store.js';
-import { getDbSizes } from '../db/connection.js';
+import { getDbSizes, getDbPaths, diagnoseEventsDb } from '../db/connection.js';
 import { formatBytes } from '../eventline/types.js';
 import { output, getOutputOptions } from '../utils/output.js';
 
@@ -17,6 +17,7 @@ export function createStatusCommand(getConfigPath: () => string): Command {
         const manager = new ConfigManager(getConfigPath());
         const store = new EventLineStore(manager.getConfigDir());
         const dbSizes = getDbSizes(manager.getConfigDir());
+        const dbPaths = getDbPaths(manager.getConfigDir());
 
         // Get schema info
         const schema = store.getSchema();
@@ -38,7 +39,9 @@ export function createStatusCommand(getConfigPath: () => string): Command {
           config_path: manager.getConfigPath(),
           config_dir: manager.getConfigDir(),
           db: {
+            events_db_path: dbPaths.events,
             events_db_size: dbSizes.events,
+            proofs_db_path: dbPaths.proofs,
             proofs_db_size: dbSizes.proofs,
             schema_version: schema.version,
             tables: Array.from(schema.tables.keys()),
@@ -102,14 +105,49 @@ export function createStatusCommand(getConfigPath: () => string): Command {
 
       } catch (error) {
         if (error instanceof Error && error.message.includes('no such table')) {
+          // Show paths even when no data
+          const manager = new ConfigManager(getConfigPath());
+          const dbPaths = getDbPaths(manager.getConfigDir());
+          const dbSizes = getDbSizes(manager.getConfigDir());
+          const diagnostic = diagnoseEventsDb(manager.getConfigDir());
+
+          if (getOutputOptions().json) {
+            output({
+              status: 'no_data',
+              config_path: manager.getConfigPath(),
+              config_dir: manager.getConfigDir(),
+              db: {
+                events_db_path: dbPaths.events,
+                events_db_size: dbSizes.events,
+                events_db_version: diagnostic.userVersion,
+                proofs_db_path: dbPaths.proofs,
+                proofs_db_size: dbSizes.proofs,
+              },
+            });
+            return;
+          }
+
           console.log('proofscan Status');
           console.log('═════════════════════════════════════════════════════');
+          console.log();
+          console.log('Configuration:');
+          console.log(`  Config file:  ${manager.getConfigPath()}`);
+          console.log(`  Data dir:     ${manager.getConfigDir()}`);
+          console.log();
+          console.log('Database:');
+          console.log(`  events.db:    ${dbPaths.events}`);
+          console.log(`                ${formatBytes(dbSizes.events)} (version: ${diagnostic.userVersion ?? 'N/A'})`);
+          console.log(`  proofs.db:    ${dbPaths.proofs}`);
+          console.log(`                ${formatBytes(dbSizes.proofs)}`);
           console.log();
           console.log('No data yet. Initialize and run a scan:');
           console.log();
           console.log('  pfscan config init');
           console.log('  pfscan connectors import --from mcpServers --stdin');
           console.log('  pfscan scan start --id <connector>');
+          console.log();
+          console.log('Troubleshooting:');
+          console.log('  pfscan doctor         Run diagnostics');
           return;
         }
         throw error;
