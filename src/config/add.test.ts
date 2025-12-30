@@ -239,7 +239,7 @@ describe('toConnector', () => {
       env: { KEY: 'value' },
     };
 
-    const connector = toConnector(parsed);
+    const { connector, secretRefCount } = toConnector(parsed);
 
     expect(connector.id).toBe('test');
     expect(connector.enabled).toBe(true);
@@ -247,6 +247,7 @@ describe('toConnector', () => {
     expect((connector.transport as { command: string }).command).toBe('node');
     expect((connector.transport as { args?: string[] }).args).toEqual(['server.js']);
     expect((connector.transport as { env?: Record<string, string> }).env).toEqual({ KEY: 'value' });
+    expect(secretRefCount).toBe(0);
   });
 
   it('omits empty args and env', () => {
@@ -255,10 +256,29 @@ describe('toConnector', () => {
       command: 'python',
     };
 
-    const connector = toConnector(parsed);
+    const { connector } = toConnector(parsed);
 
     expect((connector.transport as { args?: string[] }).args).toBeUndefined();
     expect((connector.transport as { env?: Record<string, string> }).env).toBeUndefined();
+  });
+
+  it('sanitizes secret references in env', () => {
+    const parsed = {
+      id: 'with-secrets',
+      command: 'node',
+      env: {
+        API_KEY: 'secret://local/vault/API_KEY',
+        NORMAL: 'value',
+      },
+    };
+
+    const { connector, secretRefCount } = toConnector(parsed);
+
+    expect((connector.transport as { env?: Record<string, string> }).env).toEqual({
+      API_KEY: 'secret://***',
+      NORMAL: 'value',
+    });
+    expect(secretRefCount).toBe(1);
   });
 });
 
@@ -375,7 +395,7 @@ describe('Integration tests', () => {
     expect(result.success).toBe(true);
     expect(result.connectors).toHaveLength(2);
 
-    const connector = toConnector(result.connectors[0]);
+    const { connector } = toConnector(result.connectors[0]);
     expect(connector.transport.type).toBe('stdio');
   });
 });
