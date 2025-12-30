@@ -44,6 +44,7 @@ import {
   createPermissionsCommand,
   createRecordCommand,
   createDoctorCommand,
+  createShellCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -66,9 +67,10 @@ Common Commands:
   explore, e    Interactive data browser
   scan, s       Run a new scan
   status, st    Show system status
+  shell         Interactive shell (REPL) with TAB completion
   rpc           View RPC call details (list, show)
-  summary       Show session summary (Phase 3)
-  permissions   Show permission stats per category (Phase 3)
+  summary       Show session summary
+  permissions   Show permission stats per category
 
 Management:
   archive, a    Archive and prune old data
@@ -81,12 +83,11 @@ Shortcuts:
 
 Examples:
   pfscan                      # View recent events (default)
+  pfscan shell                # Start interactive shell
   pfscan view --limit 50      # View last 50 events
   pfscan view --pairs         # View request/response pairs
-  pfscan rpc list --session <ses>  # List RPCs for a session
-  pfscan rpc show --session <ses> --id <rpc>  # Show RPC details
   pfscan tree                 # Show structure overview
-  pfscan scan start --id mcp  # Start scanning connector 'mcp'
+  pfscan scan start mcp       # Start scanning connector 'mcp'
 `;
 
 program
@@ -209,6 +210,9 @@ program.addCommand(createRecordCommand(getConfigPath));
 // doctor (Phase 3.4: diagnostics and repair)
 program.addCommand(createDoctorCommand(getConfigPath));
 
+// shell (Phase 4: interactive REPL)
+program.addCommand(createShellCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -223,7 +227,7 @@ function hasSubcommand(): boolean {
   const knownCommands = new Set([
     'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
     'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'help'
+    'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'help'
   ]);
 
   for (let i = 2; i < process.argv.length; i++) {
