@@ -18,6 +18,17 @@ import {
   clearCurrentSession,
 } from '../utils/state.js';
 
+// Cache TTL in milliseconds (5 seconds)
+const CACHE_TTL_MS = 5000;
+
+/**
+ * Simple cache entry with expiration
+ */
+interface CacheEntry<T> {
+  data: T;
+  expiry: number;
+}
+
 /**
  * Shell REPL class
  */
@@ -27,6 +38,11 @@ export class ShellRepl {
   private history: string[] = [];
   private configPath: string;
   private running = false;
+
+  // Caches for completion data
+  private connectorsCache: CacheEntry<string[]> | null = null;
+  private sessionsCache: Map<string, CacheEntry<string[]>> = new Map();
+  private rpcsCache: Map<string, CacheEntry<string[]>> = new Map();
 
   constructor(configPath: string) {
     this.configPath = configPath;
@@ -41,7 +57,16 @@ export class ShellRepl {
   }
 
   /**
-   * Get data provider for completions
+   * Invalidate all caches (called after data-modifying commands)
+   */
+  private invalidateCache(): void {
+    this.connectorsCache = null;
+    this.sessionsCache.clear();
+    this.rpcsCache.clear();
+  }
+
+  /**
+   * Get data provider for completions with caching
    */
   private getDataProvider(): DynamicDataProvider {
     const manager = new ConfigManager(this.configPath);
@@ -49,28 +74,49 @@ export class ShellRepl {
 
     return {
       getConnectorIds: () => {
+        const now = Date.now();
+        if (this.connectorsCache && this.connectorsCache.expiry > now) {
+          return this.connectorsCache.data;
+        }
         try {
           const store = new EventLineStore(configDir);
-          return store.getConnectors().map(c => c.id);
+          const ids = store.getConnectors().map(c => c.id);
+          this.connectorsCache = { data: ids, expiry: now + CACHE_TTL_MS };
+          return ids;
         } catch {
           return [];
         }
       },
       getSessionPrefixes: (connectorId?: string, limit: number = 10) => {
+        const now = Date.now();
+        const cacheKey = `${connectorId || '*'}:${limit}`;
+        const cached = this.sessionsCache.get(cacheKey);
+        if (cached && cached.expiry > now) {
+          return cached.data;
+        }
         try {
           const store = new EventLineStore(configDir);
           const sessions = store.getSessions(connectorId, limit);
-          return sessions.map(s => shortenSessionId(s.session_id));
+          const prefixes = sessions.map(s => shortenSessionId(s.session_id));
+          this.sessionsCache.set(cacheKey, { data: prefixes, expiry: now + CACHE_TTL_MS });
+          return prefixes;
         } catch {
           return [];
         }
       },
       getRpcIds: (sessionId?: string) => {
         if (!sessionId) return [];
+        const now = Date.now();
+        const cached = this.rpcsCache.get(sessionId);
+        if (cached && cached.expiry > now) {
+          return cached.data;
+        }
         try {
           const store = new EventLineStore(configDir);
           const rpcs = store.getRpcCalls(sessionId);
-          return rpcs.map((_, i) => String(i + 1));
+          const ids = rpcs.map((_, i) => String(i + 1));
+          this.rpcsCache.set(sessionId, { data: ids, expiry: now + CACHE_TTL_MS });
+          return ids;
         } catch {
           return [];
         }
@@ -224,7 +270,7 @@ Shell Commands:
   exit, quit              Exit shell
 
 Available Commands:
-  ${TOP_LEVEL_COMMANDS.filter((_, i) => i % 2 === 0).join(', ')}
+  ${TOP_LEVEL_COMMANDS.join(', ')}
 
 Tips:
   - Press TAB for auto-completion
@@ -311,14 +357,29 @@ Tips:
       const prefix = args[1];
       const manager = new ConfigManager(this.configPath);
       const store = new EventLineStore(manager.getConfigDir());
-      const sessions = store.getSessions(this.context.connector, 50);
-      const match = sessions.find(s => s.session_id.startsWith(prefix));
+      const sessions = store.getSessions(this.context.connector, 100);
+      const matches = sessions.filter(s => s.session_id.startsWith(prefix));
 
-      if (!match) {
+      if (matches.length === 0) {
         printError(`Session not found: ${prefix}`);
         return;
       }
 
+      if (matches.length > 1) {
+        // Ambiguous prefix - show all matches
+        printError(`Ambiguous session prefix: ${prefix}`);
+        printInfo('Matching sessions:');
+        matches.slice(0, 10).forEach(s => {
+          console.log(`  ${shortenSessionId(s.session_id)} (${s.connector_id})`);
+        });
+        if (matches.length > 10) {
+          printInfo(`  ... and ${matches.length - 10} more`);
+        }
+        printInfo('Provide a longer prefix to disambiguate.');
+        return;
+      }
+
+      const match = matches[0];
       this.context.session = match.session_id;
       this.context.connector = match.connector_id;
       setCurrentSession(match.session_id, match.connector_id);
@@ -367,6 +428,7 @@ Tips:
   private async executeCommand(tokens: string[]): Promise<void> {
     // Build command line with context
     const cmdArgs = this.buildCommandArgs(tokens);
+    const command = tokens[0];
 
     // Spawn pfscan process
     return new Promise((resolve) => {
@@ -381,6 +443,10 @@ Tips:
       });
 
       proc.on('close', () => {
+        // Invalidate cache after data-modifying commands
+        if (['scan', 's', 'archive', 'a'].includes(command)) {
+          this.invalidateCache();
+        }
         resolve();
       });
     });
