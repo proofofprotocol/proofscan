@@ -21,3 +21,6 @@ export * from './summary.js';
 export * from './permissions.js';
 export * from './record.js';
 export * from './doctor.js';
+
+// Phase 4: Shell REPL
+export * from './shell.js';
