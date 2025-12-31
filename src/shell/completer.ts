@@ -11,6 +11,11 @@ import {
   SHELL_BUILTINS,
 } from './types.js';
 
+/**
+ * Commands blocked in shell mode (have their own readline)
+ */
+const BLOCKED_IN_SHELL = ['explore', 'e'];
+
 export type DynamicDataProvider = {
   getConnectorIds: () => string[];
   getSessionPrefixes: (connectorId?: string, limit?: number) => string[];
@@ -59,9 +64,10 @@ function getCandidates(
   context: ShellContext,
   dataProvider: DynamicDataProvider
 ): string[] {
-  // No tokens yet - complete top-level commands + builtins
+  // No tokens yet - complete top-level commands + builtins (excluding blocked commands)
   if (completedTokens.length === 0) {
-    return [...SHELL_BUILTINS, ...TOP_LEVEL_COMMANDS];
+    const allowedCommands = TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
+    return [...SHELL_BUILTINS, ...allowedCommands];
   }
 
   const firstToken = completedTokens[0];
@@ -99,7 +105,8 @@ function getBuiltinCompletions(
 
     case 'help':
       if (tokens.length === 1) {
-        return [...SHELL_BUILTINS, ...TOP_LEVEL_COMMANDS];
+        const allowedCommands = TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
+        return [...SHELL_BUILTINS, ...allowedCommands];
       }
       return [];
 
