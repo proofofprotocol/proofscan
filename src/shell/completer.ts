@@ -9,6 +9,7 @@ import {
   COMMAND_OPTIONS,
   COMMON_OPTIONS,
   SHELL_BUILTINS,
+  ROUTER_COMMANDS,
 } from './types.js';
 
 /**
@@ -64,13 +65,18 @@ function getCandidates(
   context: ShellContext,
   dataProvider: DynamicDataProvider
 ): string[] {
-  // No tokens yet - complete top-level commands + builtins (excluding blocked commands)
+  // No tokens yet - complete top-level commands + builtins + router commands (excluding blocked commands)
   if (completedTokens.length === 0) {
     const allowedCommands = TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
-    return [...SHELL_BUILTINS, ...allowedCommands];
+    return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...allowedCommands];
   }
 
   const firstToken = completedTokens[0];
+
+  // Handle router-style commands (cd, cc, ls, show, ..)
+  if (ROUTER_COMMANDS.includes(firstToken)) {
+    return getRouterCompletions(firstToken, completedTokens, currentToken, context, dataProvider);
+  }
 
   // Handle shell builtins
   if (SHELL_BUILTINS.includes(firstToken)) {
@@ -79,6 +85,86 @@ function getCandidates(
 
   // Handle command completions
   return getCommandCompletions(completedTokens, currentToken, context, dataProvider);
+}
+
+/**
+ * Get context level for completion
+ */
+function getContextLevel(context: ShellContext): 'root' | 'connector' | 'session' {
+  if (context.session) return 'session';
+  if (context.connector) return 'connector';
+  return 'root';
+}
+
+/**
+ * Get completions for router-style commands (cd, cc, ls, show, ..)
+ */
+function getRouterCompletions(
+  command: string,
+  tokens: string[],
+  _currentToken: string,
+  context: ShellContext,
+  dataProvider: DynamicDataProvider
+): string[] {
+  const level = getContextLevel(context);
+
+  switch (command) {
+    case 'cd':
+    case 'cc':
+      // cd/cc expects context-aware targets
+      if (tokens.length === 1) {
+        // Navigation shortcuts
+        const candidates = ['/', '..', '-'];
+
+        if (level === 'root') {
+          // At root: complete connector ids
+          candidates.push(...dataProvider.getConnectorIds());
+        } else if (level === 'connector') {
+          // At connector: complete session prefixes (within current connector)
+          candidates.push(...dataProvider.getSessionPrefixes(context.connector, 50));
+        } else if (level === 'session') {
+          // At session: can still navigate to other sessions
+          candidates.push(...dataProvider.getSessionPrefixes(context.connector, 50));
+        }
+
+        return candidates;
+      }
+      return [];
+
+    case 'ls':
+      // ls has limited options
+      if (tokens.length === 1) {
+        return ['-l', '--long', '--json', '--ids'];
+      }
+      return [];
+
+    case 'show':
+      // show expects context-aware targets
+      if (tokens.length === 1) {
+        const candidates = ['--json'];
+
+        if (level === 'root') {
+          // At root: show <connector>
+          candidates.push(...dataProvider.getConnectorIds());
+        } else if (level === 'connector') {
+          // At connector: show <session>
+          candidates.push(...dataProvider.getSessionPrefixes(context.connector, 50));
+        } else if (level === 'session') {
+          // At session: show <rpcId>
+          candidates.push(...dataProvider.getRpcIds(context.session));
+        }
+
+        return candidates;
+      }
+      return [];
+
+    case '..':
+      // No completions for ..
+      return [];
+
+    default:
+      return [];
+  }
 }
 
 /**
@@ -106,7 +192,7 @@ function getBuiltinCompletions(
     case 'help':
       if (tokens.length === 1) {
         const allowedCommands = TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
-        return [...SHELL_BUILTINS, ...allowedCommands];
+        return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...allowedCommands];
       }
       return [];
 
@@ -186,6 +272,13 @@ function getCommandCompletions(
 
   // For tree command, suggest connector ids as positional argument
   if ((firstToken === 'tree' || firstToken === 't') && tokens.length === 1) {
+    if (!currentToken.startsWith('-')) {
+      candidates.push(...dataProvider.getConnectorIds());
+    }
+  }
+
+  // For view command, suggest connector ids as positional argument
+  if ((firstToken === 'view' || firstToken === 'v') && tokens.length === 1) {
     if (!currentToken.startsWith('-')) {
       candidates.push(...dataProvider.getConnectorIds());
     }

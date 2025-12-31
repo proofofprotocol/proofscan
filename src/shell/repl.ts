@@ -303,10 +303,22 @@ export class ShellRepl {
    * Show help
    */
   private showHelp(topic?: string): void {
+    // Handle blocked commands
+    if (topic && ShellRepl.BLOCKED_IN_SHELL.includes(topic)) {
+      printError(`'${topic}' is not available in shell mode (stdin conflict)`);
+      printInfo('Exit shell first, then run: pfscan ' + topic);
+      return;
+    }
+
     if (topic) {
       printInfo(`Help for "${topic}" - run "pfscan ${topic} --help" for details`);
       return;
     }
+
+    // Filter out blocked commands from help listing
+    const availableCommands = TOP_LEVEL_COMMANDS.filter(
+      cmd => !ShellRepl.BLOCKED_IN_SHELL.includes(cmd)
+    );
 
     console.log(`
 Navigation:
@@ -328,7 +340,7 @@ Shell Commands:
   exit, quit              Exit shell
 
 ProofScan Commands:
-  ${TOP_LEVEL_COMMANDS.join(', ')}
+  ${availableCommands.join(', ')}
 
 Tips:
   - Press TAB for auto-completion
