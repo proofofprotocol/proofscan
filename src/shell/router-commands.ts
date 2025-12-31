@@ -92,6 +92,67 @@ export function getContextLevel(context: ShellContext): ContextLevel {
   return 'root';
 }
 
+// Constants for query limits
+const MAX_SESSIONS_SEARCH = 100;
+const MAX_INTERACTIVE_OPTIONS = 20;
+const MAX_AMBIGUOUS_DISPLAY = 5;
+
+/**
+ * Session match result for selection
+ */
+interface SessionMatch {
+  session_id: string;
+  connector_id: string;
+}
+
+/**
+ * Handle session selection from matches
+ *
+ * This helper extracts the common session selection logic:
+ * - If exactly one match, select it
+ * - If multiple matches and interactive, show selection UI
+ * - If multiple matches and non-interactive, show error with list
+ *
+ * @returns true if a session was selected, false otherwise
+ */
+async function selectSessionFromMatches(
+  matches: SessionMatch[],
+  prefix: string,
+  context: ShellContext,
+  store: EventLineStore,
+  connectorId: string
+): Promise<boolean> {
+  if (matches.length === 1) {
+    context.session = matches[0].session_id;
+    context.connector = connectorId;
+    context.proto = detectProto(store, matches[0].session_id);
+    setCurrentSession(matches[0].session_id, connectorId);
+    printSuccess(`→ ${connectorId}|${shortenSessionId(matches[0].session_id)}`);
+    return true;
+  }
+
+  if (canInteract()) {
+    printInfo(`Multiple sessions match "${prefix}". Select one:`);
+    const selected = await selectSession(
+      matches.slice(0, MAX_INTERACTIVE_OPTIONS).map(s => ({ id: s.session_id, connector_id: s.connector_id }))
+    );
+    if (selected) {
+      context.session = selected;
+      context.connector = connectorId;
+      context.proto = detectProto(store, selected);
+      setCurrentSession(selected, connectorId);
+      printSuccess(`→ ${connectorId}|${shortenSessionId(selected)}`);
+      return true;
+    }
+  } else {
+    printError(`Ambiguous session prefix: ${prefix}`);
+    matches.slice(0, MAX_AMBIGUOUS_DISPLAY).forEach(s => {
+      console.log(`  ${shortenSessionId(s.session_id)}`);
+    });
+  }
+  return false;
+}
+
 /**
  * Handle 'cc' command - change context
  *
@@ -172,7 +233,7 @@ export async function handleCc(
     }
 
     // Find session by prefix
-    const sessions = store.getSessions(connector.id, 100);
+    const sessions = store.getSessions(connector.id, MAX_SESSIONS_SEARCH);
     const matches = sessions.filter(s => s.session_id.startsWith(sessionPart));
 
     if (matches.length === 0) {
@@ -180,33 +241,7 @@ export async function handleCc(
       return;
     }
 
-    if (matches.length > 1) {
-      if (canInteract()) {
-        printInfo(`Multiple sessions match "${sessionPart}". Select one:`);
-        const selected = await selectSession(
-          matches.slice(0, 20).map(s => ({ id: s.session_id, connector_id: s.connector_id }))
-        );
-        if (selected) {
-          context.connector = connector.id;
-          context.session = selected;
-          context.proto = detectProto(store, selected);
-          setCurrentSession(selected, connector.id);
-          printSuccess(`→ ${connector.id}|${shortenSessionId(selected)}`);
-        }
-      } else {
-        printError(`Ambiguous session prefix: ${sessionPart}`);
-        matches.slice(0, 5).forEach(s => {
-          console.log(`  ${shortenSessionId(s.session_id)}`);
-        });
-      }
-      return;
-    }
-
-    context.connector = connector.id;
-    context.session = matches[0].session_id;
-    context.proto = detectProto(store, matches[0].session_id);
-    setCurrentSession(matches[0].session_id, connector.id);
-    printSuccess(`→ ${connector.id}|${shortenSessionId(matches[0].session_id)}`);
+    await selectSessionFromMatches(matches, sessionPart, context, store, connector.id);
     return;
   }
 
@@ -232,9 +267,15 @@ export async function handleCc(
     return;
   }
 
-  if (level === 'connector') {
-    // Treat as session prefix
-    const sessions = store.getSessions(context.connector, 100);
+  if (level === 'connector' || level === 'session') {
+    // At connector or session level - treat arg as session prefix
+    // Runtime check for connector (should always be set at these levels)
+    if (!context.connector) {
+      printError('No connector in context');
+      return;
+    }
+
+    const sessions = store.getSessions(context.connector, MAX_SESSIONS_SEARCH);
     const matches = sessions.filter(s => s.session_id.startsWith(arg));
 
     if (matches.length === 0) {
@@ -242,65 +283,9 @@ export async function handleCc(
       return;
     }
 
-    if (matches.length > 1) {
-      if (canInteract()) {
-        printInfo(`Multiple sessions match "${arg}". Select one:`);
-        const selected = await selectSession(
-          matches.slice(0, 20).map(s => ({ id: s.session_id, connector_id: s.connector_id }))
-        );
-        if (selected) {
-          context.session = selected;
-          context.proto = detectProto(store, selected);
-          setCurrentSession(selected, context.connector);
-          printSuccess(`→ ${context.connector}|${shortenSessionId(selected)}`);
-        }
-      } else {
-        printError(`Ambiguous session prefix: ${arg}`);
-        matches.slice(0, 5).forEach(s => {
-          console.log(`  ${shortenSessionId(s.session_id)}`);
-        });
-      }
-      return;
-    }
-
-    context.session = matches[0].session_id;
-    context.proto = detectProto(store, matches[0].session_id);
-    setCurrentSession(matches[0].session_id, context.connector);
-    printSuccess(`→ ${context.connector}|${shortenSessionId(matches[0].session_id)}`);
+    await selectSessionFromMatches(matches, arg, context, store, context.connector);
     return;
   }
-
-  // At session level - could be going to another session
-  const sessions = store.getSessions(context.connector, 100);
-  const matches = sessions.filter(s => s.session_id.startsWith(arg));
-
-  if (matches.length === 0) {
-    printError(`Session not found: ${arg}`);
-    return;
-  }
-
-  if (matches.length > 1) {
-    if (canInteract()) {
-      printInfo(`Multiple sessions match "${arg}". Select one:`);
-      const selected = await selectSession(
-        matches.slice(0, 20).map(s => ({ id: s.session_id, connector_id: s.connector_id }))
-      );
-      if (selected) {
-        context.session = selected;
-        context.proto = detectProto(store, selected);
-        setCurrentSession(selected, context.connector);
-        printSuccess(`→ ${context.connector}|${shortenSessionId(selected)}`);
-      }
-    } else {
-      printError(`Ambiguous session prefix: ${arg}`);
-    }
-    return;
-  }
-
-  context.session = matches[0].session_id;
-  context.proto = detectProto(store, matches[0].session_id);
-  setCurrentSession(matches[0].session_id, context.connector);
-  printSuccess(`→ ${context.connector}|${shortenSessionId(matches[0].session_id)}`);
 }
 
 /**
@@ -340,19 +325,19 @@ export function handlePwd(context: ShellContext, configPath: string): void {
   if (level === 'root') {
     console.log('  Level: root');
     console.log('  Path: /');
-  } else if (level === 'connector') {
-    const proto = detectConnectorProto(store, context.connector!);
+  } else if (level === 'connector' && context.connector) {
+    const proto = detectConnectorProto(store, context.connector);
     console.log(`  Level: connector`);
     console.log(`  Connector: ${context.connector}`);
     console.log(`  Proto: ${proto}`);
     console.log(`  Path: ${context.connector}`);
-  } else {
-    const proto = detectProto(store, context.session!);
+  } else if (level === 'session' && context.connector && context.session) {
+    const proto = detectProto(store, context.session);
     console.log(`  Level: session`);
     console.log(`  Connector: ${context.connector}`);
-    console.log(`  Session: ${shortenSessionId(context.session!)}`);
+    console.log(`  Session: ${shortenSessionId(context.session)}`);
     console.log(`  Proto: ${proto}`);
-    console.log(`  Path: ${context.connector}|${shortenSessionId(context.session!)}`);
+    console.log(`  Path: ${context.connector}|${shortenSessionId(context.session)}`);
   }
   console.log();
 }
@@ -385,12 +370,20 @@ export async function handleLs(
 
   if (level === 'connector') {
     // List sessions for current connector
-    await listSessions(store, context.connector!, isLong, isJson, idsOnly);
+    if (!context.connector) {
+      printError('No connector in context');
+      return;
+    }
+    await listSessions(store, context.connector, isLong, isJson, idsOnly);
     return;
   }
 
   // Session level - list RPC calls
-  await listRpcs(store, context.session!, isLong, isJson, idsOnly, executeCommand);
+  if (!context.session) {
+    printError('No session in context');
+    return;
+  }
+  await listRpcs(store, context.session, isLong, isJson, idsOnly, executeCommand);
 }
 
 /**
@@ -575,10 +568,15 @@ export async function handleShow(
   }
 
   if (level === 'connector') {
+    if (!context.connector) {
+      printError('No connector in context');
+      return;
+    }
+
     if (target) {
       // Show session details
       // First resolve session prefix
-      const sessions = store.getSessions(context.connector, 100);
+      const sessions = store.getSessions(context.connector, MAX_SESSIONS_SEARCH);
       const matches = sessions.filter(s => s.session_id.startsWith(target));
 
       if (matches.length === 0) {
@@ -588,7 +586,7 @@ export async function handleShow(
 
       if (matches.length > 1) {
         printError(`Ambiguous session prefix: ${target}`);
-        matches.slice(0, 5).forEach(s => {
+        matches.slice(0, MAX_AMBIGUOUS_DISPLAY).forEach(s => {
           console.log(`  ${shortenSessionId(s.session_id)}`);
         });
         return;
@@ -597,18 +595,23 @@ export async function handleShow(
       await executeCommand(['sessions', 'show', '--id', matches[0].session_id, ...(isJson ? ['--json'] : [])]);
     } else {
       // Show connector details
-      await executeCommand(['connectors', 'show', '--id', context.connector!, ...(isJson ? ['--json'] : [])]);
+      await executeCommand(['connectors', 'show', '--id', context.connector, ...(isJson ? ['--json'] : [])]);
     }
     return;
   }
 
   // Session level
+  if (!context.session) {
+    printError('No session in context');
+    return;
+  }
+
   if (target) {
     // Show RPC details
-    await executeCommand(['rpc', 'show', '--session', context.session!, '--id', target, ...(isJson ? ['--json'] : [])]);
+    await executeCommand(['rpc', 'show', '--session', context.session, '--id', target, ...(isJson ? ['--json'] : [])]);
   } else {
     // Show session details
-    await executeCommand(['sessions', 'show', '--id', context.session!, ...(isJson ? ['--json'] : [])]);
+    await executeCommand(['sessions', 'show', '--id', context.session, ...(isJson ? ['--json'] : [])]);
   }
 }
 
