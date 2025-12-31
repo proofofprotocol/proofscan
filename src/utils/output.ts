@@ -2,6 +2,8 @@
  * Output utilities for CLI
  */
 
+import { redactDeep, type RedactionResult } from '../secrets/redaction.js';
+
 export interface OutputOptions {
   json?: boolean;
   verbose?: boolean;
@@ -96,6 +98,8 @@ export function maskSecret(value: string, showChars: number = 4): string {
 
 /**
  * Mask secrets in an object (for display)
+ *
+ * @deprecated Use redactSecrets() instead for consistent Phase 3.5 redaction
  */
 export function maskSecretsInObject(obj: unknown, secretKeys: string[] = ['token', 'key', 'secret', 'password', 'auth']): unknown {
   if (typeof obj !== 'object' || obj === null) {
@@ -118,4 +122,18 @@ export function maskSecretsInObject(obj: unknown, secretKeys: string[] = ['token
     }
   }
   return masked;
+}
+
+/**
+ * Redact secrets in an object (Phase 3.5)
+ *
+ * Uses the secrets module to detect and redact:
+ * - Secret references (dpapi:xxx, keychain:xxx)
+ * - Values for keys that match secret patterns (API_KEY, TOKEN, etc.)
+ *
+ * @param obj - Object to redact
+ * @returns Redaction result with value and count
+ */
+export function redactSecrets(obj: unknown): RedactionResult {
+  return redactDeep(obj);
 }

@@ -6,7 +6,8 @@ import { Command } from 'commander';
 import { promises as fs } from 'fs';
 import { ConfigManager, parseMcpServers, readStdin } from '../config/index.js';
 import type { Connector, StdioTransport } from '../types/index.js';
-import { output, outputSuccess, outputError, outputTable, maskSecretsInObject } from '../utils/output.js';
+import { output, outputSuccess, outputError, outputTable, redactSecrets } from '../utils/output.js';
+import { redactionSummary } from '../secrets/redaction.js';
 
 export function createConnectorsCommand(getConfigPath: () => string): Command {
   const cmd = new Command('connectors')
@@ -47,7 +48,7 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
 
   cmd
     .command('show')
-    .description('Show connector details')
+    .description('Show connector details (secrets redacted)')
     .requiredOption('--id <id>', 'Connector ID')
     .action(async (options) => {
       try {
@@ -59,8 +60,12 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
-        const masked = maskSecretsInObject(connector);
-        output(masked, JSON.stringify(masked, null, 2));
+        const redacted = redactSecrets(connector);
+        if (redacted.count > 0) {
+          console.log(redactionSummary(redacted.count));
+          console.log();
+        }
+        output(redacted.value, JSON.stringify(redacted.value, null, 2));
       } catch (error) {
         outputError('Failed to show connector', error instanceof Error ? error : undefined);
         process.exit(1);
