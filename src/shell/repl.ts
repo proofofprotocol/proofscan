@@ -10,6 +10,7 @@ import {
   TOP_LEVEL_COMMANDS,
   ROUTER_COMMANDS,
   BLOCKED_IN_SHELL,
+  BLOCKED_SUBCOMMANDS_IN_SHELL,
   DEFAULT_COMPLETION_LIMIT,
   SESSION_SEARCH_LIMIT,
   getAllowedCommands,
@@ -531,6 +532,15 @@ Tips:
     if (BLOCKED_IN_SHELL.includes(command)) {
       printError(`'${command}' is not available in shell mode (stdin conflict)`);
       printInfo('Exit shell first, then run: pfscan ' + command);
+      return;
+    }
+
+    // Block subcommands that use hidden input (stdin conflict)
+    const subcommand = tokens.length > 1 ? tokens[1] : '';
+    const fullCommand = `${command} ${subcommand}`;
+    if (BLOCKED_SUBCOMMANDS_IN_SHELL.includes(fullCommand)) {
+      printError(`'${fullCommand}' is not available in shell mode (requires hidden input)`);
+      printInfo('Exit shell first, then run: pfscan ' + tokens.join(' '));
       return;
     }
 

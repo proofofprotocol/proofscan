@@ -9,6 +9,7 @@ import { loadHistory, saveHistory, addToHistory, getHistoryPath } from './histor
 import { isValidArg } from './repl.js';
 import type { ShellContext } from './types.js';
 import type { DynamicDataProvider } from './completer.js';
+import { TOP_LEVEL_COMMANDS, COMMAND_SUBCOMMANDS, BLOCKED_SUBCOMMANDS_IN_SHELL } from './types.js';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
@@ -231,6 +232,97 @@ describe('isValidArg', () => {
 
     it('should block null byte injection', () => {
       expect(isValidArg('view\0rm')).toBe(false);
+    });
+  });
+});
+
+describe('secrets command in shell', () => {
+  describe('TOP_LEVEL_COMMANDS', () => {
+    it('should include secrets command', () => {
+      expect(TOP_LEVEL_COMMANDS).toContain('secrets');
+    });
+
+    it('should include secret alias', () => {
+      expect(TOP_LEVEL_COMMANDS).toContain('secret');
+    });
+  });
+
+  describe('COMMAND_SUBCOMMANDS', () => {
+    it('should have secrets subcommands', () => {
+      expect(COMMAND_SUBCOMMANDS.secrets).toBeDefined();
+      expect(COMMAND_SUBCOMMANDS.secrets).toContain('list');
+      expect(COMMAND_SUBCOMMANDS.secrets).toContain('set');
+      expect(COMMAND_SUBCOMMANDS.secrets).toContain('edit');
+      expect(COMMAND_SUBCOMMANDS.secrets).toContain('prune');
+      expect(COMMAND_SUBCOMMANDS.secrets).toContain('export');
+      expect(COMMAND_SUBCOMMANDS.secrets).toContain('import');
+    });
+
+    it('should have secret alias subcommands', () => {
+      expect(COMMAND_SUBCOMMANDS.secret).toEqual(COMMAND_SUBCOMMANDS.secrets);
+    });
+  });
+
+  describe('BLOCKED_SUBCOMMANDS_IN_SHELL', () => {
+    it('should block secrets set (requires hidden input)', () => {
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).toContain('secrets set');
+    });
+
+    it('should block secrets edit (requires hidden input)', () => {
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).toContain('secrets edit');
+    });
+
+    it('should block secrets export (requires hidden input)', () => {
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).toContain('secrets export');
+    });
+
+    it('should block secrets import (requires hidden input)', () => {
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).toContain('secrets import');
+    });
+
+    it('should block secret alias subcommands too', () => {
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).toContain('secret set');
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).toContain('secret edit');
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).toContain('secret export');
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).toContain('secret import');
+    });
+
+    it('should NOT block secrets list (no hidden input)', () => {
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).not.toContain('secrets list');
+    });
+
+    it('should NOT block secrets prune (no hidden input)', () => {
+      expect(BLOCKED_SUBCOMMANDS_IN_SHELL).not.toContain('secrets prune');
+    });
+  });
+
+  describe('completion', () => {
+    const mockDataProvider: DynamicDataProvider = {
+      getConnectorIds: () => ['mcp'],
+      getSessionPrefixes: () => [],
+      getRpcIds: () => [],
+    };
+    const context: ShellContext = {};
+
+    it('should complete secrets command', () => {
+      const [completions] = getCompletions('sec', context, mockDataProvider);
+      expect(completions).toContain('secrets');
+      expect(completions).toContain('secret');
+    });
+
+    it('should complete secrets subcommands', () => {
+      const [completions] = getCompletions('secrets ', context, mockDataProvider);
+      expect(completions).toContain('list');
+      expect(completions).toContain('set');
+      expect(completions).toContain('prune');
+      expect(completions).toContain('export');
+      expect(completions).toContain('import');
+    });
+
+    it('should complete secret alias subcommands', () => {
+      const [completions] = getCompletions('secret ', context, mockDataProvider);
+      expect(completions).toContain('list');
+      expect(completions).toContain('set');
     });
   });
 });

@@ -57,6 +57,7 @@ export const TOP_LEVEL_COMMANDS = [
   'permissions',
   'record',
   'doctor',
+  'secrets', 'secret',
 ];
 
 /**
@@ -72,6 +73,8 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   events: ['ls', 'export'],
   rpc: ['list', 'show'],
   record: ['dry-run'],
+  secrets: ['list', 'set', 'edit', 'prune', 'export', 'import'],
+  secret: ['list', 'set', 'edit', 'prune', 'export', 'import'],
 };
 
 /**
@@ -102,6 +105,14 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   sessions: ['--limit'],
   archive: ['--older-than', '--dry-run'],
   record: ['--output'],
+  secrets: ['--orphans', '--clip', '--dry-run', '--older-than', '-o', '--output', '--overwrite'],
+  secret: ['--orphans', '--clip', '--dry-run', '--older-than', '-o', '--output', '--overwrite'],
+  'secrets list': ['--orphans'],
+  'secrets prune': ['--dry-run', '--older-than'],
+  'secrets export': ['-o', '--output'],
+  'secrets import': ['--overwrite'],
+  'secrets set': ['--clip'],
+  'secrets edit': ['--clip'],
 };
 
 /**
@@ -126,6 +137,25 @@ export const ROUTER_COMMANDS = ['cc', 'cd', 'ls', 'show', '..'];
  * Users should exit shell first, then run: pfscan <command>
  */
 export const BLOCKED_IN_SHELL = ['explore', 'e'];
+
+/**
+ * Subcommands blocked in shell mode due to stdin conflicts (hidden input).
+ *
+ * These subcommands use readline for password/secret input which conflicts
+ * with the shell's readline. Users should exit shell first.
+ *
+ * Format: "command subcommand" (e.g., "secrets set")
+ */
+export const BLOCKED_SUBCOMMANDS_IN_SHELL = [
+  'secrets set',
+  'secrets edit',
+  'secrets export',
+  'secrets import',
+  'secret set',
+  'secret edit',
+  'secret export',
+  'secret import',
+];
 
 /**
  * Default limit for completion results (sessions, etc.)
