@@ -241,6 +241,50 @@ describe('pruneOrphanSecrets', () => {
     store2.close();
     expect(count).toBe(1);
   });
+
+  it('should skip secrets newer than olderThanDays threshold', async () => {
+    // Create orphan secret (just now, so 0 days old)
+    const store = new SqliteSecretStore(tempDir);
+    await store.store('recent-orphan', { connectorId: 'old' });
+    store.close();
+
+    writeFileSync(configPath, JSON.stringify({ version: 1, connectors: [] }));
+
+    // Try to prune with 7 days threshold - should skip the recent secret
+    const result = await pruneOrphanSecrets({
+      configDir: tempDir,
+      configPath,
+      olderThanDays: 7,
+    });
+
+    expect(result.orphanCount).toBe(0); // Too new, not included
+    expect(result.removedCount).toBe(0);
+
+    // Verify secret still exists
+    const store2 = new SqliteSecretStore(tempDir);
+    const count = store2.count();
+    store2.close();
+    expect(count).toBe(1);
+  });
+
+  it('should prune secrets older than olderThanDays threshold', async () => {
+    // Create orphan secret
+    const store = new SqliteSecretStore(tempDir);
+    await store.store('orphan', { connectorId: 'old' });
+    store.close();
+
+    writeFileSync(configPath, JSON.stringify({ version: 1, connectors: [] }));
+
+    // Prune with 0 days threshold - should include all
+    const result = await pruneOrphanSecrets({
+      configDir: tempDir,
+      configPath,
+      olderThanDays: 0,
+    });
+
+    expect(result.orphanCount).toBe(1);
+    expect(result.removedCount).toBe(1);
+  });
 });
 
 describe('exportSecrets / importSecrets', () => {

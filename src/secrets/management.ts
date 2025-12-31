@@ -10,7 +10,7 @@
  * Security: Never logs, prints, or writes plaintext secrets.
  */
 
-import { existsSync, readFileSync, writeFileSync, unlinkSync, openSync, closeSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, openSync, closeSync, renameSync } from 'fs';
 import { dirname, join } from 'path';
 import { randomBytes, createCipheriv, createDecipheriv, scryptSync, createHmac } from 'crypto';
 import { SqliteSecretStore } from './store.js';
@@ -93,11 +93,20 @@ export interface ImportOptions {
   overwrite?: boolean;
 }
 
+/** Error detail for import failures */
+export interface ImportError {
+  connector_id: string;
+  env_key: string;
+  error: string;
+}
+
 /** Result of importing secrets */
 export interface ImportResult {
   importedCount: number;
   skippedCount: number;
   errorCount: number;
+  /** Details about individual import failures */
+  errors?: ImportError[];
 }
 
 /** Export bundle format */
@@ -223,9 +232,9 @@ async function withConfigLock<T>(
     // Execute operation
     const { config: updatedConfig, result } = await operation(config);
 
-    // Write atomically: write to temp file first, then overwrite original
+    // Write atomically: write to temp file first, then rename to original
     writeFileSync(tempPath, JSON.stringify(updatedConfig, null, 2));
-    writeFileSync(configPath, JSON.stringify(updatedConfig, null, 2));
+    renameSync(tempPath, configPath);
 
     return result;
   } finally {
@@ -423,9 +432,14 @@ export async function pruneOrphanSecrets(options: PruneOptions): Promise<PruneRe
       if (!configRefs.has(id)) {
         // Check age if specified
         if (ageThreshold > 0) {
-          const meta = await store.getMeta(id);
-          // For now, we don't have created_at in getMeta, so skip age check
-          // TODO: Extend store to return created_at
+          const createdAt = await store.getCreatedAt(id);
+          if (createdAt) {
+            const age = now - createdAt.getTime();
+            if (age < ageThreshold) {
+              // Secret is too new, skip it
+              continue;
+            }
+          }
         }
         orphanIds.push(id);
       }
@@ -575,7 +589,7 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
   // Store secrets first (outside the config lock to minimize lock time)
   const store = new SqliteSecretStore(configDir);
   const storedSecrets: { entry: ExportEntry; reference: string }[] = [];
-  let errorCount = 0;
+  const errors: ImportError[] = [];
 
   try {
     for (const entry of payload.entries) {
@@ -591,8 +605,12 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
         });
 
         storedSecrets.push({ entry, reference: result.reference });
-      } catch {
-        errorCount++;
+      } catch (err) {
+        errors.push({
+          connector_id: entry.connector_id,
+          env_key: entry.env_key,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   } finally {
@@ -603,8 +621,9 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
   if (storedSecrets.length === 0) {
     return {
       importedCount: 0,
-      skippedCount: payload.entries.length - errorCount,
-      errorCount,
+      skippedCount: payload.entries.length - errors.length,
+      errorCount: errors.length,
+      errors: errors.length > 0 ? errors : undefined,
     };
   }
 
@@ -649,8 +668,9 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
       config,
       result: {
         importedCount,
-        skippedCount: skippedCount + (payload.entries.length - storedSecrets.length - errorCount),
-        errorCount,
+        skippedCount: skippedCount + (payload.entries.length - storedSecrets.length - errors.length),
+        errorCount: errors.length,
+        errors: errors.length > 0 ? errors : undefined,
       },
     };
   });

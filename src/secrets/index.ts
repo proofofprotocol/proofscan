@@ -73,6 +73,7 @@ export {
   type ExportResult,
   type ImportOptions,
   type ImportResult,
+  type ImportError,
 } from './management.js';
 
 // Resolution (Phase 3.6)

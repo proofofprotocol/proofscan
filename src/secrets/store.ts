@@ -176,6 +176,22 @@ export class SqliteSecretStore implements ISecretStore {
   }
 
   /**
+   * Get creation timestamp for a secret
+   */
+  async getCreatedAt(id: string): Promise<Date | null> {
+    this.ensureOpen();
+
+    const stmt = this.db.prepare(`SELECT created_at FROM secrets WHERE id = ?`);
+    const row = stmt.get(id) as { created_at: string } | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return new Date(row.created_at);
+  }
+
+  /**
    * Get the provider type in use
    */
   getProviderType(): ProviderType {
