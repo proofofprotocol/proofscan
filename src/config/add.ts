@@ -49,6 +49,8 @@ export interface AddResult {
   secrets_stored: number;
   /** Phase 3.5: Number of placeholders detected */
   placeholders_detected: number;
+  /** Phase 3.5.1: Number of storage errors (encryption failures) */
+  storage_errors: number;
 }
 
 // ============================================================

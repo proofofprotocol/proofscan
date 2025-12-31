@@ -27,10 +27,18 @@ export interface SecretizeKeyResult {
   originalValue: string;
   /** New value (may be dpapi:xxx or original) */
   newValue: string;
-  /** Action taken */
-  action: 'stored' | 'placeholder' | 'skipped';
+  /**
+   * Action taken:
+   * - 'stored': Secret successfully encrypted and stored
+   * - 'placeholder': Placeholder value detected (e.g., "YOUR_API_KEY")
+   * - 'skipped': Not a secret key (e.g., NODE_ENV)
+   * - 'error': Failed to store secret (encryption error, etc.)
+   */
+  action: 'stored' | 'placeholder' | 'skipped' | 'error';
   /** Secret reference if stored */
   secretRef?: string;
+  /** Error message if action is 'error' */
+  error?: string;
 }
 
 /**
@@ -45,6 +53,8 @@ export interface SecretizeResult {
   storedCount: number;
   /** Count of placeholders detected */
   placeholderCount: number;
+  /** Count of storage errors (encryption failures, etc.) */
+  errorCount: number;
   /** Provider type used for storage (dpapi, keychain, or plain) */
   providerType?: ProviderType;
 }
@@ -101,6 +111,7 @@ export async function secretizeEnv(
   const processedEnv: Record<string, string> = {};
   let storedCount = 0;
   let placeholderCount = 0;
+  let errorCount = 0;
 
   // Use provided store or create new one
   // When processing multiple connectors, caller should provide a shared store
@@ -131,17 +142,18 @@ export async function secretizeEnv(
           });
           storedCount++;
         } catch (error) {
-          // If storing fails, keep original value and treat as placeholder (warn)
+          // If storing fails, keep original value and report as error
           // This prevents partial failures from breaking the entire operation
-          console.error(`Warning: Failed to store secret for ${key}: ${error instanceof Error ? error.message : String(error)}`);
+          const errorMessage = error instanceof Error ? error.message : String(error);
           processedEnv[key] = value;
           results.push({
             key,
             originalValue: value,
             newValue: value,
-            action: 'placeholder',
+            action: 'error',
+            error: errorMessage,
           });
-          placeholderCount++;
+          errorCount++;
         }
       } else if (detection.action === 'warn') {
         // Placeholder detected - keep original, will warn user
@@ -175,6 +187,7 @@ export async function secretizeEnv(
     results,
     storedCount,
     placeholderCount,
+    errorCount,
     providerType,
   };
 }
@@ -219,6 +232,10 @@ export function formatSecretizeOutput(
       lines.push(`  ✔ secret stored: ${connectorId}.transport.env.${result.key} -> ${shortRef}`);
     } else if (result.action === 'placeholder') {
       lines.push(`  ⚠ placeholder detected: ${connectorId}.transport.env.${result.key}`);
+    } else if (result.action === 'error') {
+      // Show encryption/storage errors clearly
+      const errorMsg = result.error ? `: ${result.error}` : '';
+      lines.push(`  ✖ storage failed: ${connectorId}.transport.env.${result.key}${errorMsg}`);
     }
   }
 
