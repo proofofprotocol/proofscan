@@ -146,6 +146,13 @@ export async function handleCc(
   if (arg.includes('|')) {
     const [connectorPart, sessionPart] = arg.split('|', 2);
 
+    // Validate pipe-separated format
+    if (!connectorPart || !sessionPart) {
+      printError(`Invalid format: ${arg}`);
+      printInfo('Use: cc <connector>|<session> (e.g., mcp|abc12345)');
+      return;
+    }
+
     // Validate connector exists
     const connectors = store.getConnectors();
     const connector = connectors.find(c => c.id === connectorPart || c.id.startsWith(connectorPart));

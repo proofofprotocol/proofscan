@@ -16,6 +16,41 @@ export interface ApplyContextResult {
 }
 
 /**
+ * Boolean flags that don't take values
+ */
+const BOOLEAN_FLAGS = new Set([
+  '--json',
+  '--verbose',
+  '-v',
+  '--help',
+  '-h',
+  '--errors',
+  '--fulltime',
+  '--full-time',
+  '--time-full',
+  '--with-sessions',
+  '--pairs',
+  '--pair',
+  '--sessions',
+  '--rpc',
+  '--rpc-all',
+  '--compact',
+  '--ids-only',
+  '--dry-run',
+  '--stdin',
+  '-f',
+  '--follow',
+  '-l',
+]);
+
+/**
+ * Check if a flag is a boolean flag (doesn't take a value)
+ */
+function isBooleanFlag(flag: string): boolean {
+  return BOOLEAN_FLAGS.has(flag);
+}
+
+/**
  * Check if args already contain a specific option
  */
 function hasOption(args: string[], ...optionNames: string[]): boolean {
@@ -35,9 +70,11 @@ function hasPositionalAt(args: string[], position: number): boolean {
       }
       positionalCount++;
     } else {
-      // Skip option value if it's a known option that takes a value
-      // For simplicity, skip next arg if current is an option
-      i++;
+      // Only skip next arg if this is a value-taking option
+      // Boolean flags don't consume the next argument
+      if (!isBooleanFlag(args[i])) {
+        i++;
+      }
     }
   }
   return false;
@@ -55,7 +92,10 @@ function getPositionalAt(args: string[], position: number): string | undefined {
       }
       positionalCount++;
     } else {
-      i++; // Skip option value
+      // Only skip next arg if this is a value-taking option
+      if (!isBooleanFlag(args[i])) {
+        i++;
+      }
     }
   }
   return undefined;
