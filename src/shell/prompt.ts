@@ -147,3 +147,15 @@ export function printError(message: string): void {
 export function printInfo(message: string): void {
   console.log(color(message, COLORS.dim));
 }
+
+/**
+ * Get dim text for TTY output (used for table headers)
+ *
+ * @param text - The text to dim
+ * @param isTTY - Whether the output is a TTY (enables ANSI colors)
+ * @returns Dim ANSI-styled string if TTY, plain string otherwise
+ */
+export function dimText(text: string, isTTY?: boolean): string {
+  if (!isTTY) return text;
+  return `${COLORS.dim}${text}${COLORS.reset}`;
+}

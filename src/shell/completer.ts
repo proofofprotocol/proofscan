@@ -9,6 +9,7 @@ import {
   COMMON_OPTIONS,
   SHELL_BUILTINS,
   ROUTER_COMMANDS,
+  TOOL_COMMANDS,
   BLOCKED_IN_SHELL,
   DEFAULT_COMPLETION_LIMIT,
   getAllowedCommands,
@@ -62,9 +63,9 @@ function getCandidates(
   context: ShellContext,
   dataProvider: DynamicDataProvider
 ): string[] {
-  // No tokens yet - complete top-level commands + builtins + router commands (excluding blocked commands)
+  // No tokens yet - complete top-level commands + builtins + router commands + tool commands (excluding blocked commands)
   if (completedTokens.length === 0) {
-    return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...getAllowedCommands()];
+    return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...TOOL_COMMANDS, ...getAllowedCommands()];
   }
 
   const firstToken = completedTokens[0];
@@ -72,6 +73,11 @@ function getCandidates(
   // Handle router-style commands (cd, cc, ls, show, ..)
   if (ROUTER_COMMANDS.includes(firstToken)) {
     return getRouterCompletions(firstToken, completedTokens, context, dataProvider);
+  }
+
+  // Handle tool commands (tool, send)
+  if (TOOL_COMMANDS.includes(firstToken)) {
+    return getToolCompletions(firstToken, completedTokens, context, dataProvider);
   }
 
   // Handle shell builtins
@@ -189,9 +195,48 @@ function getBuiltinCompletions(
 
     case 'help':
       if (tokens.length === 1) {
-        return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...getAllowedCommands()];
+        return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...TOOL_COMMANDS, ...getAllowedCommands()];
       }
       return [];
+
+    default:
+      return [];
+  }
+}
+
+/**
+ * Get completions for tool commands (tool, send)
+ *
+ * Note: Tool name completion requires fetching from MCP server which
+ * is async and potentially slow. For now, we only provide subcommand
+ * completion. Future: Add async tool name caching.
+ */
+function getToolCompletions(
+  command: string,
+  tokens: string[],
+  _context: ShellContext,
+  _dataProvider: DynamicDataProvider
+): string[] {
+  switch (command) {
+    case 'tool':
+      if (tokens.length === 1) {
+        // `tool <subcommand>`
+        return COMMAND_SUBCOMMANDS.tool || ['ls', 'show'];
+      }
+      if (tokens.length === 2 && (tokens[1] === 'show' || tokens[1] === 'ls' || tokens[1] === 'list')) {
+        // `tool show <name>` or `tool ls [--json]`
+        // Note: Tool names require async fetch, not available in sync completion
+        return ['--json'];
+      }
+      return [];
+
+    case 'send':
+      if (tokens.length === 1) {
+        // `send <tool-name>`
+        // Note: Tool names require async fetch, not available in sync completion
+        return ['--json', '--dry-run'];
+      }
+      return ['--json', '--dry-run'];
 
     default:
       return [];

@@ -34,6 +34,7 @@ import {
   setCurrentSession,
   clearCurrentSession,
 } from '../utils/state.js';
+import { handleTool, handleSend } from './tool-commands.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -234,6 +235,22 @@ export class ShellRepl {
       return;
     }
 
+    // Handle tool commands (shell-native)
+    if (command === 'tool') {
+      await handleTool(args, this.context, this.configPath);
+      return;
+    }
+
+    // Handle send command (shell-native with interactive input)
+    if (command === 'send') {
+      if (!this.rl) {
+        printError('Shell not initialized');
+        return;
+      }
+      await handleSend(args, this.context, this.configPath, this.rl);
+      return;
+    }
+
     // Handle built-in commands
     if (SHELL_BUILTINS.includes(command)) {
       await this.handleBuiltin(command, args);
@@ -337,6 +354,11 @@ Navigation:
   ls [-l] [--json]        List items at current level
   show [target] [--json]  Show details
   pwd                     Show current context path
+
+Tool Commands:
+  tool ls                 List tools on current connector
+  tool show <name>        Show tool details (description, schema)
+  send <name>             Call a tool interactively
 
 Shell Commands:
   help [command]          Show help
