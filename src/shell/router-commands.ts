@@ -10,7 +10,7 @@ import { printSuccess, printError, printInfo, shortenSessionId } from './prompt.
 import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
 import { ConfigManager } from '../config/index.js';
-import { setCurrentSession, clearCurrentSession } from '../utils/state.js';
+import { setCurrentSession, clearCurrentSession, formatRelativeTime } from '../utils/index.js';
 
 // ProtoType is imported from types.ts
 
@@ -107,6 +107,11 @@ interface SessionMatch {
 
 /**
  * Save current location as previous (for cd - navigation)
+ *
+ * This function stores the current connector and session before navigation,
+ * allowing users to return to the previous location with `cd -`.
+ *
+ * @param context - The shell context to update
  */
 function savePreviousLocation(context: ShellContext): void {
   context.previousConnector = context.connector;
@@ -195,8 +200,16 @@ export async function handleCc(
 
   // cc .. or cc ../.. - go up one or more levels
   if (args[0]?.startsWith('..')) {
-    savePreviousLocation(context);
     const parts = args[0].split('/');
+    // Validate: only '..' and empty strings (from leading/trailing slashes) are valid
+    const invalidParts = parts.filter(p => p !== '..' && p !== '');
+    if (invalidParts.length > 0) {
+      printError(`Invalid path: ${args[0]}`);
+      printInfo('Use: cd .. or cd ../.. to go up levels');
+      return;
+    }
+
+    savePreviousLocation(context);
     const upCount = parts.filter(p => p === '..').length;
 
     for (let i = 0; i < upCount; i++) {
@@ -302,7 +315,7 @@ export async function handleCc(
     // Validate separated format
     if (!connectorPart || !sessionPart) {
       printError(`Invalid format: ${arg}`);
-      printInfo('Use: cd <connector>/<session> (e.g., mcp/abc12345)');
+      printInfo('Use: cd connector/session or connector|session (e.g., mcp/abc12345)');
       return;
     }
 
@@ -703,7 +716,11 @@ export async function handleShow(
 }
 
 /**
- * Get colored proto string for TTY
+ * Get colored proto string for TTY output
+ *
+ * @param proto - Protocol type ('mcp', 'a2a', or '?')
+ * @param isTTY - Whether the output is a TTY (enables ANSI colors)
+ * @returns Colored string if TTY, plain string otherwise
  */
 function getProtoColor(proto: ProtoType, isTTY: boolean): string {
   if (!isTTY) return proto;
@@ -719,30 +736,15 @@ function getProtoColor(proto: ProtoType, isTTY: boolean): string {
 }
 
 /**
- * Get dim text for TTY (for headers)
+ * Get dim text for TTY output (used for table headers)
+ *
+ * @param text - The text to dim
+ * @param isTTY - Whether the output is a TTY (enables ANSI colors)
+ * @returns Dim ANSI-styled string if TTY, plain string otherwise
  */
 function dimText(text: string, isTTY: boolean): string {
   if (!isTTY) return text;
   return `\x1b[2m${text}\x1b[0m`;
 }
 
-/**
- * Format timestamp as relative time (e.g., "2h ago", "3d ago")
- */
-function formatRelativeTime(timestamp: string): string {
-  const date = new Date(timestamp);
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-
-  if (diffMs < 0) return 'just now';
-
-  const seconds = Math.floor(diffMs / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  return 'just now';
-}
+// formatRelativeTime is imported from ../utils/index.js
