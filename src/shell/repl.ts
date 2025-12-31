@@ -516,6 +516,11 @@ Tips:
    * Recreate readline interface after interactive command
    */
   private recreateReadline(savedPrompt?: string): void {
+    // Clear any lingering stdin listeners from child process
+    // This prevents double input after explore command
+    process.stdin.removeAllListeners('data');
+    process.stdin.removeAllListeners('keypress');
+
     // Create completer
     const dataProvider = this.getDataProvider();
     const completer = createCompleter(this.context, dataProvider);
