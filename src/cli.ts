@@ -218,6 +218,11 @@ program.addCommand(createShellCommand(getConfigPath));
 // secrets (Phase 3.6: secret management)
 program.addCommand(createSecretsCommand(getConfigPath));
 
+// Alias: secret = secrets (common typo/singular form)
+const secretCmd = createSecretsCommand(getConfigPath);
+secretCmd.name('secret').description('Alias for secrets');
+program.addCommand(secretCmd);
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -232,7 +237,7 @@ function hasSubcommand(): boolean {
   const knownCommands = new Set([
     'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
     'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'help'
+    'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'help'
   ]);
 
   for (let i = 2; i < process.argv.length; i++) {

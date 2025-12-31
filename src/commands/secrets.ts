@@ -333,10 +333,17 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
   secrets
     .command('export')
     .description('Export secrets to encrypted bundle file')
-    .requiredOption('-o, --output <file>', 'Output file path')
+    .option('-o, --output <file>', 'Output file path (required)')
     .option('--format <format>', 'Output format (json)', 'json')
     .action(async (options) => {
       try {
+        // Validate required -o option with friendly hint
+        if (!options.output) {
+          outputError('Required: -o, --output <file>');
+          output('Example: pfscan secrets export -o proofscan-secrets.export.json');
+          process.exit(1);
+        }
+
         const configPath = getConfigPath();
         const configDir = dirname(configPath);
 
