@@ -45,3 +45,13 @@ export {
   getBestProvider,
   getProvider,
 } from './providers/index.js';
+
+// Secretize
+export {
+  secretizeEnv,
+  formatSecretizeOutput,
+  isSecretizeAvailable,
+  type SecretizeKeyResult,
+  type SecretizeResult,
+  type SecretizeOptions,
+} from './secretize.js';

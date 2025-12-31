@@ -233,13 +233,19 @@ Examples:
           skipped: [],
           duplicates,
           secret_refs_sanitized: 0,
+          secretize_output: [],
+          secrets_stored: 0,
+          placeholders_detected: 0,
         };
 
         // Process connectors
         const existingIds = new Set(config.connectors.map(c => c.id));
+        const configPath = getConfigPath();
 
         for (const parsed of parseResult.connectors) {
-          const { connector, secretRefCount } = toConnector(parsed);
+          // Phase 3.5: Pass configPath to enable secretize (only if not dry-run)
+          const toConnectorOptions = options.dryRun ? {} : { configPath };
+          const { connector, secretRefCount, secretizeResult, secretizeOutput } = await toConnector(parsed, toConnectorOptions);
 
           if (existingIds.has(parsed.id)) {
             if (options.overwrite) {
@@ -248,6 +254,12 @@ Examples:
               config.connectors[index] = connector;
               result.updated.push(parsed.id);
               result.secret_refs_sanitized += secretRefCount;
+              // Phase 3.5: Add secretize info
+              result.secretize_output.push(...secretizeOutput);
+              if (secretizeResult) {
+                result.secrets_stored += secretizeResult.storedCount;
+                result.placeholders_detected += secretizeResult.placeholderCount;
+              }
             } else {
               // Skipped: do NOT count secret refs (not actually saved)
               result.skipped.push(parsed.id);
@@ -257,6 +269,12 @@ Examples:
             config.connectors.push(connector);
             result.added.push(parsed.id);
             result.secret_refs_sanitized += secretRefCount;
+            // Phase 3.5: Add secretize info
+            result.secretize_output.push(...secretizeOutput);
+            if (secretizeResult) {
+              result.secrets_stored += secretizeResult.storedCount;
+              result.placeholders_detected += secretizeResult.placeholderCount;
+            }
           }
         }
 
@@ -271,9 +289,18 @@ Examples:
             updated: result.updated,
             skipped: result.skipped,
             secret_refs_sanitized: result.secret_refs_sanitized,
+            secrets_stored: result.secrets_stored,
+            placeholders_detected: result.placeholders_detected,
           });
         } else {
           console.log(summary);
+          // Phase 3.5: Show secretize output
+          if (result.secretize_output.length > 0) {
+            console.log('');
+            for (const line of result.secretize_output) {
+              console.log(line);
+            }
+          }
         }
 
         // Save if not dry-run
