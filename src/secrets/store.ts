@@ -123,6 +123,14 @@ export class SqliteSecretStore implements ISecretStore {
       ? this.provider
       : getProvider(row.provider);
 
+    // Security: Check if provider is available on this platform
+    if (!provider.isAvailable()) {
+      throw new Error(
+        `Secret was encrypted with '${row.provider}' which is not available on this platform. ` +
+        `This secret can only be decrypted on a system where ${row.provider} is supported.`
+      );
+    }
+
     // Decrypt and return
     return provider.decrypt(row.ciphertext);
   }

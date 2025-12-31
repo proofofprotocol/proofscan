@@ -10,6 +10,26 @@
 import { execSync } from 'child_process';
 import type { IEncryptionProvider, ProviderType } from '../types.js';
 
+/** Maximum ciphertext length (100KB base64 encoded) */
+const MAX_CIPHERTEXT_LENGTH = 100000;
+
+/** Valid base64 pattern (strict validation for command injection prevention) */
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/**
+ * Validate that a string is valid base64 format
+ * Security: Prevents command injection by ensuring only safe characters
+ */
+function isValidBase64(value: string): boolean {
+  if (!value || value.length === 0) {
+    return false;
+  }
+  if (value.length > MAX_CIPHERTEXT_LENGTH) {
+    return false;
+  }
+  return BASE64_PATTERN.test(value);
+}
+
 /**
  * DPAPI provider - Windows Data Protection API
  *
@@ -56,6 +76,11 @@ export class DpapiProvider implements IEncryptionProvider {
   async decrypt(ciphertext: string): Promise<string> {
     if (!this.isAvailable()) {
       throw new Error('DPAPI is only available on Windows');
+    }
+
+    // Security: Validate ciphertext format to prevent command injection
+    if (!isValidBase64(ciphertext)) {
+      throw new Error('Invalid ciphertext format: must be valid base64');
     }
 
     // PowerShell script to decrypt using DPAPI
