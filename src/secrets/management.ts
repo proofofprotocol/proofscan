@@ -12,7 +12,7 @@
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync, openSync, closeSync, renameSync } from 'fs';
 import { dirname, join } from 'path';
-import { randomBytes, createCipheriv, createDecipheriv, scryptSync, createHmac } from 'crypto';
+import { randomBytes, createCipheriv, createDecipheriv, scryptSync, createHmac, timingSafeEqual } from 'crypto';
 import { SqliteSecretStore } from './store.js';
 import { parseSecretRef, makeSecretRef, type ProviderType } from './types.js';
 import type { Config, Connector, StdioTransport } from '../types/index.js';
@@ -301,8 +301,8 @@ export async function listSecretBindings(
 
     // Build binding info for each secret
     for (const id of secretIds) {
-      const meta = await store.getMeta(id);
       const binding = configRefs.get(id);
+      const createdAt = await store.getCreatedAt(id);
 
       // Determine provider from meta or try to get from store
       let provider: ProviderType = 'plain';
@@ -316,7 +316,7 @@ export async function listSecretBindings(
         connector_id: binding?.connectorId,
         env_key: binding?.envKey,
         provider,
-        created_at: meta?.source ? new Date().toISOString() : new Date().toISOString(),
+        created_at: createdAt?.toISOString() ?? new Date().toISOString(),
         status: binding ? 'OK' : 'ORPHAN',
       });
 
@@ -566,9 +566,11 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
   const key = deriveKey(passphrase, salt);
 
   // Verify HMAC before trusting metadata (prevents KDF parameter tampering)
+  // Uses timing-safe comparison to prevent timing attacks
   const metadataForHmac = JSON.stringify({ version: bundle.version, kdf: bundle.kdf, cipher: bundle.cipher });
-  const expectedHmac = createHmac('sha256', key).update(metadataForHmac).digest('base64');
-  if (bundle.metadataHmac !== expectedHmac) {
+  const expectedHmacBuf = createHmac('sha256', key).update(metadataForHmac).digest();
+  const actualHmacBuf = Buffer.from(bundle.metadataHmac, 'base64');
+  if (expectedHmacBuf.length !== actualHmacBuf.length || !timingSafeEqual(expectedHmacBuf, actualHmacBuf)) {
     throw new Error('Bundle integrity check failed. The file may have been tampered with or the passphrase is incorrect.');
   }
 
