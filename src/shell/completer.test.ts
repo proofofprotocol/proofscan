@@ -238,4 +238,50 @@ describe('getCompletions', () => {
       expect(completions).toContain('my-connector');
     });
   });
+
+  describe('empty data provider responses', () => {
+    const emptyDataProvider: DynamicDataProvider = {
+      getConnectorIds: vi.fn(() => []),
+      getSessionPrefixes: vi.fn(() => []),
+      getRpcIds: vi.fn(() => []),
+    };
+
+    it('should handle empty connector list gracefully for cd', () => {
+      const context: ShellContext = {};
+      const [completions] = getCompletions('cd ', context, emptyDataProvider);
+
+      // Should still show navigation shortcuts
+      expect(completions).toContain('/');
+      expect(completions).toContain('..');
+      expect(completions).toContain('-');
+      expect(completions).toHaveLength(3);
+    });
+
+    it('should handle empty session list gracefully for show at connector level', () => {
+      const context: ShellContext = { connector: 'test-connector' };
+      const [completions] = getCompletions('show ', context, emptyDataProvider);
+
+      // Should still show --json option
+      expect(completions).toContain('--json');
+      expect(completions).toHaveLength(1);
+    });
+
+    it('should handle empty rpc list gracefully for show at session level', () => {
+      const context: ShellContext = { connector: 'test-connector', session: 'test-session' };
+      const [completions] = getCompletions('show ', context, emptyDataProvider);
+
+      // Should still show --json option
+      expect(completions).toContain('--json');
+      expect(completions).toHaveLength(1);
+    });
+
+    it('should handle empty connector list for use command', () => {
+      const context: ShellContext = {};
+      const [completions] = getCompletions('use ', context, emptyDataProvider);
+
+      // Should still show session keyword
+      expect(completions).toContain('session');
+      expect(completions).toHaveLength(1);
+    });
+  });
 });

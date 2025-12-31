@@ -133,6 +133,12 @@ export const BLOCKED_IN_SHELL = ['explore', 'e'];
 export const DEFAULT_COMPLETION_LIMIT = 50;
 
 /**
+ * Limit for session search when looking for matches by prefix
+ * Higher than completion limit since we need to find partial matches
+ */
+export const SESSION_SEARCH_LIMIT = 100;
+
+/**
  * Get commands allowed in shell mode (TOP_LEVEL_COMMANDS minus BLOCKED_IN_SHELL)
  */
 export function getAllowedCommands(): string[] {

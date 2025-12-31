@@ -71,12 +71,12 @@ function getCandidates(
 
   // Handle router-style commands (cd, cc, ls, show, ..)
   if (ROUTER_COMMANDS.includes(firstToken)) {
-    return getRouterCompletions(firstToken, completedTokens, currentToken, context, dataProvider);
+    return getRouterCompletions(firstToken, completedTokens, context, dataProvider);
   }
 
   // Handle shell builtins
   if (SHELL_BUILTINS.includes(firstToken)) {
-    return getBuiltinCompletions(firstToken, completedTokens, currentToken, context, dataProvider);
+    return getBuiltinCompletions(firstToken, completedTokens, dataProvider);
   }
 
   // Handle command completions
@@ -106,7 +106,6 @@ function getContextLevel(context: ShellContext): 'root' | 'connector' | 'session
 function getRouterCompletions(
   command: string,
   tokens: string[],
-  _currentToken: string,
   context: ShellContext,
   dataProvider: DynamicDataProvider
 ): string[] {
@@ -174,8 +173,6 @@ function getRouterCompletions(
 function getBuiltinCompletions(
   command: string,
   tokens: string[],
-  _currentToken: string,
-  _context: ShellContext,
   dataProvider: DynamicDataProvider
 ): string[] {
   switch (command) {

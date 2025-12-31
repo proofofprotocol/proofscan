@@ -11,6 +11,7 @@ import {
   ROUTER_COMMANDS,
   BLOCKED_IN_SHELL,
   DEFAULT_COMPLETION_LIMIT,
+  SESSION_SEARCH_LIMIT,
   getAllowedCommands,
 } from './types.js';
 import { applyContext } from './context-applicator.js';
@@ -434,7 +435,7 @@ Tips:
       try {
         const manager = new ConfigManager(this.configPath);
         const store = new EventLineStore(manager.getConfigDir());
-        const sessions = store.getSessions(this.context.connector, 100);
+        const sessions = store.getSessions(this.context.connector, SESSION_SEARCH_LIMIT);
         const matches = sessions.filter(s => s.session_id.startsWith(prefix));
 
         if (matches.length === 0) {
