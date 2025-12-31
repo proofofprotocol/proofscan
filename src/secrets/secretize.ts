@@ -3,11 +3,18 @@
  *
  * Processes env variables to detect secrets, store them securely,
  * and replace with secret references.
+ *
+ * Security note: On non-Windows platforms, secrets are stored using the
+ * 'plain' provider (base64 encoded, not encrypted). For production use
+ * on non-Windows systems, consider implementing keychain support.
  */
 
-import { detectSecret, type SecretDetectionResult } from './detection.js';
+import { detectSecret } from './detection.js';
 import { SqliteSecretStore } from './store.js';
 import { dirname } from 'path';
+
+/** Maximum characters to display for secret references in output */
+const DISPLAY_REF_MAX_LENGTH = 20;
 
 /**
  * Result of secretizing a single key-value pair
@@ -47,6 +54,8 @@ export interface SecretizeOptions {
   configPath: string;
   /** Connector ID (for metadata) */
   connectorId: string;
+  /** Optional: reuse existing store instance for batch operations */
+  store?: SqliteSecretStore;
 }
 
 /**
@@ -70,9 +79,12 @@ export async function secretizeEnv(
   let storedCount = 0;
   let placeholderCount = 0;
 
-  // Create store in config directory
+  // Use provided store or create new one
+  // When processing multiple connectors, caller should provide a shared store
+  // to avoid opening/closing the database repeatedly
   const configDir = dirname(options.configPath);
-  const store = new SqliteSecretStore(configDir);
+  const store = options.store ?? new SqliteSecretStore(configDir);
+  const shouldCloseStore = !options.store; // Only close if we created it
 
   try {
     for (const [key, value] of Object.entries(env)) {
@@ -115,7 +127,9 @@ export async function secretizeEnv(
       }
     }
   } finally {
-    store.close();
+    if (shouldCloseStore) {
+      store.close();
+    }
   }
 
   return {
@@ -142,8 +156,8 @@ export function formatSecretizeOutput(
   for (const result of results) {
     if (result.action === 'stored' && result.secretRef) {
       // Shorten the reference for display: dpapi:abc12345-... -> dpapi:abc12345
-      const shortRef = result.secretRef.length > 20
-        ? result.secretRef.slice(0, 20) + '...'
+      const shortRef = result.secretRef.length > DISPLAY_REF_MAX_LENGTH
+        ? result.secretRef.slice(0, DISPLAY_REF_MAX_LENGTH) + '...'
         : result.secretRef;
       lines.push(`  ✔ secret stored: ${connectorId}.transport.env.${result.key} -> ${shortRef}`);
     } else if (result.action === 'placeholder') {

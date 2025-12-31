@@ -13,6 +13,7 @@ import {
   secretizeEnv,
   formatSecretizeOutput,
   type SecretizeResult,
+  SqliteSecretStore,
 } from '../secrets/index.js';
 
 // ============================================================
@@ -219,6 +220,8 @@ export function parseConnectorJson(jsonString: string): ParseResult {
 export interface ToConnectorOptions {
   /** Config file path (for secretize) */
   configPath?: string;
+  /** Shared store instance for batch operations (optional) */
+  store?: SqliteSecretStore;
 }
 
 /** Result of toConnector with secret sanitization */
@@ -264,10 +267,12 @@ export async function toConnector(
     secretRefCount = sanitizeResult.count;
 
     // Second: Secretize real secrets if configPath provided (Phase 3.5)
+    // Pass store if provided to reuse DB connection across multiple connectors
     if (options.configPath) {
       secretizeResult = await secretizeEnv(processedEnv, {
         configPath: options.configPath,
         connectorId: parsed.id,
+        store: options.store,
       });
       processedEnv = secretizeResult.env;
       secretizeOutput = formatSecretizeOutput(secretizeResult.results, parsed.id);

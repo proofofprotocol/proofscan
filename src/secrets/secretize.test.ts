@@ -97,6 +97,20 @@ describe('secretizeEnv', () => {
     expect(result.env).toEqual(env);
   });
 
+  it('should handle empty env object', async () => {
+    const env = {};
+
+    const result = await secretizeEnv(env, {
+      configPath,
+      connectorId: 'test-connector',
+    });
+
+    expect(result.storedCount).toBe(0);
+    expect(result.placeholderCount).toBe(0);
+    expect(result.results).toEqual([]);
+    expect(result.env).toEqual({});
+  });
+
   it('should handle mixed env vars', async () => {
     const env = {
       API_KEY: 'sk-real-api-key-abcdefghij',

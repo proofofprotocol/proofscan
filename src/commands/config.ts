@@ -15,6 +15,8 @@ import {
   type ParsedConnector,
   type AddResult,
 } from '../config/add.js';
+import { SqliteSecretStore } from '../secrets/index.js';
+import { dirname } from 'path';
 import {
   SnapshotManager,
   formatSnapshotLine,
@@ -242,17 +244,40 @@ Examples:
         const existingIds = new Set(config.connectors.map(c => c.id));
         const configPath = getConfigPath();
 
-        for (const parsed of parseResult.connectors) {
-          // Phase 3.5: Pass configPath to enable secretize (only if not dry-run)
-          const toConnectorOptions = options.dryRun ? {} : { configPath };
-          const { connector, secretRefCount, secretizeResult, secretizeOutput } = await toConnector(parsed, toConnectorOptions);
+        // Phase 3.5: Create shared store for batch operations to avoid
+        // opening/closing the database for each connector
+        let sharedStore: SqliteSecretStore | undefined;
+        if (!options.dryRun) {
+          sharedStore = new SqliteSecretStore(dirname(configPath));
+        }
 
-          if (existingIds.has(parsed.id)) {
-            if (options.overwrite) {
-              // Update existing
-              const index = config.connectors.findIndex(c => c.id === parsed.id);
-              config.connectors[index] = connector;
-              result.updated.push(parsed.id);
+        try {
+          for (const parsed of parseResult.connectors) {
+            // Phase 3.5: Pass configPath and shared store to enable secretize (only if not dry-run)
+            const toConnectorOptions = options.dryRun ? {} : { configPath, store: sharedStore };
+            const { connector, secretRefCount, secretizeResult, secretizeOutput } = await toConnector(parsed, toConnectorOptions);
+
+            if (existingIds.has(parsed.id)) {
+              if (options.overwrite) {
+                // Update existing
+                const index = config.connectors.findIndex(c => c.id === parsed.id);
+                config.connectors[index] = connector;
+                result.updated.push(parsed.id);
+                result.secret_refs_sanitized += secretRefCount;
+                // Phase 3.5: Add secretize info
+                result.secretize_output.push(...secretizeOutput);
+                if (secretizeResult) {
+                  result.secrets_stored += secretizeResult.storedCount;
+                  result.placeholders_detected += secretizeResult.placeholderCount;
+                }
+              } else {
+                // Skipped: do NOT count secret refs (not actually saved)
+                result.skipped.push(parsed.id);
+              }
+            } else {
+              // Add new
+              config.connectors.push(connector);
+              result.added.push(parsed.id);
               result.secret_refs_sanitized += secretRefCount;
               // Phase 3.5: Add secretize info
               result.secretize_output.push(...secretizeOutput);
@@ -260,22 +285,11 @@ Examples:
                 result.secrets_stored += secretizeResult.storedCount;
                 result.placeholders_detected += secretizeResult.placeholderCount;
               }
-            } else {
-              // Skipped: do NOT count secret refs (not actually saved)
-              result.skipped.push(parsed.id);
-            }
-          } else {
-            // Add new
-            config.connectors.push(connector);
-            result.added.push(parsed.id);
-            result.secret_refs_sanitized += secretRefCount;
-            // Phase 3.5: Add secretize info
-            result.secretize_output.push(...secretizeOutput);
-            if (secretizeResult) {
-              result.secrets_stored += secretizeResult.storedCount;
-              result.placeholders_detected += secretizeResult.placeholderCount;
             }
           }
+        } finally {
+          // Always close the shared store to release DB connection
+          sharedStore?.close();
         }
 
         // Output summary
