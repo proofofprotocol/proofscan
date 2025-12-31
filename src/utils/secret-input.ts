@@ -44,14 +44,17 @@ export async function readSecretHidden(): Promise<string> {
         return;
       }
 
-      // Handle Ctrl+C
+      // Handle Ctrl+C - clean up and let the process handle termination
       if (char === '\x03') {
         if (process.stdin.isTTY) {
           process.stdin.setRawMode(false);
         }
         process.stdin.removeListener('data', onData);
         rl.close();
-        process.exit(0);
+        process.stdout.write('\n');
+        // Send SIGINT to allow cleanup handlers to run
+        process.kill(process.pid, 'SIGINT');
+        return;
       }
 
       // Handle Backspace

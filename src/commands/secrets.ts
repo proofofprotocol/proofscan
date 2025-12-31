@@ -118,7 +118,13 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
-        const config: Config = JSON.parse(readFileSync(configPath, 'utf-8'));
+        let config: Config;
+        try {
+          config = JSON.parse(readFileSync(configPath, 'utf-8'));
+        } catch (parseErr) {
+          outputError(`Invalid config file format: ${parseErr instanceof SyntaxError ? 'JSON parse error' : 'Read error'}`);
+          process.exit(1);
+        }
         const connector = config.connectors?.find(c => c.id === connectorId);
 
         if (!connector) {
@@ -175,7 +181,13 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
-        const config: Config = JSON.parse(readFileSync(configPath, 'utf-8'));
+        let config: Config;
+        try {
+          config = JSON.parse(readFileSync(configPath, 'utf-8'));
+        } catch (parseErr) {
+          outputError(`Invalid config file format: ${parseErr instanceof SyntaxError ? 'JSON parse error' : 'Read error'}`);
+          process.exit(1);
+        }
         const connectors = connectorId
           ? config.connectors?.filter(c => c.id === connectorId)
           : config.connectors;
@@ -280,11 +292,18 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
         const configPath = getConfigPath();
         const configDir = dirname(configPath);
 
+        // Validate olderThan option
+        const olderThanDays = options.olderThan;
+        if (olderThanDays !== undefined && (isNaN(olderThanDays) || olderThanDays < 0)) {
+          outputError('--older-than must be a positive number');
+          process.exit(1);
+        }
+
         const result = await pruneOrphanSecrets({
           configDir,
           configPath,
           dryRun: options.dryRun,
-          olderThanDays: options.olderThan,
+          olderThanDays,
         });
 
         if (getOutputOptions().json) {
@@ -324,8 +343,8 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
         output('Enter passphrase to encrypt the export:');
         const passphrase = await readSecretHidden();
 
-        if (!passphrase || passphrase.length < 8) {
-          outputError('Passphrase must be at least 8 characters');
+        if (!passphrase || passphrase.length < 12) {
+          outputError('Passphrase must be at least 12 characters');
           process.exit(1);
         }
 

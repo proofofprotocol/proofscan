@@ -303,6 +303,7 @@ describe('exportSecrets / importSecrets', () => {
     expect(exportBundle.version).toBe(1);
     expect(exportBundle.kdf.name).toBe('scrypt');
     expect(exportBundle.cipher.name).toBe('aes-256-gcm');
+    expect(exportBundle.metadataHmac).toBeDefined(); // HMAC for integrity
 
     // Setup for import: create new temp dir with config without secret refs
     const importDir = join(tmpdir(), `secrets-import-test-${Date.now()}`);
@@ -374,7 +375,7 @@ describe('exportSecrets / importSecrets', () => {
       configPath,
       inputPath: exportPath,
       passphrase: 'wrong-password',
-    })).rejects.toThrow('Decryption failed');
+    })).rejects.toThrow('integrity check failed'); // HMAC check fails before decryption
   });
 
   it('should skip existing secrets without overwrite flag', async () => {
