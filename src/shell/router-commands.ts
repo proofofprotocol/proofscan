@@ -204,7 +204,7 @@ export async function handleCc(
     // Validate: only '..' and empty strings (from leading/trailing slashes) are valid
     const invalidParts = parts.filter(p => p !== '..' && p !== '');
     if (invalidParts.length > 0) {
-      printError(`Invalid path: ${args[0]}`);
+      printError(`Invalid path: ${args[0]} (invalid: ${invalidParts.join(', ')})`);
       printInfo('Use: cd .. or cd ../.. to go up levels');
       return;
     }

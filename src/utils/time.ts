@@ -6,11 +6,13 @@
  * Format a timestamp as relative time (e.g., "2h ago", "3d ago")
  *
  * @param timestamp - ISO timestamp string or Date object
- * @returns Human-readable relative time string
+ * @returns Human-readable relative time string.
+ *          Returns "just now" for current or future timestamps.
  *
  * @example
  * formatRelativeTime('2025-12-31T10:00:00Z') // "2h ago" (if now is 12:00)
  * formatRelativeTime(new Date()) // "just now"
+ * formatRelativeTime(futureDate) // "just now"
  */
 export function formatRelativeTime(timestamp: string | Date): string {
   const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
