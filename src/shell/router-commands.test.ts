@@ -146,8 +146,22 @@ describe('handleUp', () => {
     const context: ShellContext = { connector: 'mcp', proto: 'mcp' };
     handleUp(context);
     expect(context.connector).toBeUndefined();
-    // proto is not explicitly cleared by handleUp
-    expect(context.proto).toBe('mcp');
+    // proto is cleared when going to root
+    expect(context.proto).toBeUndefined();
+  });
+
+  it('should save previous location when going up from session', () => {
+    const context: ShellContext = { connector: 'mcp', session: 'abc123', proto: 'mcp' };
+    handleUp(context);
+    expect(context.previousConnector).toBe('mcp');
+    expect(context.previousSession).toBe('abc123');
+  });
+
+  it('should save previous location when going up from connector', () => {
+    const context: ShellContext = { connector: 'mcp', proto: 'mcp' };
+    handleUp(context);
+    expect(context.previousConnector).toBe('mcp');
+    expect(context.previousSession).toBeUndefined();
   });
 
   it('should do nothing at root level', () => {

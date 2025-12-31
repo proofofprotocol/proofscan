@@ -391,17 +391,20 @@ export function handleUp(context: ShellContext): void {
   const level = getContextLevel(context);
 
   if (level === 'session') {
+    savePreviousLocation(context);
     context.session = undefined;
     setCurrentSession('', context.connector);
-    printSuccess(`→ ${context.connector}`);
+    printSuccess(`→ /${context.connector}`);
     return;
   }
 
   if (level === 'connector') {
+    savePreviousLocation(context);
     context.connector = undefined;
     context.session = undefined;
+    context.proto = undefined;
     clearCurrentSession();
-    printSuccess('→ root');
+    printSuccess('→ /');
     return;
   }
 
