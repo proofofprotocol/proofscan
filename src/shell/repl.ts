@@ -505,72 +505,10 @@ Tips:
   }
 
   /**
-   * Check if a command has its own interactive UI
+   * Commands that are not allowed in shell mode
+   * These commands have their own readline interface which conflicts with shell
    */
-  private isInteractiveCommand(command: string): boolean {
-    // Commands that create their own readline interface
-    return ['explore', 'e'].includes(command);
-  }
-
-  /**
-   * Recreate readline interface after interactive command
-   */
-  private recreateReadline(savedPrompt?: string): void {
-    // Clear any lingering stdin listeners from child process
-    // This prevents double input after explore command
-    process.stdin.removeAllListeners('data');
-    process.stdin.removeAllListeners('keypress');
-
-    // Create completer
-    const dataProvider = this.getDataProvider();
-    const completer = createCompleter(this.context, dataProvider);
-
-    // Create new readline interface
-    this.rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      prompt: savedPrompt || generatePrompt(this.context),
-      completer: (line: string, callback: (err: Error | null, result: [string[], string]) => void) => {
-        const [completions, prefix] = completer(line);
-        callback(null, [completions, prefix]);
-      },
-      history: this.history,
-      historySize: 1000,
-    });
-
-    // Re-attach event handlers
-    this.rl.on('line', async (line) => {
-      const trimmed = line.trim();
-
-      if (trimmed) {
-        this.history = addToHistory(this.history, trimmed);
-        await this.processLine(trimmed);
-      }
-
-      if (this.running && this.rl) {
-        // Update prompt (context may have changed)
-        this.rl.setPrompt(generatePrompt(this.context));
-        this.rl.prompt();
-      }
-    });
-
-    this.rl.on('close', () => {
-      this.running = false;
-      saveHistory(this.history);
-      console.log();
-      printInfo('Goodbye!');
-    });
-
-    // Handle SIGINT (Ctrl+C)
-    this.rl.on('SIGINT', () => {
-      console.log();
-      this.rl!.prompt();
-    });
-
-    // Update prompt and show it
-    this.rl.setPrompt(generatePrompt(this.context));
-    this.rl.prompt();
-  }
+  private static readonly BLOCKED_IN_SHELL = ['explore', 'e'];
 
   /**
    * Execute a pfscan command
@@ -579,6 +517,13 @@ Tips:
     // Apply context to command arguments
     const { args: cmdArgs, warnings } = applyContext(tokens, this.context);
     const command = tokens[0];
+
+    // Block commands that have their own readline (stdin conflict)
+    if (ShellRepl.BLOCKED_IN_SHELL.includes(command)) {
+      printError(`'${command}' is not available in shell mode (stdin conflict)`);
+      printInfo('Exit shell first, then run: pfscan ' + command);
+      return;
+    }
 
     // Show context-aware warnings
     warnings.forEach(w => printInfo(w));
@@ -589,19 +534,6 @@ Tips:
       printError(`Invalid characters in arguments: ${invalidArgs.join(', ')}`);
       printInfo('Arguments cannot contain shell metacharacters: & | ; ` $');
       return;
-    }
-
-    // For interactive commands, close REPL readline to avoid stdin conflict
-    // The child process will create its own readline interface
-    const isInteractive = this.isInteractiveCommand(command);
-    let savedPrompt = '';
-    if (isInteractive && this.rl) {
-      savedPrompt = (this.rl as readline.Interface & { _prompt?: string })._prompt || '';
-      // Remove close handler before closing to avoid "Goodbye!" message
-      this.rl.removeAllListeners('close');
-      // Close the readline interface to fully release stdin
-      this.rl.close();
-      this.rl = null;
     }
 
     // Spawn pfscan process
@@ -616,18 +548,10 @@ Tips:
 
       proc.on('error', (err) => {
         printError(`Failed to run command: ${err.message}`);
-        if (isInteractive) {
-          this.recreateReadline(savedPrompt);
-        }
         resolve();
       });
 
       proc.on('close', (code) => {
-        // Recreate REPL readline after interactive command
-        if (isInteractive) {
-          this.recreateReadline(savedPrompt);
-        }
-
         // Invalidate cache after data-modifying commands
         const dataModifyingCommands = [
           'scan', 's',           // Creates new sessions/events
