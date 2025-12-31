@@ -4,23 +4,15 @@
 
 import type { ShellContext } from './types.js';
 import {
-  TOP_LEVEL_COMMANDS,
   COMMAND_SUBCOMMANDS,
   COMMAND_OPTIONS,
   COMMON_OPTIONS,
   SHELL_BUILTINS,
   ROUTER_COMMANDS,
+  BLOCKED_IN_SHELL,
+  DEFAULT_COMPLETION_LIMIT,
+  getAllowedCommands,
 } from './types.js';
-
-/**
- * Commands blocked in shell mode (have their own readline)
- */
-const BLOCKED_IN_SHELL = ['explore', 'e'];
-
-/**
- * Default limit for session/completion results
- */
-const DEFAULT_COMPLETION_LIMIT = 50;
 
 export type DynamicDataProvider = {
   getConnectorIds: () => string[];
@@ -72,8 +64,7 @@ function getCandidates(
 ): string[] {
   // No tokens yet - complete top-level commands + builtins + router commands (excluding blocked commands)
   if (completedTokens.length === 0) {
-    const allowedCommands = TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
-    return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...allowedCommands];
+    return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...getAllowedCommands()];
   }
 
   const firstToken = completedTokens[0];
@@ -201,8 +192,7 @@ function getBuiltinCompletions(
 
     case 'help':
       if (tokens.length === 1) {
-        const allowedCommands = TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
-        return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...allowedCommands];
+        return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...getAllowedCommands()];
       }
       return [];
 

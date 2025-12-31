@@ -114,3 +114,27 @@ export const SHELL_BUILTINS = ['use', 'reset', 'pwd', 'help', 'exit', 'quit', 'c
  * Note: 'cd' is an alias for 'cc'
  */
 export const ROUTER_COMMANDS = ['cc', 'cd', 'ls', 'show', '..'];
+
+/**
+ * Commands blocked in shell mode due to stdin conflicts.
+ *
+ * These commands have their own readline interface which conflicts
+ * with the shell's readline. Running them from shell mode would cause
+ * stdin to be shared between two readline instances, resulting in
+ * input corruption or complete loss of input handling.
+ *
+ * Users should exit shell first, then run: pfscan <command>
+ */
+export const BLOCKED_IN_SHELL = ['explore', 'e'];
+
+/**
+ * Default limit for completion results (sessions, etc.)
+ */
+export const DEFAULT_COMPLETION_LIMIT = 50;
+
+/**
+ * Get commands allowed in shell mode (TOP_LEVEL_COMMANDS minus BLOCKED_IN_SHELL)
+ */
+export function getAllowedCommands(): string[] {
+  return TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
+}
