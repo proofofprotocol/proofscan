@@ -56,3 +56,29 @@ export {
   type SecretizeOptions,
   type FormatSecretizeOptions,
 } from './secretize.js';
+
+// Management (Phase 3.6)
+export {
+  listSecretBindings,
+  setSecret,
+  pruneOrphanSecrets,
+  exportSecrets,
+  importSecrets,
+  type SecretBindingInfo,
+  type SetSecretOptions,
+  type SetSecretResult,
+  type PruneOptions,
+  type PruneResult,
+  type ExportOptions,
+  type ExportResult,
+  type ImportOptions,
+  type ImportResult,
+} from './management.js';
+
+// Resolution (Phase 3.6)
+export {
+  resolveEnvSecrets,
+  formatResolveErrors,
+  type ResolveEnvSecretsResult,
+  type ResolveError,
+} from './resolve.js';

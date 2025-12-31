@@ -126,9 +126,9 @@ export interface ISecretStore {
 }
 
 /**
- * Secret reference pattern: "dpapi:<id>" or "keychain:<id>"
+ * Secret reference pattern: "dpapi:<id>", "keychain:<id>", or "plain:<id>"
  */
-export const SECRET_REF_PATTERN = /^(dpapi|keychain):([a-zA-Z0-9_-]+)$/;
+export const SECRET_REF_PATTERN = /^(dpapi|keychain|plain):([a-zA-Z0-9_-]+)$/;
 
 /**
  * Parse a secret reference string

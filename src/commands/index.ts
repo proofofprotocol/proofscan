@@ -24,3 +24,6 @@ export * from './doctor.js';
 
 // Phase 4: Shell REPL
 export * from './shell.js';
+
+// Phase 3.6: Secrets management
+export * from './secrets.js';
