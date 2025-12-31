@@ -106,6 +106,14 @@ interface SessionMatch {
 }
 
 /**
+ * Save current location as previous (for cd - navigation)
+ */
+function savePreviousLocation(context: ShellContext): void {
+  context.previousConnector = context.connector;
+  context.previousSession = context.session;
+}
+
+/**
  * Handle session selection from matches
  *
  * This helper extracts the common session selection logic:
@@ -123,11 +131,12 @@ async function selectSessionFromMatches(
   connectorId: string
 ): Promise<boolean> {
   if (matches.length === 1) {
+    savePreviousLocation(context);
     context.session = matches[0].session_id;
     context.connector = connectorId;
     context.proto = detectProto(store, matches[0].session_id);
     setCurrentSession(matches[0].session_id, connectorId);
-    printSuccess(`→ ${connectorId}|${shortenSessionId(matches[0].session_id)}`);
+    printSuccess(`→ /${connectorId}/${shortenSessionId(matches[0].session_id)}`);
     return true;
   }
 
@@ -137,11 +146,12 @@ async function selectSessionFromMatches(
       matches.slice(0, MAX_INTERACTIVE_OPTIONS).map(s => ({ id: s.session_id, connector_id: s.connector_id }))
     );
     if (selected) {
+      savePreviousLocation(context);
       context.session = selected;
       context.connector = connectorId;
       context.proto = detectProto(store, selected);
       setCurrentSession(selected, connectorId);
-      printSuccess(`→ ${connectorId}|${shortenSessionId(selected)}`);
+      printSuccess(`→ /${connectorId}/${shortenSessionId(selected)}`);
       return true;
     }
   } else {
@@ -158,6 +168,9 @@ async function selectSessionFromMatches(
  *
  * cc              - Go to latest session (home)
  * cc /            - Go to root
+ * cc ..           - Go up one level
+ * cc ../..        - Go up multiple levels
+ * cc -            - Go to previous location
  * cc <connector>  - Go to connector context
  * cc <session>    - Go to session (within connector context)
  * cc conn|sess    - Go directly to session
@@ -171,11 +184,78 @@ export async function handleCc(
 
   // cc / - go to root
   if (args[0] === '/') {
+    savePreviousLocation(context);
     context.connector = undefined;
     context.session = undefined;
     context.proto = undefined;
     clearCurrentSession();
-    printSuccess('Context cleared (root)');
+    printSuccess('→ /');
+    return;
+  }
+
+  // cc .. or cc ../.. - go up one or more levels
+  if (args[0]?.startsWith('..')) {
+    savePreviousLocation(context);
+    const parts = args[0].split('/');
+    const upCount = parts.filter(p => p === '..').length;
+
+    for (let i = 0; i < upCount; i++) {
+      const level = getContextLevel(context);
+      if (level === 'session') {
+        context.session = undefined;
+        setCurrentSession('', context.connector);
+      } else if (level === 'connector') {
+        context.connector = undefined;
+        context.session = undefined;
+        context.proto = undefined;
+        clearCurrentSession();
+      } else {
+        // Already at root
+        break;
+      }
+    }
+
+    // Print current location
+    if (context.session) {
+      printSuccess(`→ /${context.connector}/${shortenSessionId(context.session)}`);
+    } else if (context.connector) {
+      printSuccess(`→ /${context.connector}`);
+    } else {
+      printSuccess('→ /');
+    }
+    return;
+  }
+
+  // cc - : go to previous location
+  if (args[0] === '-') {
+    if (!context.previousConnector && !context.previousSession) {
+      printInfo('No previous location');
+      return;
+    }
+
+    // Swap current and previous
+    const currentConnector = context.connector;
+    const currentSession = context.session;
+
+    context.connector = context.previousConnector;
+    context.session = context.previousSession;
+    context.previousConnector = currentConnector;
+    context.previousSession = currentSession;
+
+    // Update proto for new location
+    if (context.session) {
+      context.proto = detectProto(store, context.session);
+      setCurrentSession(context.session, context.connector);
+      printSuccess(`→ /${context.connector}/${shortenSessionId(context.session)}`);
+    } else if (context.connector) {
+      context.proto = detectConnectorProto(store, context.connector);
+      setCurrentSession('', context.connector);
+      printSuccess(`→ /${context.connector}`);
+    } else {
+      context.proto = undefined;
+      clearCurrentSession();
+      printSuccess('→ /');
+    }
     return;
   }
 
@@ -202,25 +282,27 @@ export async function handleCc(
     }
 
     const latestSession = sessions[0];
+    savePreviousLocation(context);
     context.session = latestSession.session_id;
     context.connector = latestSession.connector_id;
     context.proto = detectProto(store, latestSession.session_id);
     setCurrentSession(latestSession.session_id, latestSession.connector_id);
-    printSuccess(`→ ${latestSession.connector_id}|${shortenSessionId(latestSession.session_id)}`);
+    printSuccess(`→ /${latestSession.connector_id}/${shortenSessionId(latestSession.session_id)}`);
     return;
   }
 
-  // Parse argument - could be <connector>, <session>, or <connector>|<session>
+  // Parse argument - could be <connector>, <session>, or <connector>/<session>
   const arg = args[0];
 
-  // Check for connector|session format
-  if (arg.includes('|')) {
-    const [connectorPart, sessionPart] = arg.split('|', 2);
+  // Check for connector/session format (or legacy connector|session)
+  if (arg.includes('/') || arg.includes('|')) {
+    const separator = arg.includes('/') ? '/' : '|';
+    const [connectorPart, sessionPart] = arg.split(separator, 2);
 
-    // Validate pipe-separated format
+    // Validate separated format
     if (!connectorPart || !sessionPart) {
       printError(`Invalid format: ${arg}`);
-      printInfo('Use: cc <connector>|<session> (e.g., mcp|abc12345)');
+      printInfo('Use: cd <connector>/<session> (e.g., mcp/abc12345)');
       return;
     }
 
@@ -259,11 +341,12 @@ export async function handleCc(
       return;
     }
 
+    savePreviousLocation(context);
     context.connector = match.id;
     context.session = undefined;
     context.proto = detectConnectorProto(store, match.id);
     setCurrentSession('', match.id);
-    printSuccess(`→ ${match.id}`);
+    printSuccess(`→ /${match.id}`);
     return;
   }
 
@@ -387,18 +470,18 @@ export async function handleLs(
 }
 
 /**
- * List connectors at root level
+ * List connectors at root level (router-style table)
  */
 async function listConnectors(
   store: EventLineStore,
-  isLong: boolean,
+  _isLong: boolean,
   isJson: boolean,
   idsOnly: boolean
 ): Promise<void> {
   const connectors = store.getConnectors();
 
   if (connectors.length === 0) {
-    printInfo('No connectors found');
+    printInfo('No connectors found. Run: scan start --id <connector>');
     return;
   }
 
@@ -407,6 +490,7 @@ async function listConnectors(
       id: c.id,
       proto: detectConnectorProto(store, c.id),
       sessions: c.session_count,
+      latest: c.latest_session,
     }));
     console.log(JSON.stringify(data, null, 2));
     return;
@@ -417,62 +501,59 @@ async function listConnectors(
     return;
   }
 
-  // Table format
+  // Router-style table format
   const isTTY = process.stdout.isTTY;
   const data = connectors.map(c => ({
     id: c.id,
     proto: detectConnectorProto(store, c.id),
     sessions: c.session_count,
+    latest: c.latest_session ? formatRelativeTime(c.latest_session) : '-',
   }));
 
   // Calculate column widths
-  const maxId = Math.max(10, ...data.map(d => d.id.length));
+  const maxId = Math.max(12, ...data.map(d => d.id.length));
 
-  // Header
-  if (isLong) {
-    console.log();
-    console.log(
-      'ID'.padEnd(maxId) + '  ' +
-      'Proto'.padEnd(5) + '  ' +
-      'Sessions'
-    );
-    console.log('-'.repeat(maxId + 20));
-  }
+  console.log();
+
+  // Header (always show in table format)
+  console.log(
+    dimText('ID', isTTY).padEnd(isTTY ? maxId + 9 : maxId) + '  ' +
+    dimText('Proto', isTTY).padEnd(isTTY ? 14 : 5) + '  ' +
+    dimText('Sessions', isTTY).padEnd(isTTY ? 17 : 8) + '  ' +
+    dimText('Last Activity', isTTY)
+  );
+  console.log(dimText('-'.repeat(maxId + 40), isTTY));
 
   // Rows
   data.forEach(d => {
     const protoColor = getProtoColor(d.proto, isTTY);
 
-    if (isLong) {
-      console.log(
-        d.id.padEnd(maxId) + '  ' +
-        protoColor.padEnd(isTTY ? 14 : 5) + '  ' +
-        String(d.sessions)
-      );
-    } else {
-      console.log(`${d.id}  ${protoColor}`);
-    }
+    console.log(
+      d.id.padEnd(maxId) + '  ' +
+      protoColor.padEnd(isTTY ? 14 : 5) + '  ' +
+      String(d.sessions).padEnd(8) + '  ' +
+      d.latest
+    );
   });
 
-  if (isLong) {
-    console.log();
-  }
+  console.log();
+  printInfo(`Hint: cd <connector> to enter, show <connector> for details`);
 }
 
 /**
- * List sessions for a connector
+ * List sessions for a connector (router-style table)
  */
 async function listSessions(
   store: EventLineStore,
   connectorId: string,
-  isLong: boolean,
+  _isLong: boolean,
   isJson: boolean,
   idsOnly: boolean
 ): Promise<void> {
   const sessions = store.getSessions(connectorId, 50);
 
   if (sessions.length === 0) {
-    printInfo(`No sessions for connector: ${connectorId}`);
+    printInfo(`No sessions for connector: ${connectorId}. Run: scan start`);
     return;
   }
 
@@ -492,46 +573,52 @@ async function listSessions(
     return;
   }
 
-  console.log();
-  if (isLong) {
-    console.log('Session'.padEnd(10) + '  ' + 'Started'.padEnd(20) + '  ' + 'Events');
-    console.log('-'.repeat(45));
-  }
+  // Router-style table format
+  const isTTY = process.stdout.isTTY;
 
+  console.log();
+
+  // Header
+  console.log(
+    dimText('Session', isTTY).padEnd(isTTY ? 19 : 10) + '  ' +
+    dimText('Started', isTTY).padEnd(isTTY ? 21 : 12) + '  ' +
+    dimText('Events', isTTY)
+  );
+  console.log(dimText('-'.repeat(40), isTTY));
+
+  // Rows
   sessions.forEach(s => {
     const prefix = shortenSessionId(s.session_id);
-    if (isLong) {
-      const started = s.started_at ? new Date(s.started_at).toLocaleString() : '-';
-      console.log(
-        prefix.padEnd(10) + '  ' +
-        started.padEnd(20) + '  ' +
-        String(s.event_count)
-      );
-    } else {
-      console.log(prefix);
-    }
+    const started = s.started_at ? formatRelativeTime(s.started_at) : '-';
+    console.log(
+      prefix.padEnd(10) + '  ' +
+      started.padEnd(12) + '  ' +
+      String(s.event_count)
+    );
   });
 
-  if (isLong) {
-    console.log();
-  }
+  console.log();
+  printInfo('Hint: cd <session> to enter, show <session> for details, cd .. to go back');
 }
 
 /**
  * List RPC calls for a session
  */
 async function listRpcs(
-  store: EventLineStore,
+  _store: EventLineStore,
   sessionId: string,
-  isLong: boolean,
+  _isLong: boolean,
   isJson: boolean,
-  idsOnly: boolean,
+  _idsOnly: boolean,
   executeCommand: (tokens: string[]) => Promise<void>
 ): Promise<void> {
   // Use existing rpc list command
   const args = ['rpc', 'list', '--session', sessionId];
   if (isJson) args.push('--json');
   await executeCommand(args);
+
+  // Show hint for navigation
+  printInfo('Hint: show <id> to view details, cd .. to go back');
 }
 
 /**
@@ -629,4 +716,33 @@ function getProtoColor(proto: ProtoType, isTTY: boolean): string {
     default:
       return '\x1b[90m?\x1b[0m';    // gray
   }
+}
+
+/**
+ * Get dim text for TTY (for headers)
+ */
+function dimText(text: string, isTTY: boolean): string {
+  if (!isTTY) return text;
+  return `\x1b[2m${text}\x1b[0m`;
+}
+
+/**
+ * Format timestamp as relative time (e.g., "2h ago", "3d ago")
+ */
+function formatRelativeTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  const now = Date.now();
+  const diffMs = now - date.getTime();
+
+  if (diffMs < 0) return 'just now';
+
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return 'just now';
 }

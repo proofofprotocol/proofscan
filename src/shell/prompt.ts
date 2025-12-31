@@ -62,48 +62,69 @@ function getProtoColor(proto: string): string {
 
 /**
  * Generate the shell prompt string
- * Format: proofscan|<proto>|<connector>|<sessionPrefix>>
+ * Format: proofscan:/path (proto) >
+ *
+ * Examples:
+ *   proofscan:/ >           (root)
+ *   proofscan:/time >       (connector)
+ *   proofscan:/time (mcp) > (connector with detected proto)
+ *   proofscan:/time/47676704 (mcp) > (session)
  */
 export function generatePrompt(context: ShellContext): string {
   const parts: string[] = [];
 
-  // proofscan (dim)
+  // proofscan prefix (dim)
   parts.push(color('proofscan', COLORS.dim));
 
-  // proto (colored by type) or * if not set
-  const proto = context.proto || '*';
-  parts.push(color(proto, getProtoColor(proto)));
-
-  // connector (cyan) or * if not set
-  const connector = context.connector || '*';
-  parts.push(color(connector, COLORS.cyan));
-
-  // session prefix (yellow) or * if connector is set but no session
-  if (context.session) {
-    parts.push(color(shortenSessionId(context.session), COLORS.yellow));
-  } else if (context.connector) {
-    parts.push(color('*', COLORS.dim));
+  // Build path
+  let path = '/';
+  if (context.connector) {
+    path = `/${context.connector}`;
+    if (context.session) {
+      path += `/${shortenSessionId(context.session)}`;
+    }
   }
 
-  return parts.join('|') + '> ';
+  // Path (cyan for connector, yellow for session)
+  if (context.session) {
+    const connectorPart = color(`/${context.connector}`, COLORS.cyan);
+    const sessionPart = color(`/${shortenSessionId(context.session)}`, COLORS.yellow);
+    parts.push(connectorPart + sessionPart);
+  } else if (context.connector) {
+    parts.push(color(`/${context.connector}`, COLORS.cyan));
+  } else {
+    parts.push(color('/', COLORS.dim));
+  }
+
+  // Proto suffix (only if detected and not '?')
+  if (context.proto && context.proto !== '?') {
+    parts.push(' ' + color(`(${context.proto})`, getProtoColor(context.proto)));
+  }
+
+  return parts.join(':') + ' > ';
 }
 
 /**
  * Generate a plain prompt (no colors)
+ * Format: proofscan:/path (proto) >
  */
 export function generatePlainPrompt(context: ShellContext): string {
-  const parts: string[] = ['proofscan'];
-
-  parts.push(context.proto || '*');
-  parts.push(context.connector || '*');
-
-  if (context.session) {
-    parts.push(shortenSessionId(context.session));
-  } else if (context.connector) {
-    parts.push('*');
+  let path = '/';
+  if (context.connector) {
+    path = `/${context.connector}`;
+    if (context.session) {
+      path += `/${shortenSessionId(context.session)}`;
+    }
   }
 
-  return parts.join('|') + '> ';
+  let prompt = `proofscan:${path}`;
+
+  // Proto suffix (only if detected and not '?')
+  if (context.proto && context.proto !== '?') {
+    prompt += ` (${context.proto})`;
+  }
+
+  return prompt + ' > ';
 }
 
 /**

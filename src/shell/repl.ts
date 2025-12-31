@@ -243,11 +243,12 @@ export class ShellRepl {
   }
 
   /**
-   * Handle router-style commands (cc, ls, show, ..)
+   * Handle router-style commands (cc, cd, ls, show, ..)
    */
   private async handleRouterCommand(command: string, args: string[]): Promise<void> {
     switch (command) {
       case 'cc':
+      case 'cd':
         await handleCc(args, this.context, this.configPath);
         break;
       case '..':
@@ -308,21 +309,20 @@ export class ShellRepl {
     }
 
     console.log(`
-Navigation (router-style):
-  cc                      Go to latest session (home)
-  cc /                    Go to root
-  cc <connector>          Enter connector context
-  cc <session>            Enter session (in connector context)
-  cc <conn>|<sess>        Enter session directly
-  ..                      Go up one level
+Navigation:
+  cd, cc                  Change context (alias for each other)
+    cd /                  Go to root
+    cd <connector>        Enter connector context
+    cd <session>          Enter session (in connector context)
+    cd <conn>/<sess>      Enter session directly
+    cd ..                 Go up one level
+    cd ../..              Go up two levels
+    cd -                  Go to previous location
   ls [-l] [--json]        List items at current level
   show [target] [--json]  Show details
+  pwd                     Show current context path
 
-Legacy Commands:
-  use <connector>         Set connector context
-  use session <prefix>    Set session context
-  reset                   Clear context
-  pwd                     Show current context with path
+Shell Commands:
   help [command]          Show help
   clear                   Clear screen
   exit, quit              Exit shell
@@ -332,7 +332,7 @@ ProofScan Commands:
 
 Tips:
   - Press TAB for auto-completion
-  - Context is shown in prompt: proto|connector|session
+  - Prompt shows: proofscan:/connector/session (proto)
   - Commands auto-apply current context
 `);
   }
