@@ -275,7 +275,9 @@ export async function toConnector(
         store: options.store,
       });
       processedEnv = secretizeResult.env;
-      secretizeOutput = formatSecretizeOutput(secretizeResult.results, parsed.id);
+      secretizeOutput = formatSecretizeOutput(secretizeResult.results, parsed.id, {
+        providerType: secretizeResult.providerType,
+      });
     }
 
     transport.env = processedEnv;

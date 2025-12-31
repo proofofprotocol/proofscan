@@ -210,3 +210,68 @@ describe('countSecretRefs', () => {
     expect(countSecretRefs({ a: 'secret://1', b: 'secret://2', c: 'normal' })).toBe(2);
   });
 });
+
+describe('Phase 3.5 internal secret references', () => {
+  it('sanitizes dpapi: references', () => {
+    const result = sanitizeSecrets('dpapi:abc123-def456');
+    expect(result.value).toBe('secret://***');
+    expect(result.count).toBe(1);
+  });
+
+  it('sanitizes keychain: references', () => {
+    const result = sanitizeSecrets('keychain:secret-id-here');
+    expect(result.value).toBe('secret://***');
+    expect(result.count).toBe(1);
+  });
+
+  it('sanitizes dpapi: in env object', () => {
+    const input = {
+      env: {
+        API_KEY: 'dpapi:550e8400-e29b-41d4-a716-446655440000',
+        OTHER: 'normal-value',
+      },
+    };
+    const result = sanitizeSecrets(input);
+    expect(result.value).toEqual({
+      env: {
+        API_KEY: 'secret://***',
+        OTHER: 'normal-value',
+      },
+    });
+    expect(result.count).toBe(1);
+  });
+
+  it('sanitizes mixed secret reference formats', () => {
+    const input = {
+      env: {
+        EXTERNAL_SECRET: 'secret://vault/api/KEY',
+        INTERNAL_SECRET: 'dpapi:internal-id-123',
+        MAC_SECRET: 'keychain:mac-secret-456',
+        NORMAL: 'value',
+      },
+    };
+    const result = sanitizeSecrets(input);
+    expect(result.value).toEqual({
+      env: {
+        EXTERNAL_SECRET: 'secret://***',
+        INTERNAL_SECRET: 'secret://***',
+        MAC_SECRET: 'secret://***',
+        NORMAL: 'value',
+      },
+    });
+    expect(result.count).toBe(3);
+  });
+
+  it('does not sanitize partial dpapi matches', () => {
+    // These should NOT be treated as secret references
+    expect(sanitizeSecrets('dpapi:')).toEqual({ value: 'dpapi:', count: 0 });
+    expect(sanitizeSecrets('dpapi')).toEqual({ value: 'dpapi', count: 0 });
+    expect(sanitizeSecrets('my-dpapi:test')).toEqual({ value: 'my-dpapi:test', count: 0 });
+  });
+
+  it('handles hasSecretRefs with dpapi format', () => {
+    expect(hasSecretRefs('dpapi:test123')).toBe(true);
+    expect(hasSecretRefs({ key: 'keychain:secret' })).toBe(true);
+    expect(hasSecretRefs('dpapi:')).toBe(false);
+  });
+});

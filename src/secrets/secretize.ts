@@ -11,6 +11,7 @@
 
 import { detectSecret } from './detection.js';
 import { SqliteSecretStore } from './store.js';
+import type { ProviderType } from './types.js';
 import { dirname } from 'path';
 
 /** Maximum characters to display for secret references in output */
@@ -44,6 +45,8 @@ export interface SecretizeResult {
   storedCount: number;
   /** Count of placeholders detected */
   placeholderCount: number;
+  /** Provider type used for storage (dpapi, keychain, or plain) */
+  providerType?: ProviderType;
 }
 
 /**
@@ -105,6 +108,7 @@ export async function secretizeEnv(
   const configDir = dirname(options.configPath);
   const store = options.store ?? new SqliteSecretStore(configDir);
   const shouldCloseStore = !options.store; // Only close if we created it
+  const providerType = store.getProviderType();
 
   try {
     for (const [key, value] of Object.entries(env)) {
@@ -171,7 +175,16 @@ export async function secretizeEnv(
     results,
     storedCount,
     placeholderCount,
+    providerType,
   };
+}
+
+/**
+ * Options for formatting secretize output
+ */
+export interface FormatSecretizeOptions {
+  /** Provider type used (to show warning if plain) */
+  providerType?: ProviderType;
 }
 
 /**
@@ -179,13 +192,23 @@ export async function secretizeEnv(
  *
  * @param results - Individual key results
  * @param connectorId - Connector ID for path display
+ * @param options - Optional formatting options
  * @returns Array of formatted output lines
  */
 export function formatSecretizeOutput(
   results: SecretizeKeyResult[],
-  connectorId: string
+  connectorId: string,
+  options: FormatSecretizeOptions = {}
 ): string[] {
   const lines: string[] = [];
+
+  // Add warning if using plain provider (unencrypted storage)
+  const hasStoredSecrets = results.some(r => r.action === 'stored');
+  if (options.providerType === 'plain' && hasStoredSecrets) {
+    lines.push(`  ⚠ WARNING: Secrets stored with 'plain' provider (base64 only, NOT encrypted)`);
+    lines.push(`    On Windows, secrets are encrypted with DPAPI. On other platforms,`);
+    lines.push(`    consider using environment variables or a dedicated secrets manager.`);
+  }
 
   for (const result of results) {
     if (result.action === 'stored' && result.secretRef) {

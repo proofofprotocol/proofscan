@@ -243,4 +243,62 @@ describe('formatSecretizeOutput', () => {
     expect(output[0]).toContain('dpapi:');
     expect(output[0]).toContain('...');
   });
+
+  it('should show warning when using plain provider', () => {
+    const results = [
+      {
+        key: 'API_KEY',
+        originalValue: 'secret-value',
+        newValue: 'plain:12345678',
+        action: 'stored' as const,
+        secretRef: 'plain:12345678',
+      },
+    ];
+
+    const output = formatSecretizeOutput(results, 'test', { providerType: 'plain' });
+
+    // Should include warning about plain provider
+    expect(output.some(line => line.includes('WARNING'))).toBe(true);
+    expect(output.some(line => line.includes('plain'))).toBe(true);
+    expect(output.some(line => line.includes('NOT encrypted'))).toBe(true);
+    // Should still include the stored secret line
+    expect(output.some(line => line.includes('secret stored'))).toBe(true);
+  });
+
+  it('should not show plain provider warning if no secrets stored', () => {
+    const results = [
+      {
+        key: 'PASSWORD',
+        originalValue: 'changeme',
+        newValue: 'changeme',
+        action: 'placeholder' as const,
+      },
+    ];
+
+    const output = formatSecretizeOutput(results, 'test', { providerType: 'plain' });
+
+    // Should NOT include warning if nothing was stored
+    expect(output.some(line => line.includes('WARNING'))).toBe(false);
+    // But should still show placeholder warning
+    expect(output.some(line => line.includes('placeholder detected'))).toBe(true);
+  });
+
+  it('should not show warning for dpapi provider', () => {
+    const results = [
+      {
+        key: 'API_KEY',
+        originalValue: 'secret-value',
+        newValue: 'dpapi:12345678',
+        action: 'stored' as const,
+        secretRef: 'dpapi:12345678',
+      },
+    ];
+
+    const output = formatSecretizeOutput(results, 'test', { providerType: 'dpapi' });
+
+    // Should NOT include warning for dpapi
+    expect(output.some(line => line.includes('WARNING'))).toBe(false);
+    // Should show stored message
+    expect(output.some(line => line.includes('secret stored'))).toBe(true);
+  });
 });

@@ -54,4 +54,5 @@ export {
   type SecretizeKeyResult,
   type SecretizeResult,
   type SecretizeOptions,
+  type FormatSecretizeOptions,
 } from './secretize.js';
