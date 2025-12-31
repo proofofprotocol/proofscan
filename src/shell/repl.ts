@@ -564,6 +564,7 @@ Tips:
 
     // Update prompt and show it
     this.rl.setPrompt(generatePrompt(this.context));
+    this.rl.prompt();
   }
 
   /**
@@ -591,6 +592,8 @@ Tips:
     let savedPrompt = '';
     if (isInteractive && this.rl) {
       savedPrompt = (this.rl as readline.Interface & { _prompt?: string })._prompt || '';
+      // Remove close handler before closing to avoid "Goodbye!" message
+      this.rl.removeAllListeners('close');
       // Close the readline interface to fully release stdin
       this.rl.close();
       this.rl = null;
