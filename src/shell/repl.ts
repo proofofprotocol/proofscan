@@ -540,7 +540,13 @@ Tips:
     const fullCommand = `${command} ${subcommand}`;
     if (BLOCKED_SUBCOMMANDS_IN_SHELL.includes(fullCommand)) {
       printError(`'${fullCommand}' is not available in shell mode (requires hidden input)`);
-      printInfo('Exit shell first, then run: pfscan ' + tokens.join(' '));
+      // Provide copy-paste ready command with default output file for export
+      if (fullCommand === 'secrets export' || fullCommand === 'secret export') {
+        printInfo('Exit shell first, then run:');
+        printInfo('  pfscan secrets export -o proofscan-secrets.export.json');
+      } else {
+        printInfo('Exit shell first, then run: pfscan ' + tokens.join(' '));
+      }
       return;
     }
 

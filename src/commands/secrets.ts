@@ -347,7 +347,7 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
         const configPath = getConfigPath();
         const configDir = dirname(configPath);
 
-        output('Enter passphrase to encrypt the export:');
+        output('Enter passphrase to encrypt the export (min 12 chars):');
         const passphrase = await readSecretHidden();
 
         if (!passphrase || passphrase.length < 12) {
