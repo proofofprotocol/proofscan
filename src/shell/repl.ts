@@ -5,7 +5,15 @@
 import * as readline from 'readline';
 import { spawn } from 'child_process';
 import type { ShellContext } from './types.js';
-import { SHELL_BUILTINS, TOP_LEVEL_COMMANDS, ROUTER_COMMANDS } from './types.js';
+import {
+  SHELL_BUILTINS,
+  TOP_LEVEL_COMMANDS,
+  ROUTER_COMMANDS,
+  BLOCKED_IN_SHELL,
+  DEFAULT_COMPLETION_LIMIT,
+  SESSION_SEARCH_LIMIT,
+  getAllowedCommands,
+} from './types.js';
 import { applyContext } from './context-applicator.js';
 import {
   handleCc,
@@ -109,7 +117,7 @@ export class ShellRepl {
           return [];
         }
       },
-      getSessionPrefixes: (connectorId?: string, limit: number = 10) => {
+      getSessionPrefixes: (connectorId?: string, limit: number = DEFAULT_COMPLETION_LIMIT) => {
         const now = Date.now();
         const cacheKey = `${connectorId || '*'}:${limit}`;
         const cached = this.sessionsCache.get(cacheKey);
@@ -303,6 +311,13 @@ export class ShellRepl {
    * Show help
    */
   private showHelp(topic?: string): void {
+    // Handle blocked commands
+    if (topic && BLOCKED_IN_SHELL.includes(topic)) {
+      printError(`'${topic}' is not available in shell mode (stdin conflict)`);
+      printInfo('Exit shell first, then run: pfscan ' + topic);
+      return;
+    }
+
     if (topic) {
       printInfo(`Help for "${topic}" - run "pfscan ${topic} --help" for details`);
       return;
@@ -328,7 +343,7 @@ Shell Commands:
   exit, quit              Exit shell
 
 ProofScan Commands:
-  ${TOP_LEVEL_COMMANDS.join(', ')}
+  ${getAllowedCommands().join(', ')}
 
 Tips:
   - Press TAB for auto-completion
@@ -420,7 +435,7 @@ Tips:
       try {
         const manager = new ConfigManager(this.configPath);
         const store = new EventLineStore(manager.getConfigDir());
-        const sessions = store.getSessions(this.context.connector, 100);
+        const sessions = store.getSessions(this.context.connector, SESSION_SEARCH_LIMIT);
         const matches = sessions.filter(s => s.session_id.startsWith(prefix));
 
         if (matches.length === 0) {
@@ -505,12 +520,6 @@ Tips:
   }
 
   /**
-   * Commands that are not allowed in shell mode
-   * These commands have their own readline interface which conflicts with shell
-   */
-  private static readonly BLOCKED_IN_SHELL = ['explore', 'e'];
-
-  /**
    * Execute a pfscan command
    */
   private async executeCommand(tokens: string[]): Promise<void> {
@@ -519,7 +528,7 @@ Tips:
     const command = tokens[0];
 
     // Block commands that have their own readline (stdin conflict)
-    if (ShellRepl.BLOCKED_IN_SHELL.includes(command)) {
+    if (BLOCKED_IN_SHELL.includes(command)) {
       printError(`'${command}' is not available in shell mode (stdin conflict)`);
       printInfo('Exit shell first, then run: pfscan ' + command);
       return;

@@ -4,17 +4,15 @@
 
 import type { ShellContext } from './types.js';
 import {
-  TOP_LEVEL_COMMANDS,
   COMMAND_SUBCOMMANDS,
   COMMAND_OPTIONS,
   COMMON_OPTIONS,
   SHELL_BUILTINS,
+  ROUTER_COMMANDS,
+  BLOCKED_IN_SHELL,
+  DEFAULT_COMPLETION_LIMIT,
+  getAllowedCommands,
 } from './types.js';
-
-/**
- * Commands blocked in shell mode (have their own readline)
- */
-const BLOCKED_IN_SHELL = ['explore', 'e'];
 
 export type DynamicDataProvider = {
   getConnectorIds: () => string[];
@@ -64,21 +62,109 @@ function getCandidates(
   context: ShellContext,
   dataProvider: DynamicDataProvider
 ): string[] {
-  // No tokens yet - complete top-level commands + builtins (excluding blocked commands)
+  // No tokens yet - complete top-level commands + builtins + router commands (excluding blocked commands)
   if (completedTokens.length === 0) {
-    const allowedCommands = TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
-    return [...SHELL_BUILTINS, ...allowedCommands];
+    return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...getAllowedCommands()];
   }
 
   const firstToken = completedTokens[0];
 
+  // Handle router-style commands (cd, cc, ls, show, ..)
+  if (ROUTER_COMMANDS.includes(firstToken)) {
+    return getRouterCompletions(firstToken, completedTokens, context, dataProvider);
+  }
+
   // Handle shell builtins
   if (SHELL_BUILTINS.includes(firstToken)) {
-    return getBuiltinCompletions(firstToken, completedTokens, currentToken, context, dataProvider);
+    return getBuiltinCompletions(firstToken, completedTokens, dataProvider);
   }
 
   // Handle command completions
   return getCommandCompletions(completedTokens, currentToken, context, dataProvider);
+}
+
+/**
+ * Get context level for completion
+ *
+ * Context hierarchy (most specific to least):
+ * - session: A specific session is selected (implies connector is also set)
+ * - connector: A connector is selected, but no specific session
+ * - root: No connector or session selected (top-level view)
+ *
+ * @param context - Current shell context with optional connector/session
+ * @returns The current context level
+ */
+function getContextLevel(context: ShellContext): 'root' | 'connector' | 'session' {
+  if (context.session) return 'session';
+  if (context.connector) return 'connector';
+  return 'root';
+}
+
+/**
+ * Get completions for router-style commands (cd, cc, ls, show, ..)
+ */
+function getRouterCompletions(
+  command: string,
+  tokens: string[],
+  context: ShellContext,
+  dataProvider: DynamicDataProvider
+): string[] {
+  const level = getContextLevel(context);
+
+  switch (command) {
+    case 'cd':
+    case 'cc':
+      // cd/cc expects context-aware targets
+      if (tokens.length === 1) {
+        // Navigation shortcuts
+        const candidates = ['/', '..', '-'];
+
+        if (level === 'root') {
+          // At root: complete connector ids
+          candidates.push(...dataProvider.getConnectorIds());
+        } else if (level === 'connector' || level === 'session') {
+          // At connector/session: complete session prefixes (within current connector)
+          candidates.push(...dataProvider.getSessionPrefixes(context.connector, DEFAULT_COMPLETION_LIMIT));
+        }
+
+        return candidates;
+      }
+      return [];
+
+    case 'ls':
+      // ls has limited options
+      if (tokens.length === 1) {
+        return ['-l', '--long', '--json', '--ids'];
+      }
+      return [];
+
+    case 'show':
+      // show expects context-aware targets
+      if (tokens.length === 1) {
+        const candidates = ['--json'];
+
+        if (level === 'root') {
+          // At root: show <connector>
+          candidates.push(...dataProvider.getConnectorIds());
+        } else if (level === 'connector') {
+          // At connector: show <session>
+          candidates.push(...dataProvider.getSessionPrefixes(context.connector, DEFAULT_COMPLETION_LIMIT));
+        } else if (level === 'session') {
+          // At session: show <rpcId>
+          candidates.push(...dataProvider.getRpcIds(context.session));
+        }
+
+        return candidates;
+      }
+      return [];
+
+    case '..':
+      // No completions for ..
+      return [];
+
+    default:
+      return [];
+  }
 }
 
 /**
@@ -87,8 +173,6 @@ function getCandidates(
 function getBuiltinCompletions(
   command: string,
   tokens: string[],
-  _currentToken: string,
-  _context: ShellContext,
   dataProvider: DynamicDataProvider
 ): string[] {
   switch (command) {
@@ -99,14 +183,13 @@ function getBuiltinCompletions(
       }
       if (tokens.length === 2 && tokens[1] === 'session') {
         // `use session <sessionPrefix>`
-        return dataProvider.getSessionPrefixes(undefined, 50);
+        return dataProvider.getSessionPrefixes(undefined, DEFAULT_COMPLETION_LIMIT);
       }
       return [];
 
     case 'help':
       if (tokens.length === 1) {
-        const allowedCommands = TOP_LEVEL_COMMANDS.filter(c => !BLOCKED_IN_SHELL.includes(c));
-        return [...SHELL_BUILTINS, ...allowedCommands];
+        return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...getAllowedCommands()];
       }
       return [];
 
@@ -153,7 +236,7 @@ function getCommandCompletions(
 
     // --session expects session prefix
     if (prevToken === '--session') {
-      return dataProvider.getSessionPrefixes(context.connector, 50);
+      return dataProvider.getSessionPrefixes(context.connector, DEFAULT_COMPLETION_LIMIT);
     }
 
     // --connector expects connector id
@@ -186,6 +269,13 @@ function getCommandCompletions(
 
   // For tree command, suggest connector ids as positional argument
   if ((firstToken === 'tree' || firstToken === 't') && tokens.length === 1) {
+    if (!currentToken.startsWith('-')) {
+      candidates.push(...dataProvider.getConnectorIds());
+    }
+  }
+
+  // For view command, suggest connector ids as positional argument
+  if ((firstToken === 'view' || firstToken === 'v') && tokens.length === 1) {
     if (!currentToken.startsWith('-')) {
       candidates.push(...dataProvider.getConnectorIds());
     }
