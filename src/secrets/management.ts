@@ -212,6 +212,7 @@ async function withConfigLock<T>(
   operation: (config: Config) => Promise<{ config: Config; result: T }>
 ): Promise<T> {
   const lockPath = await acquireConfigLock(configPath);
+  const tempPath = `${configPath}.tmp`;
   try {
     // Read current config
     if (!existsSync(configPath)) {
@@ -222,15 +223,20 @@ async function withConfigLock<T>(
     // Execute operation
     const { config: updatedConfig, result } = await operation(config);
 
-    // Write back atomically (write to temp, then rename)
-    const tempPath = `${configPath}.tmp`;
+    // Write atomically: write to temp file first, then overwrite original
     writeFileSync(tempPath, JSON.stringify(updatedConfig, null, 2));
     writeFileSync(configPath, JSON.stringify(updatedConfig, null, 2));
-    // Note: renameSync would be truly atomic but may fail cross-device
-    // Using writeFileSync is acceptable for config files
 
     return result;
   } finally {
+    // Clean up temp file if it exists
+    try {
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath);
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
     releaseConfigLock(lockPath);
   }
 }
@@ -566,38 +572,14 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
 
   const payload = JSON.parse(payloadBytes.toString('utf-8')) as { entries: ExportEntry[] };
 
-  // Load config
-  let config: Config = { version: 1, connectors: [] };
-  if (existsSync(configPath)) {
-    config = JSON.parse(readFileSync(configPath, 'utf-8'));
-  }
-
+  // Store secrets first (outside the config lock to minimize lock time)
   const store = new SqliteSecretStore(configDir);
-  let importedCount = 0;
-  let skippedCount = 0;
+  const storedSecrets: { entry: ExportEntry; reference: string }[] = [];
   let errorCount = 0;
 
   try {
     for (const entry of payload.entries) {
       try {
-        // Find connector
-        const connector = config.connectors?.find(c => c.id === entry.connector_id);
-        if (!connector) {
-          // Connector doesn't exist, skip
-          skippedCount++;
-          continue;
-        }
-
-        // Check if already has a secret ref
-        const transport = connector.transport as StdioTransport;
-        const existingValue = transport?.env?.[entry.env_key];
-        if (existingValue && parseSecretRef(existingValue)) {
-          if (!overwrite) {
-            skippedCount++;
-            continue;
-          }
-        }
-
         // Decode plaintext (in-memory only)
         const plaintext = Buffer.from(entry.secret_bytes_b64, 'base64').toString('utf-8');
 
@@ -608,33 +590,68 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
           source: `${entry.connector_id}.transport.env.${entry.env_key}`,
         });
 
-        // Update config
-        if (!transport) {
-          (connector as Connector).transport = { type: 'stdio', command: '' } as StdioTransport;
-        }
-        const t = connector.transport as StdioTransport;
-        if (!t.env) {
-          t.env = {};
-        }
-        t.env[entry.env_key] = result.reference;
-
-        importedCount++;
+        storedSecrets.push({ entry, reference: result.reference });
       } catch {
         errorCount++;
       }
     }
-
-    // Save config if any imports succeeded
-    if (importedCount > 0) {
-      writeFileSync(configPath, JSON.stringify(config, null, 2));
-    }
-
-    return {
-      importedCount,
-      skippedCount,
-      errorCount,
-    };
   } finally {
     store.close();
   }
+
+  // If no secrets were stored, return early without touching config
+  if (storedSecrets.length === 0) {
+    return {
+      importedCount: 0,
+      skippedCount: payload.entries.length - errorCount,
+      errorCount,
+    };
+  }
+
+  // Update config with file locking to prevent race conditions
+  return withConfigLock<ImportResult>(configPath, async (config) => {
+    let importedCount = 0;
+    let skippedCount = 0;
+
+    for (const { entry, reference } of storedSecrets) {
+      // Find connector
+      const connector = config.connectors?.find(c => c.id === entry.connector_id);
+      if (!connector) {
+        // Connector doesn't exist in config, skip
+        skippedCount++;
+        continue;
+      }
+
+      // Check if already has a secret ref
+      const transport = connector.transport as StdioTransport;
+      const existingValue = transport?.env?.[entry.env_key];
+      if (existingValue && parseSecretRef(existingValue)) {
+        if (!overwrite) {
+          skippedCount++;
+          continue;
+        }
+      }
+
+      // Update config
+      if (!transport) {
+        (connector as Connector).transport = { type: 'stdio', command: '' } as StdioTransport;
+      }
+      const t = connector.transport as StdioTransport;
+      if (!t.env) {
+        t.env = {};
+      }
+      t.env[entry.env_key] = reference;
+
+      importedCount++;
+    }
+
+    return {
+      config,
+      result: {
+        importedCount,
+        skippedCount: skippedCount + (payload.entries.length - storedSecrets.length - errorCount),
+        errorCount,
+      },
+    };
+  });
 }
