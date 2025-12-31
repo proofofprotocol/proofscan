@@ -3,11 +3,17 @@
  */
 
 /**
+ * Protocol type
+ */
+export type ProtoType = 'mcp' | 'a2a' | '?';
+
+/**
  * Shell context - current connector/session state
  */
 export interface ShellContext {
   connector?: string;
   session?: string;
+  proto?: ProtoType;
 }
 
 /**
@@ -99,3 +105,8 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
  * Shell built-in commands
  */
 export const SHELL_BUILTINS = ['use', 'reset', 'pwd', 'help', 'exit', 'quit', 'clear'];
+
+/**
+ * Router-style navigation commands
+ */
+export const ROUTER_COMMANDS = ['cc', 'ls', 'show', '..'];

@@ -47,8 +47,22 @@ export function shortenSessionId(sessionId: string, length: number = 8): string 
 }
 
 /**
+ * Get color for proto type
+ */
+function getProtoColor(proto: string): string {
+  switch (proto) {
+    case 'mcp':
+      return COLORS.green;
+    case 'a2a':
+      return COLORS.cyan;
+    default:
+      return COLORS.dim;
+  }
+}
+
+/**
  * Generate the shell prompt string
- * Format: proofscan|<connector>|<sessionPrefix>>
+ * Format: proofscan|<proto>|<connector>|<sessionPrefix>>
  */
 export function generatePrompt(context: ShellContext): string {
   const parts: string[] = [];
@@ -56,13 +70,19 @@ export function generatePrompt(context: ShellContext): string {
   // proofscan (dim)
   parts.push(color('proofscan', COLORS.dim));
 
+  // proto (colored by type) or * if not set
+  const proto = context.proto || '*';
+  parts.push(color(proto, getProtoColor(proto)));
+
   // connector (cyan) or * if not set
   const connector = context.connector || '*';
   parts.push(color(connector, COLORS.cyan));
 
-  // session prefix (yellow) if set
+  // session prefix (yellow) or * if connector is set but no session
   if (context.session) {
     parts.push(color(shortenSessionId(context.session), COLORS.yellow));
+  } else if (context.connector) {
+    parts.push(color('*', COLORS.dim));
   }
 
   return parts.join('|') + '> ';
@@ -74,10 +94,13 @@ export function generatePrompt(context: ShellContext): string {
 export function generatePlainPrompt(context: ShellContext): string {
   const parts: string[] = ['proofscan'];
 
+  parts.push(context.proto || '*');
   parts.push(context.connector || '*');
 
   if (context.session) {
     parts.push(shortenSessionId(context.session));
+  } else if (context.connector) {
+    parts.push('*');
   }
 
   return parts.join('|') + '> ';

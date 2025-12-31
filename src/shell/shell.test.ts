@@ -15,24 +15,26 @@ import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
 
 describe('prompt', () => {
   describe('generatePlainPrompt', () => {
-    it('should show proofscan|* when no context', () => {
+    it('should show proofscan|*|* when no context', () => {
       const context: ShellContext = {};
-      expect(generatePlainPrompt(context)).toBe('proofscan|*> ');
+      expect(generatePlainPrompt(context)).toBe('proofscan|*|*> ');
     });
 
-    it('should show connector when set', () => {
+    it('should show proto and connector when connector is set', () => {
       const context: ShellContext = { connector: 'mcp' };
-      expect(generatePlainPrompt(context)).toBe('proofscan|mcp> ');
+      // proto defaults to '*' when not set
+      expect(generatePlainPrompt(context)).toBe('proofscan|*|mcp|*> ');
     });
 
-    it('should show connector and session when both set', () => {
-      const context: ShellContext = { connector: 'mcp', session: 'abc123def456' };
-      expect(generatePlainPrompt(context)).toBe('proofscan|mcp|abc123de> ');
+    it('should show proto, connector and session when all set', () => {
+      const context: ShellContext = { proto: 'mcp', connector: 'mcp-conn', session: 'abc123def456' };
+      expect(generatePlainPrompt(context)).toBe('proofscan|mcp|mcp-conn|abc123de> ');
     });
 
-    it('should show session prefix only (8 chars)', () => {
+    it('should show session with * for proto when no proto set', () => {
       const context: ShellContext = { session: 'abcdefghijklmnop' };
-      expect(generatePlainPrompt(context)).toBe('proofscan|*|abcdefgh> ');
+      // Even with only session, we show proto and connector as *
+      expect(generatePlainPrompt(context)).toBe('proofscan|*|*|abcdefgh> ');
     });
   });
 

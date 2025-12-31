@@ -5,7 +5,15 @@
 import * as readline from 'readline';
 import { spawn } from 'child_process';
 import type { ShellContext } from './types.js';
-import { SHELL_BUILTINS, TOP_LEVEL_COMMANDS } from './types.js';
+import { SHELL_BUILTINS, TOP_LEVEL_COMMANDS, ROUTER_COMMANDS } from './types.js';
+import { applyContext } from './context-applicator.js';
+import {
+  handleCc,
+  handleUp,
+  handlePwd,
+  handleLs,
+  handleShow,
+} from './router-commands.js';
 import { generatePrompt, printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
 import { loadHistory, saveHistory, addToHistory } from './history.js';
 import { createCompleter, type DynamicDataProvider } from './completer.js';
@@ -211,6 +219,12 @@ export class ShellRepl {
     const command = tokens[0];
     const args = tokens.slice(1);
 
+    // Handle router-style commands first
+    if (ROUTER_COMMANDS.includes(command)) {
+      await this.handleRouterCommand(command, args);
+      return;
+    }
+
     // Handle built-in commands
     if (SHELL_BUILTINS.includes(command)) {
       await this.handleBuiltin(command, args);
@@ -226,6 +240,26 @@ export class ShellRepl {
     // Unknown command
     printError(`Unknown command: ${command}`);
     printInfo('Type "help" for available commands');
+  }
+
+  /**
+   * Handle router-style commands (cc, ls, show, ..)
+   */
+  private async handleRouterCommand(command: string, args: string[]): Promise<void> {
+    switch (command) {
+      case 'cc':
+        await handleCc(args, this.context, this.configPath);
+        break;
+      case '..':
+        handleUp(this.context);
+        break;
+      case 'ls':
+        await handleLs(args, this.context, this.configPath, (tokens) => this.executeCommand(tokens));
+        break;
+      case 'show':
+        await handleShow(args, this.context, this.configPath, (tokens) => this.executeCommand(tokens));
+        break;
+    }
   }
 
   /**
@@ -248,7 +282,7 @@ export class ShellRepl {
         break;
 
       case 'pwd':
-        this.showContext();
+        handlePwd(this.context, this.configPath);
         break;
 
       case 'use':
@@ -274,22 +308,32 @@ export class ShellRepl {
     }
 
     console.log(`
-Shell Commands:
-  use <connector>         Set current connector context
-  use session <prefix>    Set current session context
-  reset                   Clear context (connector and session)
-  pwd                     Show current context
+Navigation (router-style):
+  cc                      Go to latest session (home)
+  cc /                    Go to root
+  cc <connector>          Enter connector context
+  cc <session>            Enter session (in connector context)
+  cc <conn>|<sess>        Enter session directly
+  ..                      Go up one level
+  ls [-l] [--json]        List items at current level
+  show [target] [--json]  Show details
+
+Legacy Commands:
+  use <connector>         Set connector context
+  use session <prefix>    Set session context
+  reset                   Clear context
+  pwd                     Show current context with path
   help [command]          Show help
   clear                   Clear screen
   exit, quit              Exit shell
 
-Available Commands:
+ProofScan Commands:
   ${TOP_LEVEL_COMMANDS.join(', ')}
 
 Tips:
   - Press TAB for auto-completion
-  - Current context is shown in the prompt
-  - Commands run with current context applied
+  - Context is shown in prompt: proto|connector|session
+  - Commands auto-apply current context
 `);
   }
 
@@ -464,9 +508,12 @@ Tips:
    * Execute a pfscan command
    */
   private async executeCommand(tokens: string[]): Promise<void> {
-    // Build command line with context
-    const cmdArgs = this.buildCommandArgs(tokens);
+    // Apply context to command arguments
+    const { args: cmdArgs, warnings } = applyContext(tokens, this.context);
     const command = tokens[0];
+
+    // Show context-aware warnings
+    warnings.forEach(w => printInfo(w));
 
     // Validate all arguments for safety (defense-in-depth with shell: false)
     const invalidArgs = cmdArgs.filter(arg => !isValidArg(arg));
@@ -508,52 +555,5 @@ Tips:
         resolve();
       });
     });
-  }
-
-  /**
-   * Build command arguments with context applied
-   */
-  private buildCommandArgs(tokens: string[]): string[] {
-    const args = [...tokens];
-    const command = tokens[0];
-
-    // Add --connector if context has connector and command supports it
-    const connectorCommands = ['view', 'v', 'tree', 't'];
-    if (this.context.connector && connectorCommands.includes(command)) {
-      if (!args.includes('--connector') && !this.hasPositionalConnector(args)) {
-        args.push('--connector', this.context.connector);
-      }
-    }
-
-    // Add --session if context has session and command supports it
-    const sessionCommands = ['rpc', 'summary', 'permissions', 'view', 'v'];
-    if (this.context.session && sessionCommands.includes(command)) {
-      if (!args.includes('--session')) {
-        args.push('--session', this.context.session);
-      }
-    }
-
-    // Add --id for scan start if context has connector
-    if (command === 'scan' || command === 's') {
-      if (args.includes('start') && !args.includes('--id') && this.context.connector) {
-        const hasPositional = args.length > 2 && !args[2].startsWith('-');
-        if (!hasPositional) {
-          args.push('--id', this.context.connector);
-        }
-      }
-    }
-
-    return args;
-  }
-
-  /**
-   * Check if command has a positional connector argument
-   */
-  private hasPositionalConnector(args: string[]): boolean {
-    // For tree command, check if there's a positional argument
-    if (args[0] === 'tree' || args[0] === 't') {
-      return args.length > 1 && !args[1].startsWith('-');
-    }
-    return false;
   }
 }
