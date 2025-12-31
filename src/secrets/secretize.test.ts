@@ -11,6 +11,10 @@ import { secretizeEnv, formatSecretizeOutput } from './secretize.js';
 // On Windows, dpapi: is used; on other platforms, plain: is used
 const expectedProvider = platform() === 'win32' ? 'dpapi' : 'plain';
 
+// Test secrets - clearly fake patterns that won't trigger secret scanning
+const TEST_SECRET_LONG = 'test_fake_secret_' + 'x'.repeat(30);
+const TEST_SECRET_SHORT = 'test_fake_key_1234567890abcdef';
+
 describe('secretizeEnv', () => {
   let tempDir: string;
   let configPath: string;
@@ -32,7 +36,7 @@ describe('secretizeEnv', () => {
 
   it('should store real secrets and replace with dpapi reference', async () => {
     const env = {
-      OPENAI_API_KEY: 'sk-abcdefghijklmnopqrstuvwxyz123456',
+      OPENAI_API_KEY: TEST_SECRET_LONG,
       OTHER_VAR: 'not-a-secret',
     };
 
@@ -113,9 +117,9 @@ describe('secretizeEnv', () => {
 
   it('should handle mixed env vars', async () => {
     const env = {
-      API_KEY: 'sk-real-api-key-abcdefghij',
+      API_KEY: TEST_SECRET_SHORT,
       PASSWORD: 'changeme',
-      SECRET_TOKEN: 'real-secret-token-12345678901234567890',
+      SECRET_TOKEN: TEST_SECRET_LONG,
       NODE_ENV: 'production',
     };
 
@@ -142,7 +146,7 @@ describe('secretizeEnv', () => {
 
   it('should create detailed results for each key', async () => {
     const env = {
-      API_KEY: 'sk-test123456789012345678',
+      API_KEY: TEST_SECRET_SHORT,
       AUTH_TOKEN: 'YOUR_TOKEN',
       OTHER: 'value',
     };

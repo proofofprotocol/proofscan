@@ -54,7 +54,27 @@ export interface SecretizeOptions {
   configPath: string;
   /** Connector ID (for metadata) */
   connectorId: string;
-  /** Optional: reuse existing store instance for batch operations */
+  /**
+   * Optional: reuse existing store instance for batch operations.
+   *
+   * Lifecycle contract:
+   * - If provided: Caller is responsible for closing the store after all operations.
+   *   The secretizeEnv function will NOT close the store.
+   * - If not provided: A new store will be created and automatically closed
+   *   when secretizeEnv completes (even if an error occurs).
+   *
+   * Example usage for batch operations:
+   * ```typescript
+   * const store = new SqliteSecretStore(configDir);
+   * try {
+   *   for (const connector of connectors) {
+   *     await secretizeEnv(connector.env, { configPath, connectorId, store });
+   *   }
+   * } finally {
+   *   store.close();
+   * }
+   * ```
+   */
   store?: SqliteSecretStore;
 }
 
@@ -91,20 +111,34 @@ export async function secretizeEnv(
       const detection = detectSecret(key, value);
 
       if (detection.action === 'store') {
-        // Store the secret
-        const storeResult = await store.store(value, {
-          source: `${options.connectorId}.transport.env.${key}`,
-        });
+        // Store the secret - wrap in try/catch to handle individual failures gracefully
+        try {
+          const storeResult = await store.store(value, {
+            source: `${options.connectorId}.transport.env.${key}`,
+          });
 
-        processedEnv[key] = storeResult.reference;
-        results.push({
-          key,
-          originalValue: value,
-          newValue: storeResult.reference,
-          action: 'stored',
-          secretRef: storeResult.reference,
-        });
-        storedCount++;
+          processedEnv[key] = storeResult.reference;
+          results.push({
+            key,
+            originalValue: value,
+            newValue: storeResult.reference,
+            action: 'stored',
+            secretRef: storeResult.reference,
+          });
+          storedCount++;
+        } catch (error) {
+          // If storing fails, keep original value and treat as placeholder (warn)
+          // This prevents partial failures from breaking the entire operation
+          console.error(`Warning: Failed to store secret for ${key}: ${error instanceof Error ? error.message : String(error)}`);
+          processedEnv[key] = value;
+          results.push({
+            key,
+            originalValue: value,
+            newValue: value,
+            action: 'placeholder',
+          });
+          placeholderCount++;
+        }
       } else if (detection.action === 'warn') {
         // Placeholder detected - keep original, will warn user
         processedEnv[key] = value;
