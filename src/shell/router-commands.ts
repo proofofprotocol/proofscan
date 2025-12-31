@@ -16,6 +16,14 @@ import { setCurrentSession, clearCurrentSession } from '../utils/state.js';
 
 /**
  * Detect protocol type from session events
+ *
+ * Detection priority (intentional):
+ * 1. MCP - Check first because MCP is more common and has clear markers (initialize, tools/*)
+ * 2. A2A - Check second for a2a.* or agent.* method patterns
+ * 3. Unknown (?) - Default when no protocol markers are found
+ *
+ * Note: If a session has both MCP and A2A methods, it will be classified as MCP.
+ * This is intentional as mixed-protocol sessions are rare and MCP is the primary use case.
  */
 export function detectProto(store: EventLineStore, sessionId: string): ProtoType {
   try {
@@ -25,7 +33,7 @@ export function detectProto(store: EventLineStore, sessionId: string): ProtoType
     // RpcCall has 'method' property
     rpcs.forEach(r => allMethods.add(r.method));
 
-    // MCP detection: initialize + tools/list
+    // MCP detection: initialize + tools/list (checked first - higher priority)
     const hasMcpInit = allMethods.has('initialize');
     const hasMcpTools = allMethods.has('tools/list') || allMethods.has('tools/call');
     if (hasMcpInit || hasMcpTools) {
@@ -41,6 +49,8 @@ export function detectProto(store: EventLineStore, sessionId: string): ProtoType
 
     return '?';
   } catch {
+    // Return unknown on any error (e.g., DB access failure)
+    // This is intentional to avoid blocking navigation due to proto detection errors
     return '?';
   }
 }

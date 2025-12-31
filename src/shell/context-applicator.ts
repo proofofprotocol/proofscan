@@ -72,7 +72,8 @@ function hasPositionalAt(args: string[], position: number): boolean {
     } else {
       // Only skip next arg if this is a value-taking option
       // Boolean flags don't consume the next argument
-      if (!isBooleanFlag(args[i])) {
+      // Also check bounds before incrementing to avoid accessing past array end
+      if (!isBooleanFlag(args[i]) && i + 1 < args.length) {
         i++;
       }
     }
@@ -93,7 +94,8 @@ function getPositionalAt(args: string[], position: number): string | undefined {
       positionalCount++;
     } else {
       // Only skip next arg if this is a value-taking option
-      if (!isBooleanFlag(args[i])) {
+      // Also check bounds before incrementing to avoid accessing past array end
+      if (!isBooleanFlag(args[i]) && i + 1 < args.length) {
         i++;
       }
     }
