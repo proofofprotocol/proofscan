@@ -14,6 +14,9 @@ export interface ShellContext {
   connector?: string;
   session?: string;
   proto?: ProtoType;
+  /** Previous location for cd - navigation */
+  previousConnector?: string;
+  previousSession?: string;
 }
 
 /**
@@ -108,5 +111,6 @@ export const SHELL_BUILTINS = ['use', 'reset', 'pwd', 'help', 'exit', 'quit', 'c
 
 /**
  * Router-style navigation commands
+ * Note: 'cd' is an alias for 'cc'
  */
-export const ROUTER_COMMANDS = ['cc', 'ls', 'show', '..'];
+export const ROUTER_COMMANDS = ['cc', 'cd', 'ls', 'show', '..'];

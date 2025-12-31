@@ -15,26 +15,31 @@ import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
 
 describe('prompt', () => {
   describe('generatePlainPrompt', () => {
-    it('should show proofscan|*|* when no context', () => {
+    it('should show proofscan:/ when no context', () => {
       const context: ShellContext = {};
-      expect(generatePlainPrompt(context)).toBe('proofscan|*|*> ');
+      expect(generatePlainPrompt(context)).toBe('proofscan:/ > ');
     });
 
-    it('should show proto and connector when connector is set', () => {
+    it('should show path format when connector is set', () => {
       const context: ShellContext = { connector: 'mcp' };
-      // proto defaults to '*' when not set
-      expect(generatePlainPrompt(context)).toBe('proofscan|*|mcp|*> ');
+      // No proto suffix when proto is not set
+      expect(generatePlainPrompt(context)).toBe('proofscan:/mcp > ');
     });
 
-    it('should show proto, connector and session when all set', () => {
+    it('should show path format with proto when all set', () => {
       const context: ShellContext = { proto: 'mcp', connector: 'mcp-conn', session: 'abc123def456' };
-      expect(generatePlainPrompt(context)).toBe('proofscan|mcp|mcp-conn|abc123de> ');
+      expect(generatePlainPrompt(context)).toBe('proofscan:/mcp-conn/abc123de (mcp) > ');
     });
 
-    it('should show session with * for proto when no proto set', () => {
-      const context: ShellContext = { session: 'abcdefghijklmnop' };
-      // Even with only session, we show proto and connector as *
-      expect(generatePlainPrompt(context)).toBe('proofscan|*|*|abcdefgh> ');
+    it('should show session in path format when session is set', () => {
+      const context: ShellContext = { connector: 'myconn', session: 'abcdefghijklmnop' };
+      // No proto suffix when proto is not set
+      expect(generatePlainPrompt(context)).toBe('proofscan:/myconn/abcdefgh > ');
+    });
+
+    it('should not show proto suffix when proto is ?', () => {
+      const context: ShellContext = { connector: 'mcp', proto: '?' };
+      expect(generatePlainPrompt(context)).toBe('proofscan:/mcp > ');
     });
   });
 
