@@ -505,6 +505,68 @@ Tips:
   }
 
   /**
+   * Check if a command has its own interactive UI
+   */
+  private isInteractiveCommand(command: string): boolean {
+    // Commands that create their own readline interface
+    return ['explore', 'e'].includes(command);
+  }
+
+  /**
+   * Recreate readline interface after interactive command
+   */
+  private recreateReadline(savedPrompt?: string): void {
+    // Create completer
+    const dataProvider = this.getDataProvider();
+    const completer = createCompleter(this.context, dataProvider);
+
+    // Create new readline interface
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      prompt: savedPrompt || generatePrompt(this.context),
+      completer: (line: string, callback: (err: Error | null, result: [string[], string]) => void) => {
+        const [completions, prefix] = completer(line);
+        callback(null, [completions, prefix]);
+      },
+      history: this.history,
+      historySize: 1000,
+    });
+
+    // Re-attach event handlers
+    this.rl.on('line', async (line) => {
+      const trimmed = line.trim();
+
+      if (trimmed) {
+        this.history = addToHistory(this.history, trimmed);
+        await this.processLine(trimmed);
+      }
+
+      if (this.running && this.rl) {
+        // Update prompt (context may have changed)
+        this.rl.setPrompt(generatePrompt(this.context));
+        this.rl.prompt();
+      }
+    });
+
+    this.rl.on('close', () => {
+      this.running = false;
+      saveHistory(this.history);
+      console.log();
+      printInfo('Goodbye!');
+    });
+
+    // Handle SIGINT (Ctrl+C)
+    this.rl.on('SIGINT', () => {
+      console.log();
+      this.rl!.prompt();
+    });
+
+    // Update prompt and show it
+    this.rl.setPrompt(generatePrompt(this.context));
+  }
+
+  /**
    * Execute a pfscan command
    */
   private async executeCommand(tokens: string[]): Promise<void> {
@@ -523,6 +585,17 @@ Tips:
       return;
     }
 
+    // For interactive commands, close REPL readline to avoid stdin conflict
+    // The child process will create its own readline interface
+    const isInteractive = this.isInteractiveCommand(command);
+    let savedPrompt = '';
+    if (isInteractive && this.rl) {
+      savedPrompt = (this.rl as readline.Interface & { _prompt?: string })._prompt || '';
+      // Close the readline interface to fully release stdin
+      this.rl.close();
+      this.rl = null;
+    }
+
     // Spawn pfscan process
     // Windows requires shell: true for .cmd wrapper scripts (npm global installs)
     // Security is ensured by isValidArg() validation above which blocks dangerous characters
@@ -535,10 +608,18 @@ Tips:
 
       proc.on('error', (err) => {
         printError(`Failed to run command: ${err.message}`);
+        if (isInteractive) {
+          this.recreateReadline(savedPrompt);
+        }
         resolve();
       });
 
       proc.on('close', (code) => {
+        // Recreate REPL readline after interactive command
+        if (isInteractive) {
+          this.recreateReadline(savedPrompt);
+        }
+
         // Invalidate cache after data-modifying commands
         const dataModifyingCommands = [
           'scan', 's',           // Creates new sessions/events
