@@ -20,7 +20,8 @@ import {
   formatSnapshotLine,
   formatConfigDiff,
 } from '../config/snapshot.js';
-import { output, outputSuccess, outputError, maskSecretsInObject, getOutputOptions } from '../utils/output.js';
+import { output, outputSuccess, outputError, redactSecrets, getOutputOptions } from '../utils/output.js';
+import { redactionSummary } from '../secrets/redaction.js';
 
 export function createConfigCommand(getConfigPath: () => string): Command {
   const cmd = new Command('config')
@@ -61,7 +62,7 @@ export function createConfigCommand(getConfigPath: () => string): Command {
 
   cmd
     .command('show')
-    .description('Show current config or a snapshot (secrets masked)')
+    .description('Show current config or a snapshot (secrets redacted)')
     .argument('[number]', 'Snapshot number to show (from ls)')
     .action(async (num?: string) => {
       try {
@@ -77,25 +78,32 @@ export function createConfigCommand(getConfigPath: () => string): Command {
             process.exit(1);
           }
 
-          const masked = maskSecretsInObject(snapshot.config);
+          const redacted = redactSecrets(snapshot.config);
 
           if (getOutputOptions().json) {
-            output({ snapshot: snapshot.meta, config: masked });
+            output({ snapshot: snapshot.meta, config: redacted.value });
           } else {
             console.log(`Snapshot #${num}: ${snapshot.meta.note || '(no note)'}`);
             console.log(`Created: ${snapshot.meta.created_at}`);
+            if (redacted.count > 0) {
+              console.log(redactionSummary(redacted.count));
+            }
             console.log();
-            console.log(JSON.stringify(masked, null, 2));
+            console.log(JSON.stringify(redacted.value, null, 2));
           }
         } else {
           // Show current config
           const config = await manager.load();
-          const masked = maskSecretsInObject(config);
+          const redacted = redactSecrets(config);
 
           if (getOutputOptions().json) {
-            output(masked);
+            output(redacted.value);
           } else {
-            console.log(JSON.stringify(masked, null, 2));
+            if (redacted.count > 0) {
+              console.log(redactionSummary(redacted.count));
+              console.log();
+            }
+            console.log(JSON.stringify(redacted.value, null, 2));
           }
         }
       } catch (error) {
