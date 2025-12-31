@@ -231,7 +231,7 @@ describe('parseConnectorJson - Error handling', () => {
 // ============================================================
 
 describe('toConnector', () => {
-  it('converts parsed connector to Connector type', () => {
+  it('converts parsed connector to Connector type', async () => {
     const parsed = {
       id: 'test',
       command: 'node',
@@ -239,7 +239,7 @@ describe('toConnector', () => {
       env: { KEY: 'value' },
     };
 
-    const { connector, secretRefCount } = toConnector(parsed);
+    const { connector, secretRefCount } = await toConnector(parsed);
 
     expect(connector.id).toBe('test');
     expect(connector.enabled).toBe(true);
@@ -250,19 +250,19 @@ describe('toConnector', () => {
     expect(secretRefCount).toBe(0);
   });
 
-  it('omits empty args and env', () => {
+  it('omits empty args and env', async () => {
     const parsed = {
       id: 'minimal',
       command: 'python',
     };
 
-    const { connector } = toConnector(parsed);
+    const { connector } = await toConnector(parsed);
 
     expect((connector.transport as { args?: string[] }).args).toBeUndefined();
     expect((connector.transport as { env?: Record<string, string> }).env).toBeUndefined();
   });
 
-  it('sanitizes secret references in env', () => {
+  it('sanitizes secret references in env', async () => {
     const parsed = {
       id: 'with-secrets',
       command: 'node',
@@ -272,7 +272,7 @@ describe('toConnector', () => {
       },
     };
 
-    const { connector, secretRefCount } = toConnector(parsed);
+    const { connector, secretRefCount } = await toConnector(parsed);
 
     expect((connector.transport as { env?: Record<string, string> }).env).toEqual({
       API_KEY: 'secret://***',
@@ -372,7 +372,7 @@ describe('Integration tests', () => {
     expect(result.connectors[0].id).toBe('mcp-server-time');
   });
 
-  it('parses real Claude Desktop config excerpt', () => {
+  it('parses real Claude Desktop config excerpt', async () => {
     const json = JSON.stringify({
       mcpServers: {
         'mcp-server-time': {
@@ -395,7 +395,7 @@ describe('Integration tests', () => {
     expect(result.success).toBe(true);
     expect(result.connectors).toHaveLength(2);
 
-    const { connector } = toConnector(result.connectors[0]);
+    const { connector } = await toConnector(result.connectors[0]);
     expect(connector.transport.type).toBe('stdio');
   });
 });

@@ -9,6 +9,12 @@
 
 import type { Connector, StdioTransport } from '../types/index.js';
 import { sanitizeSecrets } from '../utils/sanitize-secrets.js';
+import {
+  secretizeEnv,
+  formatSecretizeOutput,
+  type SecretizeResult,
+  SqliteSecretStore,
+} from '../secrets/index.js';
 
 // ============================================================
 // Types
@@ -37,6 +43,12 @@ export interface AddResult {
   duplicates: string[];
   /** Phase 3.4: Number of secret references sanitized */
   secret_refs_sanitized: number;
+  /** Phase 3.5: Secretize output lines */
+  secretize_output: string[];
+  /** Phase 3.5: Number of secrets stored */
+  secrets_stored: number;
+  /** Phase 3.5: Number of placeholders detected */
+  placeholders_detected: number;
 }
 
 // ============================================================
@@ -204,20 +216,40 @@ export function parseConnectorJson(jsonString: string): ParseResult {
 // Connector Conversion
 // ============================================================
 
+/** Options for toConnector */
+export interface ToConnectorOptions {
+  /** Config file path (for secretize) */
+  configPath?: string;
+  /** Shared store instance for batch operations (optional) */
+  store?: SqliteSecretStore;
+}
+
 /** Result of toConnector with secret sanitization */
 export interface ToConnectorResult {
   connector: Connector;
   secretRefCount: number;
+  /** Phase 3.5: Secretize result (if configPath provided) */
+  secretizeResult?: SecretizeResult;
+  /** Phase 3.5: Formatted output lines */
+  secretizeOutput: string[];
 }
 
 /**
  * Convert ParsedConnector to Connector type
  * Phase 3.4: Sanitizes secret references in env values
+ * Phase 3.5: Also secretizes real secrets if configPath is provided
  *
- * @returns Connector with sanitized env and count of secret refs found
+ * @param parsed - Parsed connector data
+ * @param options - Options including configPath for secretize
+ * @returns Connector with sanitized/secretized env and counts
  */
-export function toConnector(parsed: ParsedConnector): ToConnectorResult {
+export async function toConnector(
+  parsed: ParsedConnector,
+  options: ToConnectorOptions = {}
+): Promise<ToConnectorResult> {
   let secretRefCount = 0;
+  let secretizeResult: SecretizeResult | undefined;
+  let secretizeOutput: string[] = [];
 
   const transport: StdioTransport = {
     type: 'stdio',
@@ -229,10 +261,26 @@ export function toConnector(parsed: ParsedConnector): ToConnectorResult {
   }
 
   if (parsed.env && Object.keys(parsed.env).length > 0) {
-    // Sanitize secret references in env
+    // First: Sanitize existing secret:// references (Phase 3.4)
     const sanitizeResult = sanitizeSecrets(parsed.env);
-    transport.env = sanitizeResult.value as Record<string, string>;
+    let processedEnv = sanitizeResult.value as Record<string, string>;
     secretRefCount = sanitizeResult.count;
+
+    // Second: Secretize real secrets if configPath provided (Phase 3.5)
+    // Pass store if provided to reuse DB connection across multiple connectors
+    if (options.configPath) {
+      secretizeResult = await secretizeEnv(processedEnv, {
+        configPath: options.configPath,
+        connectorId: parsed.id,
+        store: options.store,
+      });
+      processedEnv = secretizeResult.env;
+      secretizeOutput = formatSecretizeOutput(secretizeResult.results, parsed.id, {
+        providerType: secretizeResult.providerType,
+      });
+    }
+
+    transport.env = processedEnv;
   }
 
   return {
@@ -242,6 +290,8 @@ export function toConnector(parsed: ParsedConnector): ToConnectorResult {
       transport,
     },
     secretRefCount,
+    secretizeResult,
+    secretizeOutput,
   };
 }
 

@@ -14,11 +14,29 @@ export interface SanitizeResult {
   count: number;
 }
 
-/** Secret reference pattern: "secret://..." (but NOT already masked "secret://***") */
-const SECRET_REF_PATTERN = /^secret:\/\/(?!\*\*\*$)/;
+/**
+ * Secret reference patterns:
+ * - "secret://..." - External/user-provided secret references (Phase 3.4)
+ * - "dpapi:xxx" - Windows DPAPI-encrypted secrets (Phase 3.5)
+ * - "keychain:xxx" - macOS Keychain secrets (Phase 3.5, future)
+ *
+ * Note: "secret://***" is already masked, so we exclude it
+ */
+const SECRET_REF_PATTERNS = [
+  /^secret:\/\/(?!\*\*\*$)/,  // secret://... (but not secret://*** which is already masked)
+  /^dpapi:[a-zA-Z0-9_-]+$/,   // dpapi:xxx (Phase 3.5 internal format)
+  /^keychain:[a-zA-Z0-9_-]+$/, // keychain:xxx (Phase 3.5 future format)
+];
 
 /** Masked secret reference */
 const SECRET_MASKED = 'secret://***';
+
+/**
+ * Check if a value matches any secret reference pattern
+ */
+function isSecretReference(value: string): boolean {
+  return SECRET_REF_PATTERNS.some(pattern => pattern.test(value));
+}
 
 /**
  * Recursively sanitize secret references in a JSON-like value.
@@ -46,7 +64,7 @@ export function sanitizeSecrets(value: unknown): SanitizeResult {
 
     // Handle strings - check for secret reference
     if (typeof val === 'string') {
-      if (SECRET_REF_PATTERN.test(val)) {
+      if (isSecretReference(val)) {
         count++;
         return SECRET_MASKED;
       }

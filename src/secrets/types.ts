@@ -37,6 +37,8 @@ export interface SecretMeta {
   keyName?: string;
   /** Connector ID where secret is used */
   connectorId?: string;
+  /** Full source path (e.g., "myConnector.transport.env.API_KEY") */
+  source?: string;
 }
 
 /**

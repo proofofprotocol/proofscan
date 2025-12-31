@@ -15,6 +15,8 @@ import {
   type ParsedConnector,
   type AddResult,
 } from '../config/add.js';
+import { SqliteSecretStore } from '../secrets/index.js';
+import { dirname } from 'path';
 import {
   SnapshotManager,
   formatSnapshotLine,
@@ -233,31 +235,61 @@ Examples:
           skipped: [],
           duplicates,
           secret_refs_sanitized: 0,
+          secretize_output: [],
+          secrets_stored: 0,
+          placeholders_detected: 0,
         };
 
         // Process connectors
         const existingIds = new Set(config.connectors.map(c => c.id));
+        const configPath = getConfigPath();
 
-        for (const parsed of parseResult.connectors) {
-          const { connector, secretRefCount } = toConnector(parsed);
+        // Phase 3.5: Create shared store for batch operations to avoid
+        // opening/closing the database for each connector
+        let sharedStore: SqliteSecretStore | undefined;
+        if (!options.dryRun) {
+          sharedStore = new SqliteSecretStore(dirname(configPath));
+        }
 
-          if (existingIds.has(parsed.id)) {
-            if (options.overwrite) {
-              // Update existing
-              const index = config.connectors.findIndex(c => c.id === parsed.id);
-              config.connectors[index] = connector;
-              result.updated.push(parsed.id);
-              result.secret_refs_sanitized += secretRefCount;
+        try {
+          for (const parsed of parseResult.connectors) {
+            // Phase 3.5: Pass configPath and shared store to enable secretize (only if not dry-run)
+            const toConnectorOptions = options.dryRun ? {} : { configPath, store: sharedStore };
+            const { connector, secretRefCount, secretizeResult, secretizeOutput } = await toConnector(parsed, toConnectorOptions);
+
+            if (existingIds.has(parsed.id)) {
+              if (options.overwrite) {
+                // Update existing
+                const index = config.connectors.findIndex(c => c.id === parsed.id);
+                config.connectors[index] = connector;
+                result.updated.push(parsed.id);
+                result.secret_refs_sanitized += secretRefCount;
+                // Phase 3.5: Add secretize info
+                result.secretize_output.push(...secretizeOutput);
+                if (secretizeResult) {
+                  result.secrets_stored += secretizeResult.storedCount;
+                  result.placeholders_detected += secretizeResult.placeholderCount;
+                }
+              } else {
+                // Skipped: do NOT count secret refs (not actually saved)
+                result.skipped.push(parsed.id);
+              }
             } else {
-              // Skipped: do NOT count secret refs (not actually saved)
-              result.skipped.push(parsed.id);
+              // Add new
+              config.connectors.push(connector);
+              result.added.push(parsed.id);
+              result.secret_refs_sanitized += secretRefCount;
+              // Phase 3.5: Add secretize info
+              result.secretize_output.push(...secretizeOutput);
+              if (secretizeResult) {
+                result.secrets_stored += secretizeResult.storedCount;
+                result.placeholders_detected += secretizeResult.placeholderCount;
+              }
             }
-          } else {
-            // Add new
-            config.connectors.push(connector);
-            result.added.push(parsed.id);
-            result.secret_refs_sanitized += secretRefCount;
           }
+        } finally {
+          // Always close the shared store to release DB connection
+          sharedStore?.close();
         }
 
         // Output summary
@@ -271,9 +303,18 @@ Examples:
             updated: result.updated,
             skipped: result.skipped,
             secret_refs_sanitized: result.secret_refs_sanitized,
+            secrets_stored: result.secrets_stored,
+            placeholders_detected: result.placeholders_detected,
           });
         } else {
           console.log(summary);
+          // Phase 3.5: Show secretize output
+          if (result.secretize_output.length > 0) {
+            console.log('');
+            for (const line of result.secretize_output) {
+              console.log(line);
+            }
+          }
         }
 
         // Save if not dry-run

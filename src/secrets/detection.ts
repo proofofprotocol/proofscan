@@ -141,6 +141,9 @@ export interface SecretDetectionResult {
   action: 'store' | 'warn' | 'skip';
 }
 
+/** Minimum length for a value to be considered a storable secret */
+const MIN_SECRET_LENGTH = 8;
+
 /**
  * Detect if a key-value pair is a secret and determine action
  *
@@ -152,21 +155,25 @@ export function detectSecret(key: string, value: string): SecretDetectionResult 
   const secretKey = isSecretKey(key);
   const placeholder = isPlaceholder(value);
   const looksReal = looksLikeRealSecret(value);
+  const isTooShort = !value || value.length < MIN_SECRET_LENGTH;
 
   let action: 'store' | 'warn' | 'skip';
 
-  if (secretKey && placeholder) {
-    // Secret key with placeholder value - warn user
-    action = 'warn';
-  } else if (secretKey && looksReal) {
-    // Secret key with real-looking value - store securely
-    action = 'store';
-  } else if (secretKey) {
-    // Secret key with unknown value format - store to be safe
-    action = 'store';
-  } else {
+  if (!secretKey) {
     // Not a secret key - skip
     action = 'skip';
+  } else if (placeholder) {
+    // Secret key with placeholder value - warn user
+    action = 'warn';
+  } else if (isTooShort) {
+    // Secret key with very short/empty value - likely not a real secret, warn
+    action = 'warn';
+  } else if (looksReal) {
+    // Secret key with real-looking value - store securely
+    action = 'store';
+  } else {
+    // Secret key with value that's long enough but doesn't match known patterns - store to be safe
+    action = 'store';
   }
 
   return {
