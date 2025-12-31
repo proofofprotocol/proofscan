@@ -301,4 +301,42 @@ describe('formatSecretizeOutput', () => {
     // Should show stored message
     expect(output.some(line => line.includes('secret stored'))).toBe(true);
   });
+
+  it('should format storage errors (v0.7.2)', () => {
+    const results = [
+      {
+        key: 'API_KEY',
+        originalValue: 'secret-value',
+        newValue: 'secret-value',
+        action: 'error' as const,
+        error: 'DPAPI encryption failed: PowerShell error',
+      },
+    ];
+
+    const output = formatSecretizeOutput(results, 'test');
+
+    expect(output.length).toBe(1);
+    expect(output[0]).toContain('✖ storage failed');
+    expect(output[0]).toContain('test.transport.env.API_KEY');
+    expect(output[0]).toContain('DPAPI encryption failed');
+  });
+
+  it('should format storage errors without message', () => {
+    const results = [
+      {
+        key: 'SECRET_TOKEN',
+        originalValue: 'secret-value',
+        newValue: 'secret-value',
+        action: 'error' as const,
+      },
+    ];
+
+    const output = formatSecretizeOutput(results, 'my-connector');
+
+    expect(output.length).toBe(1);
+    expect(output[0]).toContain('✖ storage failed');
+    expect(output[0]).toContain('my-connector.transport.env.SECRET_TOKEN');
+    // Should not have extra colon when no error message
+    expect(output[0]).not.toContain('::');
+  });
 });

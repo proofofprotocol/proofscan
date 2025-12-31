@@ -238,6 +238,7 @@ Examples:
           secretize_output: [],
           secrets_stored: 0,
           placeholders_detected: 0,
+          storage_errors: 0,
         };
 
         // Process connectors
@@ -269,6 +270,7 @@ Examples:
                 if (secretizeResult) {
                   result.secrets_stored += secretizeResult.storedCount;
                   result.placeholders_detected += secretizeResult.placeholderCount;
+                  result.storage_errors += secretizeResult.errorCount;
                 }
               } else {
                 // Skipped: do NOT count secret refs (not actually saved)
@@ -284,6 +286,7 @@ Examples:
               if (secretizeResult) {
                 result.secrets_stored += secretizeResult.storedCount;
                 result.placeholders_detected += secretizeResult.placeholderCount;
+                result.storage_errors += secretizeResult.errorCount;
               }
             }
           }
