@@ -63,6 +63,13 @@ export function readClipboard(): string {
 }
 
 /**
+ * Async wrapper for readClipboard
+ */
+export async function getClipboardContent(): Promise<string> {
+  return readClipboard();
+}
+
+/**
  * Check if clipboard tools are available
  */
 export function isClipboardAvailable(): boolean {

@@ -45,6 +45,7 @@ import {
   createRecordCommand,
   createDoctorCommand,
   createShellCommand,
+  createSecretsCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -76,6 +77,7 @@ Management:
   archive, a    Archive and prune old data
   config, c     Configuration management
   connectors    Connector management
+  secrets       Secret management (list, set, edit, prune, export, import)
   doctor        Diagnose and fix database issues
 
 Shortcuts:
@@ -213,6 +215,9 @@ program.addCommand(createDoctorCommand(getConfigPath));
 // shell (Phase 4: interactive REPL)
 program.addCommand(createShellCommand(getConfigPath));
 
+// secrets (Phase 3.6: secret management)
+program.addCommand(createSecretsCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -227,7 +232,7 @@ function hasSubcommand(): boolean {
   const knownCommands = new Set([
     'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
     'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'help'
+    'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'help'
   ]);
 
   for (let i = 2; i < process.argv.length; i++) {

@@ -31,7 +31,11 @@ describe('parseSecretRef', () => {
     expect(parseSecretRef('dpapi:')).toBeNull();
     expect(parseSecretRef(':abc')).toBeNull();
     expect(parseSecretRef('')).toBeNull();
-    expect(parseSecretRef('plain:abc')).toBeNull();
+  });
+
+  it('should parse plain references (fallback provider)', () => {
+    const result = parseSecretRef('plain:abc');
+    expect(result).toEqual({ provider: 'plain', id: 'abc' });
   });
 
   it('should return null for unknown providers', () => {
@@ -64,11 +68,15 @@ describe('isSecretRef', () => {
     expect(isSecretRef('keychain:abc')).toBe(true);
   });
 
+  it('should detect plain references', () => {
+    expect(isSecretRef('plain:abc')).toBe(true);
+  });
+
   it('should not detect invalid references', () => {
-    expect(isSecretRef('plain:abc')).toBe(false);
     expect(isSecretRef('not-a-ref')).toBe(false);
     expect(isSecretRef('dpapi')).toBe(false);
     expect(isSecretRef('')).toBe(false);
     expect(isSecretRef('dpapi:')).toBe(false);
+    expect(isSecretRef('unknown:abc')).toBe(false);
   });
 });
