@@ -17,6 +17,11 @@ import {
  */
 const BLOCKED_IN_SHELL = ['explore', 'e'];
 
+/**
+ * Default limit for session/completion results
+ */
+const DEFAULT_COMPLETION_LIMIT = 50;
+
 export type DynamicDataProvider = {
   getConnectorIds: () => string[];
   getSessionPrefixes: (connectorId?: string, limit?: number) => string[];
@@ -89,6 +94,14 @@ function getCandidates(
 
 /**
  * Get context level for completion
+ *
+ * Context hierarchy (most specific to least):
+ * - session: A specific session is selected (implies connector is also set)
+ * - connector: A connector is selected, but no specific session
+ * - root: No connector or session selected (top-level view)
+ *
+ * @param context - Current shell context with optional connector/session
+ * @returns The current context level
  */
 function getContextLevel(context: ShellContext): 'root' | 'connector' | 'session' {
   if (context.session) return 'session';
@@ -119,12 +132,9 @@ function getRouterCompletions(
         if (level === 'root') {
           // At root: complete connector ids
           candidates.push(...dataProvider.getConnectorIds());
-        } else if (level === 'connector') {
-          // At connector: complete session prefixes (within current connector)
-          candidates.push(...dataProvider.getSessionPrefixes(context.connector, 50));
-        } else if (level === 'session') {
-          // At session: can still navigate to other sessions
-          candidates.push(...dataProvider.getSessionPrefixes(context.connector, 50));
+        } else if (level === 'connector' || level === 'session') {
+          // At connector/session: complete session prefixes (within current connector)
+          candidates.push(...dataProvider.getSessionPrefixes(context.connector, DEFAULT_COMPLETION_LIMIT));
         }
 
         return candidates;
@@ -148,7 +158,7 @@ function getRouterCompletions(
           candidates.push(...dataProvider.getConnectorIds());
         } else if (level === 'connector') {
           // At connector: show <session>
-          candidates.push(...dataProvider.getSessionPrefixes(context.connector, 50));
+          candidates.push(...dataProvider.getSessionPrefixes(context.connector, DEFAULT_COMPLETION_LIMIT));
         } else if (level === 'session') {
           // At session: show <rpcId>
           candidates.push(...dataProvider.getRpcIds(context.session));
@@ -185,7 +195,7 @@ function getBuiltinCompletions(
       }
       if (tokens.length === 2 && tokens[1] === 'session') {
         // `use session <sessionPrefix>`
-        return dataProvider.getSessionPrefixes(undefined, 50);
+        return dataProvider.getSessionPrefixes(undefined, DEFAULT_COMPLETION_LIMIT);
       }
       return [];
 
@@ -239,7 +249,7 @@ function getCommandCompletions(
 
     // --session expects session prefix
     if (prevToken === '--session') {
-      return dataProvider.getSessionPrefixes(context.connector, 50);
+      return dataProvider.getSessionPrefixes(context.connector, DEFAULT_COMPLETION_LIMIT);
     }
 
     // --connector expects connector id
