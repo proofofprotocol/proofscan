@@ -453,7 +453,7 @@ export class EventsStore {
       created_at: new Date().toISOString(),
     };
 
-    // Use INSERT ... ON CONFLICT to preserve original created_at on update
+    // Use INSERT ... ON CONFLICT: created_at NOT in UPDATE SET, so original is preserved on conflict
     const stmt = this.db.prepare(`
       INSERT INTO user_refs (name, kind, connector, session, rpc, proto, level, captured_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -572,9 +572,10 @@ export class EventsStore {
       return result;
     }
 
-    // Try prefix match
-    let sql = `SELECT session_id, connector_id FROM sessions WHERE session_id LIKE ?`;
-    const params: unknown[] = [prefix + '%'];
+    // Try prefix match (escape SQL wildcards in user input)
+    const escapedPrefix = prefix.replace(/[%_]/g, '\\$&');
+    let sql = `SELECT session_id, connector_id FROM sessions WHERE session_id LIKE ? ESCAPE '\\'`;
+    const params: unknown[] = [escapedPrefix + '%'];
 
     if (connectorId) {
       sql += ` AND connector_id = ?`;
