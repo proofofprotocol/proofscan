@@ -32,7 +32,6 @@ import {
   type ToolContext,
 } from '../tools/adapter.js';
 import { redactDeep } from '../secrets/redaction.js';
-import { isSecretKey } from '../secrets/detection.js';
 import type { InscriberConfig } from '../types/config.js';
 
 /** Default inscriber connector ID */
@@ -374,8 +373,14 @@ async function handleInscribeFromRef(
     return;
   }
 
+  // Validate rpcId is set
+  if (!rpcId) {
+    printError('Failed to resolve RPC ID from reference');
+    return;
+  }
+
   // Get RPC data
-  const rpcData = eventsStore.getRpcWithEvents(rpcId!, sessionId);
+  const rpcData = eventsStore.getRpcWithEvents(rpcId, sessionId);
   if (!rpcData) {
     printError(`RPC not found: ${rpcId}`);
     return;
@@ -396,7 +401,7 @@ async function handleInscribeFromRef(
 
   console.log();
   printInfo(`Inscribing: ${rpcData.rpc.method}`);
-  printInfo(`RPC: ${rpcId!.slice(0, 8)}`);
+  printInfo(`RPC: ${rpcId.slice(0, 8)}`);
   if (redactedCount > 0) {
     printInfo(`Secrets redacted: ${redactedCount}`);
   }
@@ -474,7 +479,7 @@ async function sendToInscriber(
   const connector = await getConnector(configPath, inscriberConnectorId);
   if (!connector) {
     printError(`Inscriber connector not found: ${inscriberConnectorId}`);
-    printInfo('Configure inscriber in config.yaml:');
+    printInfo('Configure inscriber in config file:');
     printInfo('  inscriber:');
     printInfo('    connectorId: inscribe');
     printInfo('Or add a connector with id "inscribe"');
