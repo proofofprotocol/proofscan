@@ -55,6 +55,37 @@ export function isValidArg(arg: string): boolean {
 }
 
 /**
+ * Parse a pipe command (e.g., "pwd --json | ref add name" or "pwd --json|ref add name")
+ * Returns null if no pipe, or the left and right parts if pipe found
+ * Exported for testing
+ */
+export function parsePipeCommand(line: string): { left: string; right: string } | null {
+  // Find pipe character - support both ' | ' and '|' forms
+  // First try with spaces, then without
+  let pipeIndex = line.indexOf(' | ');
+  let pipeLen = 3;
+
+  if (pipeIndex === -1) {
+    // Try without spaces (e.g., "--json|ref")
+    pipeIndex = line.indexOf('|');
+    pipeLen = 1;
+  }
+
+  if (pipeIndex === -1) {
+    return null;
+  }
+
+  const left = line.slice(0, pipeIndex).trim();
+  const right = line.slice(pipeIndex + pipeLen).trim();
+
+  if (!left || !right) {
+    return null;
+  }
+
+  return { left, right };
+}
+
+/**
  * Simple cache entry with expiration
  */
 interface CacheEntry<T> {
@@ -564,25 +595,10 @@ Tips:
   }
 
   /**
-   * Parse a pipe command (e.g., "pwd --json | ref add name")
-   * Returns null if no pipe, or the left and right parts if pipe found
+   * Parse a pipe command - delegates to exported function for testability
    */
   private parsePipe(line: string): { left: string; right: string } | null {
-    // Find pipe character that's not part of an argument
-    // Simple approach: split on ' | ' (with spaces)
-    const pipeIndex = line.indexOf(' | ');
-    if (pipeIndex === -1) {
-      return null;
-    }
-
-    const left = line.slice(0, pipeIndex).trim();
-    const right = line.slice(pipeIndex + 3).trim();
-
-    if (!left || !right) {
-      return null;
-    }
-
-    return { left, right };
+    return parsePipeCommand(line);
   }
 
   /**
