@@ -521,8 +521,8 @@ async function sendToInscriber(
   // Call inscribe tool
   printInfo('Inscribing...');
 
-  // Record outgoing event
-  const outEvent = eventsStore.saveEvent(toolsResult.sessionId, 'client_to_server', 'request', {
+  // Record outgoing event (return value intentionally unused - event is persisted)
+  eventsStore.saveEvent(toolsResult.sessionId, 'client_to_server', 'request', {
     summary: `inscribe: ${payload.rpc.method}`,
     rawJson: JSON.stringify({
       tool: inscriberToolName,
