@@ -2,9 +2,10 @@
  * Database schema definitions and migrations
  * Phase 2.1: Schema version 2 with seq, summary, payload_hash
  * Phase 3.4: Schema version 3 with actor columns, secret_ref_count, actors table
+ * Phase 4.1: Schema version 4 with user_refs table for named references
  */
 
-export const EVENTS_DB_VERSION = 3;
+export const EVENTS_DB_VERSION = 4;
 export const PROOFS_DB_VERSION = 1;
 
 // events.db schema (version 3)
@@ -76,6 +77,22 @@ CREATE TABLE IF NOT EXISTS actors (
 
 CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
 CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
+
+-- User refs table (Phase 4.1: named references)
+CREATE TABLE IF NOT EXISTS user_refs (
+  name TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context')),
+  connector TEXT,
+  session TEXT,
+  rpc TEXT,
+  proto TEXT,
+  level TEXT,
+  captured_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
+CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
 `;
 
 /**
@@ -125,6 +142,29 @@ CREATE TABLE IF NOT EXISTS actors (
 CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
 
 CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
+`;
+
+/**
+ * Migration from version 3 to version 4
+ * Phase 4.1: Adds user_refs table for named references
+ */
+export const EVENTS_DB_MIGRATION_3_TO_4 = `
+-- Create user_refs table for named references
+CREATE TABLE IF NOT EXISTS user_refs (
+  name TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context')),
+  connector TEXT,
+  session TEXT,
+  rpc TEXT,
+  proto TEXT,
+  level TEXT,
+  captured_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
+
+CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
 `;
 
 // proofs.db schema

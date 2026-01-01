@@ -11,6 +11,7 @@ import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
 import { ConfigManager } from '../config/index.js';
 import { setCurrentSession, clearCurrentSession, formatRelativeTime } from '../utils/index.js';
+import { createRefFromContext, refToJson } from './ref-resolver.js';
 
 // ProtoType is imported from types.ts
 
@@ -413,11 +414,30 @@ export function handleUp(context: ShellContext): void {
 
 /**
  * Handle 'pwd' command - show current context with copyable path
+ *
+ * Options:
+ *   --json  Output RefStruct as JSON (for piping to ref add)
  */
-export function handlePwd(context: ShellContext, configPath: string): void {
+export function handlePwd(context: ShellContext, configPath: string, args: string[] = []): void {
+  const isJson = args.includes('--json');
   const level = getContextLevel(context);
   const store = getStore(configPath);
 
+  // --json: Output RefStruct for piping
+  if (isJson) {
+    // Update context.proto for accurate output
+    if (level === 'session' && context.session) {
+      context.proto = detectProto(store, context.session);
+    } else if (level === 'connector' && context.connector) {
+      context.proto = detectConnectorProto(store, context.connector);
+    }
+
+    const ref = createRefFromContext(context);
+    console.log(refToJson(ref));
+    return;
+  }
+
+  // Default: human-readable output
   console.log();
   console.log('Current context:');
 

@@ -35,6 +35,7 @@ import {
   clearCurrentSession,
 } from '../utils/state.js';
 import { handleTool, handleSend } from './tool-commands.js';
+import { handleRef } from './ref-commands.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -251,6 +252,12 @@ export class ShellRepl {
       return;
     }
 
+    // Handle ref command (shell-native)
+    if (command === 'ref') {
+      await handleRef(args, this.context, this.configPath);
+      return;
+    }
+
     // Handle built-in commands
     if (SHELL_BUILTINS.includes(command)) {
       await this.handleBuiltin(command, args);
@@ -309,7 +316,7 @@ export class ShellRepl {
         break;
 
       case 'pwd':
-        handlePwd(this.context, this.configPath);
+        handlePwd(this.context, this.configPath, args);
         break;
 
       case 'use':
@@ -353,12 +360,18 @@ Navigation:
     cd -                  Go to previous location
   ls [-l] [--json]        List items at current level
   show [target] [--json]  Show details
-  pwd                     Show current context path
+  pwd [--json]            Show current context (--json for RefStruct)
 
 Tool Commands:
   tool ls                 List tools on current connector
   tool show <name>        Show tool details (description, schema)
   send <name>             Call a tool interactively
+
+Reference Commands:
+  ref add <name> @this    Save current context as reference
+  ref add <name> @last    Save latest session/rpc
+  ref ls                  List all user-defined references
+  ref rm <name>           Remove a reference
 
 Shell Commands:
   help [command]          Show help
@@ -372,6 +385,7 @@ Tips:
   - Press TAB for auto-completion
   - Prompt shows: proofscan:/connector/session (proto)
   - Commands auto-apply current context
+  - Use @ref:<name> to reference saved refs
 `);
   }
 

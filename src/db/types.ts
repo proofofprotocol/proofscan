@@ -98,3 +98,18 @@ export interface ArchivePlan {
   raw_json_to_clear: number;
   estimated_savings_mb: number;
 }
+
+// User-defined references (Phase 4.1)
+export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context';
+
+export interface UserRef {
+  name: string;
+  kind: RefKind;
+  connector: string | null;
+  session: string | null;
+  rpc: string | null;
+  proto: string | null;
+  level: string | null;
+  captured_at: string;
+  created_at: string;
+}
