@@ -913,3 +913,96 @@ function dimText(text: string, isTTY: boolean): string {
 }
 
 // formatRelativeTime is imported from ../utils/index.js
+
+/**
+ * Get RPC detail as JSON string for piping to inscribe
+ *
+ * @param target - Reference target (e.g., @rpc:1, @ref:name, @last)
+ * @param context - Shell context
+ * @param configDir - Config directory path
+ * @returns JSON string of RPC detail, or null if not found
+ */
+export async function getRpcDetailJson(
+  target: string,
+  context: ShellContext,
+  configDir: string
+): Promise<string | null> {
+  const eventsStore = new EventsStore(configDir);
+  const dataProvider = createRefDataProvider(eventsStore);
+  const resolver = new RefResolver(dataProvider);
+
+  // Resolve reference
+  const parsed = parseRef(target);
+  let sessionId: string | undefined;
+  let rpcId: string | undefined;
+
+  if (parsed.type === 'last') {
+    const result = resolver.resolveLast(context);
+    if (!result.success || !result.ref || result.ref.kind !== 'rpc') {
+      return null;
+    }
+    sessionId = result.ref.session;
+    rpcId = result.ref.rpc;
+  } else if (parsed.type === 'rpc' && parsed.id) {
+    rpcId = parsed.id;
+    sessionId = context.session;
+  } else if (parsed.type === 'ref' && parsed.id) {
+    const result = resolver.resolveUserRef(parsed.id);
+    if (!result.success || !result.ref || result.ref.kind !== 'rpc') {
+      return null;
+    }
+    sessionId = result.ref.session;
+    rpcId = result.ref.rpc;
+  } else {
+    return null;
+  }
+
+  if (!rpcId) {
+    return null;
+  }
+
+  // Get RPC with events
+  const rpcData = eventsStore.getRpcWithEvents(rpcId, sessionId);
+  if (!rpcData) {
+    return null;
+  }
+
+  // Get session for connector_id
+  const session = eventsStore.getSession(rpcData.rpc.session_id);
+
+  // Parse request/response JSON
+  let requestJson: unknown = null;
+  let responseJson: unknown = null;
+
+  if (rpcData.request?.raw_json) {
+    try {
+      requestJson = JSON.parse(rpcData.request.raw_json);
+    } catch {
+      requestJson = rpcData.request.raw_json;
+    }
+  }
+
+  if (rpcData.response?.raw_json) {
+    try {
+      responseJson = JSON.parse(rpcData.response.raw_json);
+    } catch {
+      responseJson = rpcData.response.raw_json;
+    }
+  }
+
+  // Build RPC detail object (same format as rpc show --json)
+  const detail = {
+    rpc_id: rpcData.rpc.rpc_id,
+    session_id: rpcData.rpc.session_id,
+    connector_id: session?.connector_id,
+    method: rpcData.rpc.method,
+    request_ts: rpcData.rpc.request_ts,
+    response_ts: rpcData.rpc.response_ts,
+    success: rpcData.rpc.success,
+    error_code: rpcData.rpc.error_code,
+    request_json: requestJson,
+    response_json: responseJson,
+  };
+
+  return JSON.stringify(detail, null, 2);
+}

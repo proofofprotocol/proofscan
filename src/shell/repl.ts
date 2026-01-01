@@ -36,6 +36,7 @@ import {
 } from '../utils/state.js';
 import { handleTool, handleSend } from './tool-commands.js';
 import { handleRef } from './ref-commands.js';
+import { handleInscribe } from './inscribe-commands.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -296,6 +297,12 @@ export class ShellRepl {
       return;
     }
 
+    // Handle inscribe command (shell-native, Phase 4.3)
+    if (command === 'inscribe') {
+      await handleInscribe(args, this.context, this.configPath);
+      return;
+    }
+
     // Handle built-in commands
     if (SHELL_BUILTINS.includes(command)) {
       await this.handleBuiltin(command, args);
@@ -420,6 +427,12 @@ Tool Commands:
   send <name>             Call a tool interactively
   send @last              Replay last RPC call
   send @ref:<name>        Replay from saved reference
+
+Inscribe Commands:
+  inscribe @rpc:<id>      Inscribe RPC to blockchain
+  inscribe @ref:<name>    Inscribe from saved reference
+  inscribe @last          Inscribe latest RPC
+  show @rpc:<id> --json | inscribe   Inscribe via pipe
 
 Shell Commands:
   help [command]          Show help
@@ -613,7 +626,9 @@ Tips:
 
   /**
    * Handle piped commands
-   * Currently supports: pwd --json | ref add <name>
+   * Supports:
+   *   pwd --json | ref add <name>
+   *   show @rpc:<id> --json | inscribe
    */
   private async handlePipe(leftCmd: string, rightCmd: string): Promise<void> {
     const leftTokens = leftCmd.split(/\s+/).filter(t => t !== '');
@@ -624,18 +639,73 @@ Tips:
       return;
     }
 
-    // Currently only support: pwd --json | ref add <name>
     const leftCommand = leftTokens[0];
     const rightCommand = rightTokens[0];
 
-    if (leftCommand !== 'pwd' || !leftTokens.includes('--json')) {
-      printError('Pipe source must be: pwd --json');
-      printInfo('Example: pwd --json | ref add myref');
+    // Handle: show --json | inscribe
+    if (rightCommand === 'inscribe') {
+      await this.handlePipeToInscribe(leftTokens, rightTokens);
       return;
     }
 
-    if (rightCommand !== 'ref' || rightTokens[1] !== 'add') {
-      printError('Pipe target must be: ref add <name>');
+    // Handle: pwd --json | ref add <name>
+    if (rightCommand === 'ref' && rightTokens[1] === 'add') {
+      await this.handlePipeToRefAdd(leftTokens, rightTokens);
+      return;
+    }
+
+    printError('Unsupported pipe command');
+    printInfo('Supported pipes:');
+    printInfo('  pwd --json | ref add <name>');
+    printInfo('  show @rpc:<id> --json | inscribe');
+  }
+
+  /**
+   * Handle: show --json | inscribe
+   */
+  private async handlePipeToInscribe(leftTokens: string[], rightTokens: string[]): Promise<void> {
+    const leftCommand = leftTokens[0];
+
+    // Validate left side is show --json
+    if (leftCommand !== 'show' || !leftTokens.includes('--json')) {
+      printError('Pipe to inscribe requires: show <@ref> --json');
+      printInfo('Example: show @rpc:1 --json | inscribe');
+      return;
+    }
+
+    // Get target reference from show command
+    const target = leftTokens.find(t => t.startsWith('@'));
+    if (!target) {
+      printError('show command requires a reference target');
+      printInfo('Example: show @rpc:1 --json | inscribe');
+      return;
+    }
+
+    // Get RPC detail JSON by calling show internally
+    const { getRpcDetailJson } = await import('./router-commands.js');
+    const { ConfigManager } = await import('../config/index.js');
+
+    const manager = new ConfigManager(this.configPath);
+    const jsonOutput = await getRpcDetailJson(target, this.context, manager.getConfigDir());
+
+    if (!jsonOutput) {
+      printError('Failed to get RPC detail for inscribe');
+      return;
+    }
+
+    // Call inscribe with JSON as stdin data
+    const inscribeArgs = rightTokens.slice(1); // args after 'inscribe'
+    await handleInscribe(inscribeArgs, this.context, this.configPath, jsonOutput);
+  }
+
+  /**
+   * Handle: pwd --json | ref add <name>
+   */
+  private async handlePipeToRefAdd(leftTokens: string[], rightTokens: string[]): Promise<void> {
+    const leftCommand = leftTokens[0];
+
+    if (leftCommand !== 'pwd' || !leftTokens.includes('--json')) {
+      printError('Pipe source must be: pwd --json');
       printInfo('Example: pwd --json | ref add myref');
       return;
     }
