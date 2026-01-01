@@ -80,6 +80,9 @@ Management:
   secrets       Secret management (list, set, edit, prune, export, import)
   doctor        Diagnose and fix database issues
 
+Shell-only Commands (run: pfscan shell):
+  tool ls | tool show <name> | send <name>
+
 Shortcuts:
   v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
 
@@ -232,35 +235,59 @@ function hasHelpFlag(): boolean {
   return process.argv.includes('--help') || process.argv.includes('-h');
 }
 
-// Check if no subcommand is provided (only options like --config, --json)
-function hasSubcommand(): boolean {
-  const knownCommands = new Set([
-    'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
-    'scan', 's', 'archive', 'a', 'config', 'c',
-    'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'help'
-  ]);
+// Known CLI commands (registered with commander)
+const KNOWN_COMMANDS = new Set([
+  'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
+  'scan', 's', 'archive', 'a', 'config', 'c',
+  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'help'
+]);
 
+// Shell-only commands (not available as CLI commands)
+const SHELL_ONLY_COMMANDS = new Set(['tool', 'send']);
+
+/**
+ * Check if no subcommand is provided (only options like --config, --json)
+ * Returns: { hasCommand: boolean, unknownCommand?: string }
+ */
+function checkSubcommand(): { hasCommand: boolean; unknownCommand?: string } {
   for (let i = 2; i < process.argv.length; i++) {
     const arg = process.argv[i];
     // Skip option flags and their values
     if (arg.startsWith('-')) {
-      // If it's --config, skip the next arg too
+      // If it's --config, skip the next arg too (with bounds check)
       if (arg === '-c' || arg === '--config') {
-        i++;
+        if (i + 1 < process.argv.length) i++;
       }
       continue;
     }
-    // This is a positional argument - check if it's a command
-    if (knownCommands.has(arg)) {
-      return true;
+    // This is a positional argument - check if it's a known command
+    if (KNOWN_COMMANDS.has(arg)) {
+      return { hasCommand: true };
     }
+    // Check if it's a shell-only command or unknown
+    return { hasCommand: false, unknownCommand: arg };
   }
-  return false;
+  return { hasCommand: false };
 }
 
 // If no subcommand and no help flag, insert 'view' right after program name
 // This ensures `pfscan --help` shows root help, not `pfscan view` help
-if (!hasSubcommand() && !hasHelpFlag()) {
+const subcommandCheck = checkSubcommand();
+
+if (subcommandCheck.unknownCommand) {
+  // Unknown command detected - show error and exit
+  const cmd = subcommandCheck.unknownCommand;
+  const isShellOnly = SHELL_ONLY_COMMANDS.has(cmd);
+
+  console.error(`✗ Unknown command: ${cmd}`);
+  if (isShellOnly) {
+    console.error(`  '${cmd}' is a shell-only command. Run: pfscan shell`);
+  }
+  console.error(`  Run 'pfscan --help' for available commands.`);
+  process.exit(1);
+}
+
+if (!subcommandCheck.hasCommand && !hasHelpFlag()) {
   process.argv.splice(2, 0, 'view');
 }
 
