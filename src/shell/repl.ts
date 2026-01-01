@@ -35,6 +35,7 @@ import {
   clearCurrentSession,
 } from '../utils/state.js';
 import { handleTool, handleSend } from './tool-commands.js';
+import { handleRef } from './ref-commands.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -51,6 +52,37 @@ const CACHE_TTL_MS = 5000;
 export function isValidArg(arg: string): boolean {
   const dangerousPattern = /[&|;`$\n\r\0]/;
   return !dangerousPattern.test(arg);
+}
+
+/**
+ * Parse a pipe command (e.g., "pwd --json | ref add name" or "pwd --json|ref add name")
+ * Returns null if no pipe, or the left and right parts if pipe found
+ * Exported for testing
+ */
+export function parsePipeCommand(line: string): { left: string; right: string } | null {
+  // Find pipe character - support both ' | ' and '|' forms
+  // First try with spaces, then without
+  let pipeIndex = line.indexOf(' | ');
+  let pipeLen = 3;
+
+  if (pipeIndex === -1) {
+    // Try without spaces (e.g., "--json|ref")
+    pipeIndex = line.indexOf('|');
+    pipeLen = 1;
+  }
+
+  if (pipeIndex === -1) {
+    return null;
+  }
+
+  const left = line.slice(0, pipeIndex).trim();
+  const right = line.slice(pipeIndex + pipeLen).trim();
+
+  if (!left || !right) {
+    return null;
+  }
+
+  return { left, right };
 }
 
 /**
@@ -223,6 +255,13 @@ export class ShellRepl {
    * Process a line of input
    */
   private async processLine(line: string): Promise<void> {
+    // Check for pipe syntax (e.g., "pwd --json | ref add name")
+    const pipeResult = this.parsePipe(line);
+    if (pipeResult) {
+      await this.handlePipe(pipeResult.left, pipeResult.right);
+      return;
+    }
+
     const tokens = line.trim().split(/\s+/).filter(t => t !== '');
     if (tokens.length === 0) return;
 
@@ -248,6 +287,12 @@ export class ShellRepl {
         return;
       }
       await handleSend(args, this.context, this.configPath, this.rl);
+      return;
+    }
+
+    // Handle ref command (shell-native)
+    if (command === 'ref') {
+      await handleRef(args, this.context, this.configPath);
       return;
     }
 
@@ -309,7 +354,7 @@ export class ShellRepl {
         break;
 
       case 'pwd':
-        handlePwd(this.context, this.configPath);
+        handlePwd(this.context, this.configPath, args);
         break;
 
       case 'use':
@@ -348,17 +393,33 @@ Navigation:
     cd <connector>        Enter connector context
     cd <session>          Enter session (in connector context)
     cd <conn>/<sess>      Enter session directly
+    cd @last              Jump to latest session/RPC
+    cd @ref:<name>        Jump to saved reference
     cd ..                 Go up one level
-    cd ../..              Go up two levels
     cd -                  Go to previous location
   ls [-l] [--json]        List items at current level
-  show [target] [--json]  Show details
-  pwd                     Show current context path
+  pwd [--json]            Show current path (--json for RefStruct)
+
+Resource Details (show):
+  show [target] [--json]  Show resource details (request/response data)
+  show @rpc:abc           Show specific RPC details
+  show @ref:<name>        Show referenced resource details
+
+Reference Resolution (ref):
+  ref @this               Resolve current context to RefStruct
+  ref @last               Resolve latest session/RPC
+  ref @rpc:abc            Resolve specific RPC
+  ref @ref:<name>         Resolve saved reference
+  ref add <name> @...     Save a reference
+  ref ls                  List all user-defined references
+  ref rm <name>           Remove a reference
 
 Tool Commands:
   tool ls                 List tools on current connector
   tool show <name>        Show tool details (description, schema)
   send <name>             Call a tool interactively
+  send @last              Replay last RPC call
+  send @ref:<name>        Replay from saved reference
 
 Shell Commands:
   help [command]          Show help
@@ -369,9 +430,10 @@ ProofScan Commands:
   ${getAllowedCommands().join(', ')}
 
 Tips:
+  - @ is the dereference operator (e.g., @this, @last, @ref:<name>)
+  - show = resource details (data), ref = address resolution (RefStruct)
   - Press TAB for auto-completion
-  - Prompt shows: proofscan:/connector/session (proto)
-  - Commands auto-apply current context
+  - Use pipes: pwd --json | ref add myname
 `);
   }
 
@@ -540,6 +602,67 @@ Tips:
     this.context.session = undefined;
     clearCurrentSession();
     printSuccess('Context cleared');
+  }
+
+  /**
+   * Parse a pipe command - delegates to exported function for testability
+   */
+  private parsePipe(line: string): { left: string; right: string } | null {
+    return parsePipeCommand(line);
+  }
+
+  /**
+   * Handle piped commands
+   * Currently supports: pwd --json | ref add <name>
+   */
+  private async handlePipe(leftCmd: string, rightCmd: string): Promise<void> {
+    const leftTokens = leftCmd.split(/\s+/).filter(t => t !== '');
+    const rightTokens = rightCmd.split(/\s+/).filter(t => t !== '');
+
+    if (leftTokens.length === 0 || rightTokens.length === 0) {
+      printError('Invalid pipe syntax');
+      return;
+    }
+
+    // Currently only support: pwd --json | ref add <name>
+    const leftCommand = leftTokens[0];
+    const rightCommand = rightTokens[0];
+
+    if (leftCommand !== 'pwd' || !leftTokens.includes('--json')) {
+      printError('Pipe source must be: pwd --json');
+      printInfo('Example: pwd --json | ref add myref');
+      return;
+    }
+
+    if (rightCommand !== 'ref' || rightTokens[1] !== 'add') {
+      printError('Pipe target must be: ref add <name>');
+      printInfo('Example: pwd --json | ref add myref');
+      return;
+    }
+
+    // Get pwd --json output
+    const { createRefFromContext, refToJson } = await import('./ref-resolver.js');
+    const { detectProto, detectConnectorProto, getContextLevel } = await import('./router-commands.js');
+    const { EventLineStore } = await import('../eventline/store.js');
+    const { ConfigManager } = await import('../config/index.js');
+
+    const manager = new ConfigManager(this.configPath);
+    const store = new EventLineStore(manager.getConfigDir());
+    const level = getContextLevel(this.context);
+
+    // Update proto for accurate output
+    if (level === 'session' && this.context.session) {
+      this.context.proto = detectProto(store, this.context.session);
+    } else if (level === 'connector' && this.context.connector) {
+      this.context.proto = detectConnectorProto(store, this.context.connector);
+    }
+
+    const ref = createRefFromContext(this.context);
+    const jsonOutput = refToJson(ref);
+
+    // Now call ref add with the JSON as stdin data
+    const refArgs = rightTokens.slice(1); // ['add', '<name>']
+    await handleRef(refArgs, this.context, this.configPath, jsonOutput);
   }
 
   /**

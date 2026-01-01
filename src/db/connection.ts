@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -112,6 +112,30 @@ function ensureCriticalTables(db: Database.Database): void {
       console.warn('Warning: Failed to create critical tables:', err.message);
     }
   }
+
+  // Phase 4.1: Ensure user_refs table exists
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_refs (
+        name TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context')),
+        connector TEXT,
+        session TEXT,
+        rpc TEXT,
+        proto TEXT,
+        level TEXT,
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
+      CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
+    `);
+  } catch (err) {
+    // Only ignore "table already exists" errors - warn on other errors
+    if (err instanceof Error && !err.message.includes('already exists')) {
+      console.warn('Warning: Failed to create user_refs table:', err.message);
+    }
+  }
 }
 
 /**
@@ -169,6 +193,35 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
           // Ignore "duplicate column" and "table already exists" errors
           if (err instanceof Error &&
               !err.message.includes('duplicate column') &&
+              !err.message.includes('already exists')) {
+            throw err;
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  // Migration 3 → 4: Add user_refs table (Phase 4.1)
+  if (fromVersion < 4) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      const statements = EVENTS_DB_MIGRATION_3_TO_4
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Ignore "table already exists" errors
+          if (err instanceof Error &&
               !err.message.includes('already exists')) {
             throw err;
           }
@@ -354,8 +407,8 @@ export function diagnoseEventsDb(configDir?: string): DbDiagnostic {
     ).all() as { name: string }[];
     result.tables = tablesResult.map(t => t.name).sort();
 
-    // Check for required tables
-    const requiredTables = ['sessions', 'rpc_calls', 'events', 'actors'];
+    // Check for required tables (Phase 4.1: added user_refs)
+    const requiredTables = ['sessions', 'rpc_calls', 'events', 'actors', 'user_refs'];
     result.missingTables = requiredTables.filter(t => !result.tables.includes(t));
 
     // Check for required columns in sessions table (Phase 3.4)
@@ -424,6 +477,30 @@ export function fixEventsDb(configDir?: string): { success: boolean; fixed: stri
           CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
         `);
         fixed.push('table:actors');
+      }
+
+      // Phase 4.1: Check if user_refs table exists before trying to create
+      const userRefsExists = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='user_refs'"
+      ).get();
+
+      if (!userRefsExists) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS user_refs (
+            name TEXT PRIMARY KEY,
+            kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context')),
+            connector TEXT,
+            session TEXT,
+            rpc TEXT,
+            proto TEXT,
+            level TEXT,
+            captured_at TEXT NOT NULL,
+            created_at TEXT NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
+          CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
+        `);
+        fixed.push('table:user_refs');
       }
 
       // Check if sessions table exists before trying to add columns

@@ -13,6 +13,8 @@ import type {
   EventKind,
   SessionWithStats,
   PruneCandidate,
+  UserRef,
+  RefKind,
 } from './types.js';
 
 export class EventsStore {
@@ -420,5 +422,215 @@ export class EventsStore {
    */
   vacuum(): void {
     this.db.exec('VACUUM');
+  }
+
+  // ==================== User Refs (Phase 4.1) ====================
+
+  /**
+   * Save or update a user-defined reference
+   */
+  saveUserRef(
+    name: string,
+    ref: {
+      kind: RefKind;
+      connector?: string;
+      session?: string;
+      rpc?: string;
+      proto?: string;
+      level?: string;
+      captured_at?: string;
+    }
+  ): UserRef {
+    const userRef: UserRef = {
+      name,
+      kind: ref.kind,
+      connector: ref.connector || null,
+      session: ref.session || null,
+      rpc: ref.rpc || null,
+      proto: ref.proto || null,
+      level: ref.level || null,
+      captured_at: ref.captured_at || new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+
+    // Use INSERT ... ON CONFLICT: created_at NOT in UPDATE SET, so original is preserved on conflict
+    const stmt = this.db.prepare(`
+      INSERT INTO user_refs (name, kind, connector, session, rpc, proto, level, captured_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET
+        kind = excluded.kind,
+        connector = excluded.connector,
+        session = excluded.session,
+        rpc = excluded.rpc,
+        proto = excluded.proto,
+        level = excluded.level,
+        captured_at = excluded.captured_at
+    `);
+
+    stmt.run(
+      userRef.name,
+      userRef.kind,
+      userRef.connector,
+      userRef.session,
+      userRef.rpc,
+      userRef.proto,
+      userRef.level,
+      userRef.captured_at,
+      userRef.created_at
+    );
+
+    return userRef;
+  }
+
+  /**
+   * Get a user-defined reference by name
+   */
+  getUserRef(name: string): UserRef | null {
+    const stmt = this.db.prepare(`SELECT * FROM user_refs WHERE name = ?`);
+    return stmt.get(name) as UserRef | null;
+  }
+
+  /**
+   * Delete a user-defined reference
+   */
+  deleteUserRef(name: string): boolean {
+    const stmt = this.db.prepare(`DELETE FROM user_refs WHERE name = ?`);
+    const result = stmt.run(name);
+    return result.changes > 0;
+  }
+
+  /**
+   * List all user-defined references
+   */
+  listUserRefs(): UserRef[] {
+    const stmt = this.db.prepare(`SELECT * FROM user_refs ORDER BY created_at DESC`);
+    return stmt.all() as UserRef[];
+  }
+
+  /**
+   * Get latest session (optionally for a specific connector)
+   * Used by RefResolver
+   */
+  getLatestSession(connectorId?: string): { session_id: string; connector_id: string } | null {
+    let sql = `SELECT session_id, connector_id FROM sessions`;
+    const params: unknown[] = [];
+
+    if (connectorId) {
+      sql += ` WHERE connector_id = ?`;
+      params.push(connectorId);
+    }
+
+    sql += ` ORDER BY started_at DESC LIMIT 1`;
+
+    const stmt = this.db.prepare(sql);
+    return stmt.get(...params) as { session_id: string; connector_id: string } | null;
+  }
+
+  /**
+   * Get latest RPC for a session
+   * Used by RefResolver
+   */
+  getLatestRpc(sessionId: string): { rpc_id: string; method: string } | null {
+    const stmt = this.db.prepare(`
+      SELECT rpc_id, method FROM rpc_calls
+      WHERE session_id = ?
+      ORDER BY request_ts DESC
+      LIMIT 1
+    `);
+    return stmt.get(sessionId) as { rpc_id: string; method: string } | null;
+  }
+
+  /**
+   * Get RPC by ID (optionally within a session)
+   * Used by RefResolver
+   */
+  getRpcById(rpcId: string, sessionId?: string): { rpc_id: string; session_id: string; method: string } | null {
+    let sql = `SELECT rpc_id, session_id, method FROM rpc_calls WHERE rpc_id = ?`;
+    const params: unknown[] = [rpcId];
+
+    if (sessionId) {
+      sql += ` AND session_id = ?`;
+      params.push(sessionId);
+    }
+
+    const stmt = this.db.prepare(sql);
+    return stmt.get(...params) as { rpc_id: string; session_id: string; method: string } | null;
+  }
+
+  /**
+   * Get session by ID or prefix
+   * Used by RefResolver
+   */
+  getSessionByPrefix(prefix: string, connectorId?: string): { session_id: string; connector_id: string } | null {
+    // Try exact match first
+    let stmt = this.db.prepare(`SELECT session_id, connector_id FROM sessions WHERE session_id = ?`);
+    let result = stmt.get(prefix) as { session_id: string; connector_id: string } | null;
+    if (result) {
+      if (connectorId && result.connector_id !== connectorId) {
+        return null; // Wrong connector
+      }
+      return result;
+    }
+
+    // Try prefix match (escape SQL wildcards in user input)
+    const escapedPrefix = prefix.replace(/[%_]/g, '\\$&');
+    let sql = `SELECT session_id, connector_id FROM sessions WHERE session_id LIKE ? ESCAPE '\\'`;
+    const params: unknown[] = [escapedPrefix + '%'];
+
+    if (connectorId) {
+      sql += ` AND connector_id = ?`;
+      params.push(connectorId);
+    }
+
+    sql += ` ORDER BY started_at DESC LIMIT 1`;
+
+    stmt = this.db.prepare(sql);
+    return stmt.get(...params) as { session_id: string; connector_id: string } | null;
+  }
+
+  /**
+   * Get RPC call with request/response events for replay
+   * Used for send @last / send @rpc:<id>
+   *
+   * @param rpcId - RPC ID to look up
+   * @param sessionId - Optional session ID to narrow search (required when rpc_id is not globally unique)
+   */
+  getRpcWithEvents(rpcId: string, sessionId?: string): {
+    rpc: RpcCall;
+    request?: Event;
+    response?: Event;
+  } | null {
+    // Get RPC call - use session_id if provided to avoid ambiguity
+    let rpc: RpcCall | null;
+    if (sessionId) {
+      const rpcStmt = this.db.prepare(`SELECT * FROM rpc_calls WHERE rpc_id = ? AND session_id = ?`);
+      rpc = rpcStmt.get(rpcId, sessionId) as RpcCall | null;
+    } else {
+      const rpcStmt = this.db.prepare(`SELECT * FROM rpc_calls WHERE rpc_id = ?`);
+      rpc = rpcStmt.get(rpcId) as RpcCall | null;
+    }
+    if (!rpc) return null;
+
+    // Get request event (tools/call request)
+    const reqStmt = this.db.prepare(`
+      SELECT * FROM events
+      WHERE session_id = ? AND rpc_id = ? AND kind = 'request'
+      ORDER BY ts ASC LIMIT 1
+    `);
+    const request = reqStmt.get(rpc.session_id, rpcId) as Event | null;
+
+    // Get response event
+    const respStmt = this.db.prepare(`
+      SELECT * FROM events
+      WHERE session_id = ? AND rpc_id = ? AND kind = 'response'
+      ORDER BY ts ASC LIMIT 1
+    `);
+    const response = respStmt.get(rpc.session_id, rpcId) as Event | null;
+
+    return {
+      rpc,
+      request: request || undefined,
+      response: response || undefined,
+    };
   }
 }

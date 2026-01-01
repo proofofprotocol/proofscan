@@ -76,6 +76,7 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   secrets: ['list', 'set', 'edit', 'prune', 'export', 'import'],
   secret: ['list', 'set', 'edit', 'prune', 'export', 'import'],
   tool: ['ls', 'list', 'show'],
+  ref: ['add', 'ls', 'list', 'rm', 'remove', 'delete'],
 };
 
 /**
@@ -132,6 +133,12 @@ export const ROUTER_COMMANDS = ['cc', 'cd', 'ls', 'show', '..'];
  * These commands interact directly with MCP servers
  */
 export const TOOL_COMMANDS = ['tool', 'send'];
+
+/**
+ * Shell-native ref commands (Phase 4.1)
+ * These commands manage user-defined references
+ */
+export const REF_COMMANDS = ['ref'];
 
 /**
  * Commands blocked in shell mode due to stdin conflicts.

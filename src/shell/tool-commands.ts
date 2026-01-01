@@ -20,6 +20,13 @@ import {
   formatInputSchema,
   type ToolContext,
 } from '../tools/adapter.js';
+import { EventsStore } from '../db/events-store.js';
+import {
+  RefResolver,
+  createRefDataProvider,
+  parseRef,
+  isRef,
+} from './ref-resolver.js';
 import * as readline from 'readline';
 
 /**
@@ -246,7 +253,13 @@ async function handleToolShow(
 }
 
 /**
- * Handle 'send' command - interactive tool call
+ * Handle 'send' command - interactive tool call or replay
+ *
+ * Usage:
+ *   send <tool-name>     Interactive tool call with argument builder
+ *   send @last           Replay the last RPC call
+ *   send @rpc:<id>       Replay a specific RPC call
+ *   send @ref:<name>     Replay from a saved reference
  */
 export async function handleSend(
   args: string[],
@@ -256,13 +269,33 @@ export async function handleSend(
 ): Promise<void> {
   const isJson = args.includes('--json');
   const isDryRun = args.includes('--dry-run');
-  const toolName = args.find(a => !a.startsWith('-'));
+  const target = args.find(a => !a.startsWith('-'));
 
-  if (!toolName) {
-    printError('Usage: send <tool-name>');
-    printInfo('Example: send get_stock_info');
+  if (!target) {
+    printError('Usage: send <tool-name> or send @<ref>');
+    printInfo('');
+    printInfo('Interactive tool call:');
+    printInfo('  send <tool-name>        Call a tool with interactive argument builder');
+    printInfo('');
+    printInfo('Replay mode (@ prefix):');
+    printInfo('  send @last              Replay last RPC call');
+    printInfo('  send @rpc:<id>          Replay specific RPC');
+    printInfo('  send @ref:<name>        Replay from saved reference');
+    printInfo('');
+    printInfo('Options:');
+    printInfo('  --json                  Output result as JSON');
+    printInfo('  --dry-run               Show what would be sent, don\'t execute');
     return;
   }
+
+  // Check if target is a reference (replay mode)
+  if (isRef(target)) {
+    await handleSendReplay(target, context, configPath, isJson, isDryRun);
+    return;
+  }
+
+  // Normal tool call mode
+  const toolName = target;
 
   // Require connector context
   if (!context.connector) {
@@ -397,6 +430,178 @@ export async function handleSend(
 
   console.log();
   printInfo(`Session: ${callResult.sessionId.slice(0, 8)}`);
+  printInfo('View details: pfscan rpc list --session ' + callResult.sessionId.slice(0, 8));
+}
+
+/**
+ * Handle send replay mode - replay a previous RPC call
+ */
+async function handleSendReplay(
+  refString: string,
+  context: ShellContext,
+  configPath: string,
+  isJson: boolean,
+  isDryRun: boolean
+): Promise<void> {
+  const manager = new ConfigManager(configPath);
+  const eventsStore = new EventsStore(manager.getConfigDir());
+  const dataProvider = createRefDataProvider(eventsStore);
+  const resolver = new RefResolver(dataProvider);
+
+  // Resolve the reference
+  const parsed = parseRef(refString);
+  let rpcId: string | undefined;
+  let sessionId: string | undefined;
+
+  if (parsed.type === 'last') {
+    // @last: get latest RPC from current session or latest session
+    const result = resolver.resolveLast(context);
+    if (!result.success || !result.ref) {
+      printError(result.error || 'Failed to resolve @last');
+      return;
+    }
+    if (result.ref.kind !== 'rpc' || !result.ref.rpc) {
+      printError('@last did not resolve to an RPC call');
+      printInfo('Make sure you are in a session context or have RPC history');
+      return;
+    }
+    rpcId = result.ref.rpc;
+    sessionId = result.ref.session;
+  } else if (parsed.type === 'rpc' && parsed.id) {
+    // @rpc:<id>: use the ID directly
+    rpcId = parsed.id;
+    // Try to get session from context
+    sessionId = context.session;
+  } else if (parsed.type === 'ref' && parsed.id) {
+    // @ref:<name>: resolve user reference
+    const result = resolver.resolveUserRef(parsed.id);
+    if (!result.success || !result.ref) {
+      printError(result.error || `Failed to resolve @ref:${parsed.id}`);
+      return;
+    }
+    if (result.ref.kind !== 'rpc' || !result.ref.rpc) {
+      printError(`Reference @ref:${parsed.id} is not an RPC reference`);
+      return;
+    }
+    rpcId = result.ref.rpc;
+    sessionId = result.ref.session;
+  } else {
+    printError(`Cannot replay from reference: ${refString}`);
+    printInfo('Supported: @last, @rpc:<id>, @ref:<name>');
+    return;
+  }
+
+  // Get the RPC details from the database
+  // Pass sessionId to avoid ambiguity when rpc_id is not globally unique
+  const rpcData = eventsStore.getRpcWithEvents(rpcId, sessionId);
+  if (!rpcData) {
+    printError(`RPC not found: ${rpcId}`);
+    return;
+  }
+
+  // Parse the request to get tool name and arguments
+  if (!rpcData.request || !rpcData.request.raw_json) {
+    printError('RPC request data not available (raw_json may have been pruned)');
+    return;
+  }
+
+  let requestData: { method?: string; params?: { name?: string; arguments?: Record<string, unknown> } };
+  try {
+    requestData = JSON.parse(rpcData.request.raw_json);
+  } catch {
+    printError('Failed to parse RPC request data');
+    return;
+  }
+
+  // Check if this is a tools/call request
+  if (requestData.method !== 'tools/call') {
+    printError(`Cannot replay: method is ${requestData.method}, not tools/call`);
+    return;
+  }
+
+  const toolName = requestData.params?.name;
+  const toolArgs = requestData.params?.arguments || {};
+
+  if (!toolName) {
+    printError('Cannot replay: tool name not found in request');
+    return;
+  }
+
+  console.log();
+  printInfo(`Replaying: ${toolName}`);
+  printInfo(`Original RPC: ${rpcId.slice(0, 8)}`);
+  printInfo(`Arguments: ${JSON.stringify(toolArgs)}`);
+
+  if (isDryRun) {
+    console.log();
+    printInfo('Dry run - would send:');
+    console.log(JSON.stringify({ tool: toolName, arguments: toolArgs }, null, 2));
+    return;
+  }
+
+  // Get connector from the original session
+  const session = eventsStore.getSession(rpcData.rpc.session_id);
+  if (!session) {
+    printError('Original session not found');
+    return;
+  }
+
+  const connector = await getConnector(configPath, session.connector_id);
+  if (!connector) {
+    printError(`Connector not found: ${session.connector_id}`);
+    return;
+  }
+
+  const ctx: ToolContext = {
+    connectorId: session.connector_id,
+    configDir: manager.getConfigDir(),
+  };
+
+  // Execute the replay
+  console.log();
+  printInfo('Sending...');
+  const callResult = await callTool(ctx, connector, toolName, toolArgs);
+
+  if (!callResult.success) {
+    printError(`Replay failed: ${callResult.error}`);
+    if (callResult.sessionId) {
+      printInfo(`Session: ${callResult.sessionId.slice(0, 8)}`);
+    }
+    return;
+  }
+
+  // Show result
+  console.log();
+  if (callResult.isError) {
+    printError('Tool returned error:');
+  } else {
+    printSuccess('Replay succeeded:');
+  }
+
+  if (isJson) {
+    console.log(JSON.stringify(callResult.content, null, 2));
+  } else {
+    // Format content for display
+    if (callResult.content && Array.isArray(callResult.content)) {
+      for (const item of callResult.content) {
+        if (typeof item === 'object' && item !== null) {
+          const content = item as { type?: string; text?: string; data?: unknown };
+          if (content.type === 'text' && content.text) {
+            console.log(content.text);
+          } else {
+            console.log(JSON.stringify(item, null, 2));
+          }
+        } else {
+          console.log(String(item));
+        }
+      }
+    } else {
+      console.log(JSON.stringify(callResult.content, null, 2));
+    }
+  }
+
+  console.log();
+  printInfo(`Session: ${callResult.sessionId.slice(0, 8)} (replay of ${rpcId.slice(0, 8)})`);
   printInfo('View details: pfscan rpc list --session ' + callResult.sessionId.slice(0, 8));
 }
 

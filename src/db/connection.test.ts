@@ -47,6 +47,7 @@ describe('diagnoseEventsDb', () => {
     expect(result.missingTables).toContain('rpc_calls');
     expect(result.missingTables).toContain('events');
     expect(result.missingTables).toContain('actors');
+    expect(result.missingTables).toContain('user_refs');
   });
 
   it('should detect missing columns in sessions table', () => {
@@ -62,15 +63,16 @@ describe('diagnoseEventsDb', () => {
       CREATE TABLE rpc_calls (id TEXT PRIMARY KEY);
       CREATE TABLE events (id TEXT PRIMARY KEY);
       CREATE TABLE actors (id TEXT PRIMARY KEY);
+      CREATE TABLE user_refs (name TEXT PRIMARY KEY);
     `);
-    db.pragma('user_version = 3');
+    db.pragma('user_version = 4');
     db.close();
 
     const result = diagnoseEventsDb(testDir);
 
     expect(result.exists).toBe(true);
     expect(result.readable).toBe(true);
-    expect(result.userVersion).toBe(3);
+    expect(result.userVersion).toBe(4);
     expect(result.missingTables).toEqual([]);
     expect(result.missingColumns).toContainEqual({ table: 'sessions', column: 'actor_id' });
     expect(result.missingColumns).toContainEqual({ table: 'sessions', column: 'actor_kind' });
@@ -79,7 +81,7 @@ describe('diagnoseEventsDb', () => {
   });
 
   it('should report no issues for complete database', () => {
-    // Create complete database
+    // Create complete database (Phase 4.1: includes user_refs)
     const dbPath = join(testDir, 'events.db');
     const db = new Database(dbPath);
     db.exec(`
@@ -95,15 +97,26 @@ describe('diagnoseEventsDb', () => {
       CREATE TABLE rpc_calls (id TEXT PRIMARY KEY);
       CREATE TABLE events (id TEXT PRIMARY KEY);
       CREATE TABLE actors (id TEXT PRIMARY KEY);
+      CREATE TABLE user_refs (
+        name TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        connector TEXT,
+        session TEXT,
+        rpc TEXT,
+        proto TEXT,
+        level TEXT,
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
-    db.pragma('user_version = 3');
+    db.pragma('user_version = 4');
     db.close();
 
     const result = diagnoseEventsDb(testDir);
 
     expect(result.exists).toBe(true);
     expect(result.readable).toBe(true);
-    expect(result.userVersion).toBe(3);
+    expect(result.userVersion).toBe(4);
     expect(result.missingTables).toEqual([]);
     expect(result.missingColumns).toEqual([]);
   });
@@ -138,7 +151,7 @@ describe('fixEventsDb', () => {
   });
 
   it('should create missing actors table', () => {
-    // Create database without actors table
+    // Create database without actors table (but with user_refs to isolate test)
     const dbPath = join(testDir, 'events.db');
     const db = new Database(dbPath);
     db.exec(`
@@ -151,6 +164,7 @@ describe('fixEventsDb', () => {
         actor_label TEXT,
         secret_ref_count INTEGER NOT NULL DEFAULT 0
       );
+      CREATE TABLE user_refs (name TEXT PRIMARY KEY);
     `);
     db.close();
 
@@ -175,6 +189,7 @@ describe('fixEventsDb', () => {
         started_at TEXT NOT NULL
       );
       CREATE TABLE actors (id TEXT PRIMARY KEY);
+      CREATE TABLE user_refs (name TEXT PRIMARY KEY);
     `);
     db.close();
 
@@ -192,7 +207,7 @@ describe('fixEventsDb', () => {
   });
 
   it('should not report fixes for already complete database', () => {
-    // Create complete database
+    // Create complete database (Phase 4.1: includes user_refs)
     const dbPath = join(testDir, 'events.db');
     const db = new Database(dbPath);
     db.exec(`
@@ -212,6 +227,17 @@ describe('fixEventsDb', () => {
         created_at TEXT NOT NULL,
         revoked_at TEXT
       );
+      CREATE TABLE user_refs (
+        name TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        connector TEXT,
+        session TEXT,
+        rpc TEXT,
+        proto TEXT,
+        level TEXT,
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
     db.close();
 
@@ -219,6 +245,34 @@ describe('fixEventsDb', () => {
 
     expect(result.success).toBe(true);
     expect(result.fixed).toEqual([]);
+  });
+
+  it('should create missing user_refs table', () => {
+    // Create database without user_refs table
+    const dbPath = join(testDir, 'events.db');
+    const db = new Database(dbPath);
+    db.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        connector_id TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        actor_id TEXT,
+        actor_kind TEXT,
+        actor_label TEXT,
+        secret_ref_count INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE actors (id TEXT PRIMARY KEY);
+    `);
+    db.close();
+
+    const result = fixEventsDb(testDir);
+
+    expect(result.success).toBe(true);
+    expect(result.fixed).toContain('table:user_refs');
+
+    // Verify table was created
+    const diagnostic = diagnoseEventsDb(testDir);
+    expect(diagnostic.tables).toContain('user_refs');
   });
 
   it('should handle non-existent database directory gracefully', () => {
@@ -232,7 +286,7 @@ describe('fixEventsDb', () => {
   });
 
   it('should handle missing sessions table gracefully', () => {
-    // Create database with only actors table (no sessions)
+    // Create database with only actors and user_refs tables (no sessions)
     const dbPath = join(testDir, 'events.db');
     const db = new Database(dbPath);
     db.exec(`
@@ -243,6 +297,7 @@ describe('fixEventsDb', () => {
         created_at TEXT NOT NULL,
         revoked_at TEXT
       );
+      CREATE TABLE user_refs (name TEXT PRIMARY KEY);
     `);
     db.close();
 
