@@ -254,9 +254,9 @@ function checkSubcommand(): { hasCommand: boolean; unknownCommand?: string } {
     const arg = process.argv[i];
     // Skip option flags and their values
     if (arg.startsWith('-')) {
-      // If it's --config, skip the next arg too
+      // If it's --config, skip the next arg too (with bounds check)
       if (arg === '-c' || arg === '--config') {
-        i++;
+        if (i + 1 < process.argv.length) i++;
       }
       continue;
     }
@@ -282,8 +282,6 @@ if (subcommandCheck.unknownCommand) {
   console.error(`✗ Unknown command: ${cmd}`);
   if (isShellOnly) {
     console.error(`  '${cmd}' is a shell-only command. Run: pfscan shell`);
-  } else {
-    console.error(`  Hint: 'tool'/'send' are available in interactive shell: pfscan shell`);
   }
   console.error(`  Run 'pfscan --help' for available commands.`);
   process.exit(1);
