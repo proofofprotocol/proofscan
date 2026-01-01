@@ -71,6 +71,93 @@ function serverDefToConnector(id: string, def: McpServerDef): Connector {
   };
 }
 
+/**
+ * Parse MCP server JSON and extract a specific connector by ID
+ *
+ * Supports:
+ * - Single server: { "command": "...", "args": [...] }
+ * - mcpServers wrapper: { "mcpServers": { "<id>": { ... } } }
+ *
+ * @param jsonString - JSON string to parse
+ * @param id - Connector ID to use (for single) or extract (from mcpServers)
+ * @returns ImportResult with single connector or error
+ */
+export function parseMcpServerById(jsonString: string, id: string): ImportResult {
+  const result: ImportResult = { connectors: [], errors: [] };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonString);
+  } catch (e) {
+    result.errors.push(`Invalid JSON: ${e instanceof Error ? e.message : 'parse error'}`);
+    return result;
+  }
+
+  // Case 1: Single server definition { "command": "...", "args": [...] }
+  if (isMcpServerDef(parsed)) {
+    result.connectors.push(serverDefToConnector(id, parsed));
+    return result;
+  }
+
+  // Case 2: mcpServers wrapper { "mcpServers": { ... } }
+  if (isMcpServersWrapper(parsed)) {
+    const servers = parsed.mcpServers;
+    const serverIds = Object.keys(servers);
+
+    // Check if requested ID exists
+    if (id in servers) {
+      const def = servers[id];
+      if (isMcpServerDef(def)) {
+        result.connectors.push(serverDefToConnector(id, def));
+        return result;
+      } else {
+        result.errors.push(`Invalid server definition for '${id}'`);
+        return result;
+      }
+    }
+
+    // ID not found - show available IDs
+    if (serverIds.length === 1) {
+      // Only one server, use it with the specified ID
+      const [actualId] = serverIds;
+      const def = servers[actualId];
+      if (isMcpServerDef(def)) {
+        result.connectors.push(serverDefToConnector(id, def));
+        return result;
+      }
+    }
+
+    result.errors.push(
+      `Server '${id}' not found in mcpServers. Available: ${serverIds.join(', ')}`
+    );
+    return result;
+  }
+
+  // Case 3: mcpServers object without wrapper { "<id>": { ... } }
+  if (isMcpServersObject(parsed)) {
+    const serverIds = Object.keys(parsed);
+
+    if (id in parsed) {
+      result.connectors.push(serverDefToConnector(id, parsed[id]));
+      return result;
+    }
+
+    if (serverIds.length === 1) {
+      const [actualId] = serverIds;
+      result.connectors.push(serverDefToConnector(id, parsed[actualId]));
+      return result;
+    }
+
+    result.errors.push(
+      `Server '${id}' not found. Available: ${serverIds.join(', ')}`
+    );
+    return result;
+  }
+
+  result.errors.push('Unrecognized format: expected { "command": ... } or { "mcpServers": { ... } }');
+  return result;
+}
+
 export function parseMcpServers(jsonString: string, singleName?: string): ImportResult {
   const result: ImportResult = { connectors: [], errors: [] };
 
