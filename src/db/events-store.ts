@@ -453,10 +453,18 @@ export class EventsStore {
       created_at: new Date().toISOString(),
     };
 
-    // Use INSERT OR REPLACE for upsert behavior
+    // Use INSERT ... ON CONFLICT to preserve original created_at on update
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO user_refs (name, kind, connector, session, rpc, proto, level, captured_at, created_at)
+      INSERT INTO user_refs (name, kind, connector, session, rpc, proto, level, captured_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(name) DO UPDATE SET
+        kind = excluded.kind,
+        connector = excluded.connector,
+        session = excluded.session,
+        rpc = excluded.rpc,
+        proto = excluded.proto,
+        level = excluded.level,
+        captured_at = excluded.captured_at
     `);
 
     stmt.run(

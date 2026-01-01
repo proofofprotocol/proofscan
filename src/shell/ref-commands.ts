@@ -27,6 +27,38 @@ import {
   type RefStruct,
 } from './ref-resolver.js';
 
+/** Max length for reference names */
+const REF_NAME_MAX_LENGTH = 64;
+
+/** Pattern for valid reference names: alphanumeric, hyphens, underscores */
+const REF_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+/** Reserved names that cannot be used as reference names */
+const RESERVED_NAMES = ['this', 'last', 'rpc', 'session', 'fav', 'ref'];
+
+/**
+ * Validate reference name
+ * @returns Error message if invalid, null if valid
+ */
+function validateRefName(name: string): string | null {
+  if (!name) {
+    return 'Reference name is required';
+  }
+  if (name.startsWith('@')) {
+    return `Name cannot start with @: ${name}`;
+  }
+  if (name.length > REF_NAME_MAX_LENGTH) {
+    return `Name too long (max ${REF_NAME_MAX_LENGTH} chars): ${name}`;
+  }
+  if (!REF_NAME_PATTERN.test(name)) {
+    return `Invalid name. Use only letters, numbers, hyphens, and underscores: ${name}`;
+  }
+  if (RESERVED_NAMES.includes(name.toLowerCase())) {
+    return `Reserved name cannot be used: ${name}`;
+  }
+  return null;
+}
+
 /**
  * Handle 'ref' command
  */
@@ -89,9 +121,9 @@ async function handleRefAdd(
       return;
     }
 
-    if (name.startsWith('@')) {
-      printError(`Name cannot start with @: ${name}`);
-      printInfo('@ is reserved for reference resolution');
+    const validationError = validateRefName(name);
+    if (validationError) {
+      printError(validationError);
       return;
     }
 
@@ -116,9 +148,9 @@ async function handleRefAdd(
   const name = args[0];
   const refArg = args[1];
 
-  if (name.startsWith('@')) {
-    printError(`Name cannot start with @: ${name}`);
-    printInfo('@ is reserved for reference resolution');
+  const validationError = validateRefName(name);
+  if (validationError) {
+    printError(validationError);
     return;
   }
 

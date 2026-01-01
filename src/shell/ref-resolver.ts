@@ -369,13 +369,25 @@ export class RefResolver {
       case 'last':
         return this.resolveLast(context);
       case 'rpc':
-        return this.resolveRpc(parsed.id!, context);
+        if (!parsed.id) {
+          return { success: false, error: 'RPC reference requires an ID' };
+        }
+        return this.resolveRpc(parsed.id, context);
       case 'session':
-        return this.resolveSession(parsed.id!, context);
+        if (!parsed.id) {
+          return { success: false, error: 'Session reference requires an ID' };
+        }
+        return this.resolveSession(parsed.id, context);
       case 'fav':
-        return this.resolveFavorite(parsed.id!);
+        if (!parsed.id) {
+          return { success: false, error: 'Favorite reference requires a name' };
+        }
+        return this.resolveFavorite(parsed.id);
       case 'ref':
-        return this.resolveUserRef(parsed.id!);
+        if (!parsed.id) {
+          return { success: false, error: 'User reference requires a name' };
+        }
+        return this.resolveUserRef(parsed.id);
       case 'literal':
         return {
           success: false,
