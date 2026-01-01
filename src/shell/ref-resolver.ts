@@ -271,9 +271,12 @@ export class RefResolver {
   resolveRpc(rpcId: string, context: ShellContext): ResolveResult {
     const rpc = this.dataProvider.getRpcById(rpcId, context.session);
     if (!rpc) {
+      const hint = context.session
+        ? `Use 'ls' to list RPCs in current session.`
+        : `Navigate to a session first with 'cd'.`;
       return {
         success: false,
-        error: `RPC not found: ${rpcId}`,
+        error: `RPC not found: @rpc:${rpcId}. ${hint}`,
       };
     }
 
@@ -297,9 +300,12 @@ export class RefResolver {
   resolveSession(sessionId: string, context: ShellContext): ResolveResult {
     const session = this.dataProvider.getSessionByPrefix(sessionId, context.connector);
     if (!session) {
+      const hint = context.connector
+        ? `Use 'ls' to list sessions for ${context.connector}.`
+        : `Use 'ls' at connector level to list sessions.`;
       return {
         success: false,
-        error: `Session not found: ${sessionId}`,
+        error: `Session not found: @session:${sessionId}. ${hint}`,
       };
     }
 
@@ -323,7 +329,7 @@ export class RefResolver {
     if (!fav) {
       return {
         success: false,
-        error: `Favorite not found: ${name}`,
+        error: `Favorite not found: @fav:${name}. Favorites feature is not yet implemented.`,
       };
     }
 
@@ -344,7 +350,7 @@ export class RefResolver {
     if (!ref) {
       return {
         success: false,
-        error: `Reference not found: ${name}`,
+        error: `Reference not found: @ref:${name}. Use 'ref ls' to list available references.`,
       };
     }
 

@@ -9,9 +9,18 @@ import type { ShellContext, ProtoType } from './types.js';
 import { printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
 import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
+import { EventsStore } from '../db/events-store.js';
 import { ConfigManager } from '../config/index.js';
 import { setCurrentSession, clearCurrentSession, formatRelativeTime } from '../utils/index.js';
-import { createRefFromContext, refToJson } from './ref-resolver.js';
+import {
+  createRefFromContext,
+  refToJson,
+  parseRef,
+  isRef,
+  RefResolver,
+  createRefDataProvider,
+  type RefStruct,
+} from './ref-resolver.js';
 
 // ProtoType is imported from types.ts
 
@@ -305,8 +314,84 @@ export async function handleCc(
     return;
   }
 
-  // Parse argument - could be <connector>, <session>, or <connector>/<session>
+  // Parse argument - could be <connector>, <session>, <connector>/<session>, or @ref
   const arg = args[0];
+
+  // Handle @ references (e.g., @last, @ref:name, @session:abc)
+  if (isRef(arg)) {
+    const manager = new ConfigManager(configPath);
+    const eventsStore = new EventsStore(manager.getConfigDir());
+    const dataProvider = createRefDataProvider(eventsStore);
+    const resolver = new RefResolver(dataProvider);
+
+    const result = resolver.resolve(arg, context);
+    if (!result.success || !result.ref) {
+      printError(result.error || `Failed to resolve reference: ${arg}`);
+      return;
+    }
+
+    const ref = result.ref;
+
+    // Navigate based on ref kind
+    if (ref.kind === 'rpc') {
+      // For RPC refs, navigate to the containing session
+      if (!ref.session || !ref.connector) {
+        printError(`Cannot navigate to RPC reference: missing session/connector`);
+        printInfo(`Use: show ${arg} to view RPC details`);
+        return;
+      }
+      savePreviousLocation(context);
+      context.connector = ref.connector;
+      context.session = ref.session;
+      context.proto = detectProto(store, ref.session);
+      setCurrentSession(ref.session, ref.connector);
+      printSuccess(`→ /${ref.connector}/${shortenSessionId(ref.session)}`);
+      printInfo(`(navigated to session containing RPC)`);
+      return;
+    }
+
+    if (ref.kind === 'session') {
+      if (!ref.session || !ref.connector) {
+        printError(`Invalid session reference: missing session/connector`);
+        return;
+      }
+      savePreviousLocation(context);
+      context.connector = ref.connector;
+      context.session = ref.session;
+      context.proto = detectProto(store, ref.session);
+      setCurrentSession(ref.session, ref.connector);
+      printSuccess(`→ /${ref.connector}/${shortenSessionId(ref.session)}`);
+      return;
+    }
+
+    if (ref.kind === 'connector') {
+      if (!ref.connector) {
+        printError(`Invalid connector reference: missing connector`);
+        return;
+      }
+      savePreviousLocation(context);
+      context.connector = ref.connector;
+      context.session = undefined;
+      context.proto = detectConnectorProto(store, ref.connector);
+      setCurrentSession('', ref.connector);
+      printSuccess(`→ /${ref.connector}`);
+      return;
+    }
+
+    if (ref.kind === 'context') {
+      // Root context - go to root
+      savePreviousLocation(context);
+      context.connector = undefined;
+      context.session = undefined;
+      context.proto = undefined;
+      clearCurrentSession();
+      printSuccess('→ /');
+      return;
+    }
+
+    printError(`Cannot navigate to ${ref.kind} reference`);
+    return;
+  }
 
   // Check for connector/session format (or legacy connector|session)
   if (arg.includes('/') || arg.includes('|')) {
@@ -660,6 +745,11 @@ async function listRpcs(
 /**
  * Handle 'show' command - show details at current level
  *
+ * Supports @ references:
+ *   show @last      - show latest session/RPC
+ *   show @rpc:abc   - show specific RPC
+ *   show @ref:name  - show saved reference
+ *
  * connector level:
  *   show           - connector details
  *   show <session> - session details
@@ -679,6 +769,58 @@ export async function handleShow(
   const target = args.find(a => !a.startsWith('-'));
 
   const store = getStore(configPath);
+
+  // Handle @ references first
+  if (target && isRef(target)) {
+    const manager = new ConfigManager(configPath);
+    const eventsStore = new EventsStore(manager.getConfigDir());
+    const dataProvider = createRefDataProvider(eventsStore);
+    const resolver = new RefResolver(dataProvider);
+
+    const result = resolver.resolve(target, context);
+    if (!result.success || !result.ref) {
+      printError(result.error || `Failed to resolve reference: ${target}`);
+      return;
+    }
+
+    const ref = result.ref;
+
+    // Show based on ref kind
+    if (ref.kind === 'rpc') {
+      if (!ref.session || !ref.rpc) {
+        printError(`Invalid RPC reference: missing session/rpc ID`);
+        return;
+      }
+      await executeCommand(['rpc', 'show', '--session', ref.session, '--id', ref.rpc, ...(isJson ? ['--json'] : [])]);
+      return;
+    }
+
+    if (ref.kind === 'session') {
+      if (!ref.session) {
+        printError(`Invalid session reference: missing session ID`);
+        return;
+      }
+      await executeCommand(['sessions', 'show', '--id', ref.session, ...(isJson ? ['--json'] : [])]);
+      return;
+    }
+
+    if (ref.kind === 'connector') {
+      if (!ref.connector) {
+        printError(`Invalid connector reference: missing connector ID`);
+        return;
+      }
+      await executeCommand(['connectors', 'show', '--id', ref.connector, ...(isJson ? ['--json'] : [])]);
+      return;
+    }
+
+    if (ref.kind === 'context') {
+      printInfo('At root context. Use: show <connector> to view connector details');
+      return;
+    }
+
+    printError(`Cannot show ${ref.kind} reference`);
+    return;
+  }
 
   if (level === 'root') {
     if (target) {

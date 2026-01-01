@@ -224,6 +224,13 @@ export class ShellRepl {
    * Process a line of input
    */
   private async processLine(line: string): Promise<void> {
+    // Check for pipe syntax (e.g., "pwd --json | ref add name")
+    const pipeResult = this.parsePipe(line);
+    if (pipeResult) {
+      await this.handlePipe(pipeResult.left, pipeResult.right);
+      return;
+    }
+
     const tokens = line.trim().split(/\s+/).filter(t => t !== '');
     if (tokens.length === 0) return;
 
@@ -554,6 +561,82 @@ Tips:
     this.context.session = undefined;
     clearCurrentSession();
     printSuccess('Context cleared');
+  }
+
+  /**
+   * Parse a pipe command (e.g., "pwd --json | ref add name")
+   * Returns null if no pipe, or the left and right parts if pipe found
+   */
+  private parsePipe(line: string): { left: string; right: string } | null {
+    // Find pipe character that's not part of an argument
+    // Simple approach: split on ' | ' (with spaces)
+    const pipeIndex = line.indexOf(' | ');
+    if (pipeIndex === -1) {
+      return null;
+    }
+
+    const left = line.slice(0, pipeIndex).trim();
+    const right = line.slice(pipeIndex + 3).trim();
+
+    if (!left || !right) {
+      return null;
+    }
+
+    return { left, right };
+  }
+
+  /**
+   * Handle piped commands
+   * Currently supports: pwd --json | ref add <name>
+   */
+  private async handlePipe(leftCmd: string, rightCmd: string): Promise<void> {
+    const leftTokens = leftCmd.split(/\s+/).filter(t => t !== '');
+    const rightTokens = rightCmd.split(/\s+/).filter(t => t !== '');
+
+    if (leftTokens.length === 0 || rightTokens.length === 0) {
+      printError('Invalid pipe syntax');
+      return;
+    }
+
+    // Currently only support: pwd --json | ref add <name>
+    const leftCommand = leftTokens[0];
+    const rightCommand = rightTokens[0];
+
+    if (leftCommand !== 'pwd' || !leftTokens.includes('--json')) {
+      printError('Pipe source must be: pwd --json');
+      printInfo('Example: pwd --json | ref add myref');
+      return;
+    }
+
+    if (rightCommand !== 'ref' || rightTokens[1] !== 'add') {
+      printError('Pipe target must be: ref add <name>');
+      printInfo('Example: pwd --json | ref add myref');
+      return;
+    }
+
+    // Get pwd --json output
+    const { createRefFromContext, refToJson } = await import('./ref-resolver.js');
+    const { detectProto, detectConnectorProto, getContextLevel } = await import('./router-commands.js');
+    const { EventLineStore } = await import('../eventline/store.js');
+    const { ConfigManager } = await import('../config/index.js');
+
+    const manager = new ConfigManager(this.configPath);
+    const store = new EventLineStore(manager.getConfigDir());
+    const level = getContextLevel(this.context);
+
+    // Update proto for accurate output
+    if (level === 'session' && this.context.session) {
+      this.context.proto = detectProto(store, this.context.session);
+    } else if (level === 'connector' && this.context.connector) {
+      this.context.proto = detectConnectorProto(store, this.context.connector);
+    }
+
+    const ref = createRefFromContext(this.context);
+    const jsonOutput = refToJson(ref);
+
+    // Now call ref add with the JSON as stdin data
+    const refArgs = rightTokens.slice(1); // ['add', '<name>']
+    await handleRef(refArgs, this.context, this.configPath, jsonOutput);
   }
 
   /**
