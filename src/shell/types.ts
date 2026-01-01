@@ -75,6 +75,7 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   record: ['dry-run'],
   secrets: ['list', 'set', 'edit', 'prune', 'export', 'import'],
   secret: ['list', 'set', 'edit', 'prune', 'export', 'import'],
+  tool: ['ls', 'list', 'show'],
 };
 
 /**
@@ -125,6 +126,12 @@ export const SHELL_BUILTINS = ['use', 'reset', 'pwd', 'help', 'exit', 'quit', 'c
  * Note: 'cd' is an alias for 'cc'
  */
 export const ROUTER_COMMANDS = ['cc', 'cd', 'ls', 'show', '..'];
+
+/**
+ * Shell-native tool commands (Phase 4.0)
+ * These commands interact directly with MCP servers
+ */
+export const TOOL_COMMANDS = ['tool', 'send'];
 
 /**
  * Commands blocked in shell mode due to stdin conflicts.

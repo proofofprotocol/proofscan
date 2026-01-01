@@ -9,7 +9,7 @@ import { loadHistory, saveHistory, addToHistory, getHistoryPath } from './histor
 import { isValidArg } from './repl.js';
 import type { ShellContext } from './types.js';
 import type { DynamicDataProvider } from './completer.js';
-import { TOP_LEVEL_COMMANDS, COMMAND_SUBCOMMANDS, BLOCKED_SUBCOMMANDS_IN_SHELL } from './types.js';
+import { TOP_LEVEL_COMMANDS, COMMAND_SUBCOMMANDS, BLOCKED_SUBCOMMANDS_IN_SHELL, TOOL_COMMANDS } from './types.js';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs';
@@ -323,6 +323,63 @@ describe('secrets command in shell', () => {
       const [completions] = getCompletions('secret ', context, mockDataProvider);
       expect(completions).toContain('list');
       expect(completions).toContain('set');
+    });
+  });
+});
+
+describe('tool commands in shell', () => {
+  describe('TOOL_COMMANDS', () => {
+    it('should include tool command', () => {
+      expect(TOOL_COMMANDS).toContain('tool');
+    });
+
+    it('should include send command', () => {
+      expect(TOOL_COMMANDS).toContain('send');
+    });
+  });
+
+  describe('COMMAND_SUBCOMMANDS', () => {
+    it('should have tool subcommands', () => {
+      expect(COMMAND_SUBCOMMANDS.tool).toBeDefined();
+      expect(COMMAND_SUBCOMMANDS.tool).toContain('ls');
+      expect(COMMAND_SUBCOMMANDS.tool).toContain('list');
+      expect(COMMAND_SUBCOMMANDS.tool).toContain('show');
+    });
+  });
+
+  describe('completion', () => {
+    const mockDataProvider: DynamicDataProvider = {
+      getConnectorIds: () => ['mcp'],
+      getSessionPrefixes: () => [],
+      getRpcIds: () => [],
+    };
+    const context: ShellContext = {};
+
+    it('should complete tool command', () => {
+      const [completions] = getCompletions('too', context, mockDataProvider);
+      expect(completions).toContain('tool');
+    });
+
+    it('should complete send command', () => {
+      const [completions] = getCompletions('sen', context, mockDataProvider);
+      expect(completions).toContain('send');
+    });
+
+    it('should complete tool subcommands', () => {
+      const [completions] = getCompletions('tool ', context, mockDataProvider);
+      expect(completions).toContain('ls');
+      expect(completions).toContain('show');
+    });
+
+    it('should complete tool show options', () => {
+      const [completions] = getCompletions('tool show ', context, mockDataProvider);
+      expect(completions).toContain('--json');
+    });
+
+    it('should complete send options', () => {
+      const [completions] = getCompletions('send ', context, mockDataProvider);
+      expect(completions).toContain('--json');
+      expect(completions).toContain('--dry-run');
     });
   });
 });
