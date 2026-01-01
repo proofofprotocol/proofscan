@@ -83,7 +83,19 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
     .action(async (idArg, options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
+
+        // Validate conflicting ID options
+        if (idArg && options.id && idArg !== options.id) {
+          outputError('Cannot specify ID both as argument and --id option');
+          process.exit(1);
+        }
         const id = idArg || options.id;
+
+        // Validate mutual exclusivity
+        if (options.fromMcpJson && options.fromMcpFile) {
+          outputError('Cannot use both --from-mcp-json and --from-mcp-file');
+          process.exit(1);
+        }
 
         // --from-mcp-json or --from-mcp-file mode
         if (options.fromMcpJson || options.fromMcpFile) {
@@ -97,7 +109,7 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
             try {
               jsonContent = await fs.readFile(options.fromMcpFile, 'utf-8');
             } catch (e) {
-              outputError(`Failed to read file: ${options.fromMcpFile}`);
+              outputError(`Failed to read file: ${options.fromMcpFile}`, e instanceof Error ? e : undefined);
               process.exit(1);
             }
           } else if (options.fromMcpJson === '-') {

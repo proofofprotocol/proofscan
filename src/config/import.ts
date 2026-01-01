@@ -149,7 +149,7 @@ export function parseMcpServerById(jsonString: string, id: string): ImportResult
     }
 
     result.errors.push(
-      `Server '${id}' not found. Available: ${serverIds.join(', ')}`
+      `Server '${id}' not found in mcpServers. Available: ${serverIds.join(', ')}`
     );
     return result;
   }
