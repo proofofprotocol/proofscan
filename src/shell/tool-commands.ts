@@ -451,6 +451,7 @@ async function handleSendReplay(
   // Resolve the reference
   const parsed = parseRef(refString);
   let rpcId: string | undefined;
+  let sessionId: string | undefined;
 
   if (parsed.type === 'last') {
     // @last: get latest RPC from current session or latest session
@@ -465,9 +466,12 @@ async function handleSendReplay(
       return;
     }
     rpcId = result.ref.rpc;
+    sessionId = result.ref.session;
   } else if (parsed.type === 'rpc' && parsed.id) {
     // @rpc:<id>: use the ID directly
     rpcId = parsed.id;
+    // Try to get session from context
+    sessionId = context.session;
   } else if (parsed.type === 'ref' && parsed.id) {
     // @ref:<name>: resolve user reference
     const result = resolver.resolveUserRef(parsed.id);
@@ -480,6 +484,7 @@ async function handleSendReplay(
       return;
     }
     rpcId = result.ref.rpc;
+    sessionId = result.ref.session;
   } else {
     printError(`Cannot replay from reference: ${refString}`);
     printInfo('Supported: @last, @rpc:<id>, @ref:<name>');
@@ -487,7 +492,8 @@ async function handleSendReplay(
   }
 
   // Get the RPC details from the database
-  const rpcData = eventsStore.getRpcWithEvents(rpcId);
+  // Pass sessionId to avoid ambiguity when rpc_id is not globally unique
+  const rpcData = eventsStore.getRpcWithEvents(rpcId, sessionId);
   if (!rpcData) {
     printError(`RPC not found: ${rpcId}`);
     return;

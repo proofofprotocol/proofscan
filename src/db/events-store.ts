@@ -591,15 +591,24 @@ export class EventsStore {
   /**
    * Get RPC call with request/response events for replay
    * Used for send @last / send @rpc:<id>
+   *
+   * @param rpcId - RPC ID to look up
+   * @param sessionId - Optional session ID to narrow search (required when rpc_id is not globally unique)
    */
-  getRpcWithEvents(rpcId: string): {
+  getRpcWithEvents(rpcId: string, sessionId?: string): {
     rpc: RpcCall;
     request?: Event;
     response?: Event;
   } | null {
-    // Get RPC call
-    const rpcStmt = this.db.prepare(`SELECT * FROM rpc_calls WHERE rpc_id = ?`);
-    const rpc = rpcStmt.get(rpcId) as RpcCall | null;
+    // Get RPC call - use session_id if provided to avoid ambiguity
+    let rpc: RpcCall | null;
+    if (sessionId) {
+      const rpcStmt = this.db.prepare(`SELECT * FROM rpc_calls WHERE rpc_id = ? AND session_id = ?`);
+      rpc = rpcStmt.get(rpcId, sessionId) as RpcCall | null;
+    } else {
+      const rpcStmt = this.db.prepare(`SELECT * FROM rpc_calls WHERE rpc_id = ?`);
+      rpc = rpcStmt.get(rpcId) as RpcCall | null;
+    }
     if (!rpc) return null;
 
     // Get request event (tools/call request)
