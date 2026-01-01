@@ -4,7 +4,7 @@
 
 import { Command } from 'commander';
 import { promises as fs } from 'fs';
-import { ConfigManager, parseMcpServers, readStdin } from '../config/index.js';
+import { ConfigManager, parseMcpServers, parseMcpServerById, readStdin } from '../config/index.js';
 import type { Connector, StdioTransport } from '../types/index.js';
 import { output, outputSuccess, outputError, outputTable, redactSecrets } from '../utils/output.js';
 import { redactionSummary } from '../secrets/redaction.js';
@@ -74,30 +74,108 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
 
   cmd
     .command('add')
-    .description('Add a new stdio connector')
-    .requiredOption('--id <id>', 'Connector ID')
-    .requiredOption('--stdio <cmdline>', 'Command line (command and args as single string)')
-    .action(async (options) => {
+    .description('Add a new connector')
+    .argument('[id]', 'Connector ID')
+    .option('--id <id>', 'Connector ID (alternative to positional argument)')
+    .option('--stdio <cmdline>', 'Command line (command and args as single string)')
+    .option('--from-mcp-json <json>', 'MCP server JSON (use "-" for stdin)')
+    .option('--from-mcp-file <path>', 'Path to MCP config file (e.g., claude_desktop_config.json)')
+    .action(async (idArg, options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
 
-        // Parse command line
-        const parts = options.stdio.trim().split(/\s+/);
-        const command = parts[0];
-        const args = parts.slice(1);
+        // Validate conflicting ID options
+        if (idArg && options.id && idArg !== options.id) {
+          outputError('Cannot specify ID both as argument and --id option');
+          process.exit(1);
+        }
+        const id = idArg || options.id;
 
-        const connector: Connector = {
-          id: options.id,
-          enabled: true,
-          transport: {
-            type: 'stdio',
-            command,
-            ...(args.length > 0 && { args }),
-          },
-        };
+        // Validate mutual exclusivity
+        if (options.fromMcpJson && options.fromMcpFile) {
+          outputError('Cannot use both --from-mcp-json and --from-mcp-file');
+          process.exit(1);
+        }
 
-        await manager.addConnector(connector);
-        outputSuccess(`Connector '${options.id}' added`);
+        // --from-mcp-json or --from-mcp-file mode
+        if (options.fromMcpJson || options.fromMcpFile) {
+          if (!id) {
+            outputError('Connector ID is required. Usage: connectors add <id> --from-mcp-json \'...\'');
+            process.exit(1);
+          }
+
+          let jsonContent: string;
+          if (options.fromMcpFile) {
+            try {
+              jsonContent = await fs.readFile(options.fromMcpFile, 'utf-8');
+            } catch (e) {
+              outputError(`Failed to read file: ${options.fromMcpFile}`, e instanceof Error ? e : undefined);
+              process.exit(1);
+            }
+          } else if (options.fromMcpJson === '-') {
+            jsonContent = await readStdin();
+          } else {
+            jsonContent = options.fromMcpJson;
+          }
+
+          const result = parseMcpServerById(jsonContent, id);
+
+          if (result.errors.length > 0) {
+            outputError(result.errors.join('\n'));
+            process.exit(1);
+          }
+
+          if (result.connectors.length === 0) {
+            outputError('No connector found in input');
+            process.exit(1);
+          }
+
+          await manager.addConnector(result.connectors[0]);
+          outputSuccess(`Connector '${id}' added`);
+          return;
+        }
+
+        // --stdio mode (legacy)
+        if (options.stdio) {
+          if (!id) {
+            outputError('Connector ID is required. Usage: connectors add <id> --stdio \'...\'');
+            process.exit(1);
+          }
+
+          const parts = options.stdio.trim().split(/\s+/);
+          const command = parts[0];
+          const args = parts.slice(1);
+
+          const connector: Connector = {
+            id,
+            enabled: true,
+            transport: {
+              type: 'stdio',
+              command,
+              ...(args.length > 0 && { args }),
+            },
+          };
+
+          await manager.addConnector(connector);
+          outputSuccess(`Connector '${id}' added`);
+          return;
+        }
+
+        // No mode specified
+        outputError('One of --stdio, --from-mcp-json, or --from-mcp-file is required');
+        console.error('\nExamples:');
+        console.error('  # From command line');
+        console.error('  pfscan connectors add inscribe --stdio \'npx -y inscribe-mcp\'');
+        console.error('');
+        console.error('  # From MCP JSON (README format)');
+        console.error('  pfscan connectors add inscribe --from-mcp-json \'{"command":"npx","args":["-y","inscribe-mcp"]}\'');
+        console.error('');
+        console.error('  # From Claude Desktop config file');
+        console.error('  pfscan connectors add inscribe --from-mcp-file ~/.config/Claude/claude_desktop_config.json');
+        console.error('');
+        console.error('  # From stdin');
+        console.error('  cat config.json | pfscan connectors add inscribe --from-mcp-json -');
+        process.exit(1);
       } catch (error) {
         outputError('Failed to add connector', error instanceof Error ? error : undefined);
         process.exit(1);
