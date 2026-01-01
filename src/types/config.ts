@@ -44,10 +44,24 @@ export interface RetentionConfig {
   max_db_mb?: number;          // Maximum events.db size in MB
 }
 
+/**
+ * Inscriber configuration for inscribe command (Phase 4.3)
+ */
+export interface InscriberConfig {
+  /** Connector ID for the inscribe-mcp server (default: 'inscribe') */
+  connectorId?: string;
+  /** Tool name to call on the inscriber connector (default: 'inscribe') */
+  toolName?: string;
+  /** Default inscription type (default: 'proofscan.rpc') */
+  type?: string;
+}
+
 export interface Config {
   version: 1;
   connectors: Connector[];
   retention?: RetentionConfig;
+  /** Inscriber configuration for inscribe command */
+  inscriber?: InscriberConfig;
 }
 
 export const DEFAULT_CONFIG: Config = {

@@ -141,6 +141,12 @@ export const TOOL_COMMANDS = ['tool', 'send'];
 export const REF_COMMANDS = ['ref'];
 
 /**
+ * Shell-native inscribe command (Phase 4.3)
+ * Inscribes RPC call details to blockchain via inscribe-mcp
+ */
+export const INSCRIBE_COMMANDS = ['inscribe'];
+
+/**
  * Commands blocked in shell mode due to stdin conflicts.
  *
  * These commands have their own readline interface which conflicts
