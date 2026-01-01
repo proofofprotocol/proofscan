@@ -179,9 +179,6 @@ export async function listTools(
     // Call tools/list
     const toolsListResponse = await connection.sendRequest('tools/list', {}, timeout);
 
-    // Close connection gracefully
-    connection.close();
-
     eventsStore.saveEvent(sessionId, 'client_to_server', 'transport_event', {
       rawJson: JSON.stringify({ type: 'disconnected' }),
     });
@@ -214,13 +211,15 @@ export async function listTools(
       rawJson: JSON.stringify({ type: 'error', error: errMsg }),
     });
     eventsStore.endSession(sessionId, 'error');
-    connection.close();
 
     return {
       tools: [],
       sessionId,
       error: errMsg,
     };
+  } finally {
+    // Guarantee connection cleanup to prevent zombie processes
+    connection.close();
   }
 }
 
@@ -364,9 +363,6 @@ export async function callTool(
       arguments: args,
     }, timeout);
 
-    // Close connection gracefully
-    connection.close();
-
     eventsStore.saveEvent(sessionId, 'client_to_server', 'transport_event', {
       rawJson: JSON.stringify({ type: 'disconnected' }),
     });
@@ -396,13 +392,15 @@ export async function callTool(
       rawJson: JSON.stringify({ type: 'error', error: errMsg }),
     });
     eventsStore.endSession(sessionId, 'error');
-    connection.close();
 
     return {
       success: false,
       sessionId,
       error: errMsg,
     };
+  } finally {
+    // Guarantee connection cleanup to prevent zombie processes
+    connection.close();
   }
 }
 

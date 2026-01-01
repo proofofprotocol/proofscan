@@ -18,9 +18,7 @@ import {
   getTool,
   callTool,
   formatInputSchema,
-  type ToolInfo,
   type ToolContext,
-  type PropertySchema,
 } from '../tools/adapter.js';
 import * as readline from 'readline';
 
@@ -428,7 +426,16 @@ async function promptForValue(
     rl.removeAllListeners('line');
     rl.removeAllListeners('close');
 
+    // Handle Ctrl+C during input
+    const sigintHandler = () => {
+      resolve(null);
+    };
+    rl.once('SIGINT', sigintHandler);
+
     rl.question(prompt, (answer) => {
+      // Clean up SIGINT handler
+      rl.removeListener('SIGINT', sigintHandler);
+
       // Restore listeners
       for (const listener of lineListeners) {
         rl.on('line', listener as (...args: unknown[]) => void);
@@ -439,12 +446,6 @@ async function promptForValue(
 
       resolve(answer);
     });
-
-    // Handle Ctrl+C during input
-    const sigintHandler = () => {
-      resolve(null);
-    };
-    rl.once('SIGINT', sigintHandler);
   });
 }
 
@@ -456,8 +457,12 @@ function parseValue(value: string, type?: string): unknown {
 
   switch (type) {
     case 'number':
-    case 'integer':
-      return Number(value);
+    case 'integer': {
+      const num = Number(value);
+      // Return original string if conversion results in NaN
+      if (Number.isNaN(num)) return value;
+      return num;
+    }
     case 'boolean':
       return value.toLowerCase() === 'true' || value === '1';
     case 'array':
