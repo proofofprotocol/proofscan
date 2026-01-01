@@ -7,6 +7,7 @@ import { generatePrompt, generatePlainPrompt, supportsColor, shortenSessionId } 
 import { getCompletions } from './completer.js';
 import { loadHistory, saveHistory, addToHistory, getHistoryPath } from './history.js';
 import { isValidArg, parsePipeCommand } from './repl.js';
+import { isRef, parseRef } from './ref-resolver.js';
 import type { ShellContext } from './types.js';
 import type { DynamicDataProvider } from './completer.js';
 import { TOP_LEVEL_COMMANDS, COMMAND_SUBCOMMANDS, BLOCKED_SUBCOMMANDS_IN_SHELL, TOOL_COMMANDS } from './types.js';
@@ -436,6 +437,97 @@ describe('parsePipeCommand', () => {
       // If someone writes "a|b | c|d", the first ' | ' should be used
       const result = parsePipeCommand('a|b | c|d');
       expect(result).toEqual({ left: 'a|b', right: 'c|d' });
+    });
+  });
+});
+
+describe('ref-resolver', () => {
+  describe('isRef', () => {
+    it('should recognize @this as a reference', () => {
+      expect(isRef('@this')).toBe(true);
+    });
+
+    it('should recognize @last as a reference', () => {
+      expect(isRef('@last')).toBe(true);
+    });
+
+    it('should recognize @rpc:<id> as a reference', () => {
+      expect(isRef('@rpc:abc123')).toBe(true);
+    });
+
+    it('should recognize @session:<id> as a reference', () => {
+      expect(isRef('@session:xyz789')).toBe(true);
+    });
+
+    it('should recognize @ref:<name> as a reference', () => {
+      expect(isRef('@ref:myref')).toBe(true);
+    });
+
+    it('should recognize @fav:<name> as a reference', () => {
+      expect(isRef('@fav:myfav')).toBe(true);
+    });
+
+    it('should NOT recognize plain text as a reference', () => {
+      expect(isRef('add')).toBe(false);
+      expect(isRef('ls')).toBe(false);
+      expect(isRef('myname')).toBe(false);
+    });
+
+    it('should NOT recognize @ without valid type as a reference', () => {
+      expect(isRef('@unknown')).toBe(false);
+      expect(isRef('@')).toBe(false);
+      expect(isRef('@:')).toBe(false);
+    });
+  });
+
+  describe('parseRef', () => {
+    it('should parse @this correctly', () => {
+      const result = parseRef('@this');
+      expect(result.type).toBe('this');
+      expect(result.raw).toBe('@this');
+    });
+
+    it('should parse @last correctly', () => {
+      const result = parseRef('@last');
+      expect(result.type).toBe('last');
+      expect(result.raw).toBe('@last');
+    });
+
+    it('should parse @rpc:<id> correctly', () => {
+      const result = parseRef('@rpc:abc123');
+      expect(result.type).toBe('rpc');
+      expect(result.id).toBe('abc123');
+      expect(result.raw).toBe('@rpc:abc123');
+    });
+
+    it('should parse @session:<id> correctly', () => {
+      const result = parseRef('@session:xyz789');
+      expect(result.type).toBe('session');
+      expect(result.id).toBe('xyz789');
+      expect(result.raw).toBe('@session:xyz789');
+    });
+
+    it('should parse @ref:<name> correctly', () => {
+      const result = parseRef('@ref:myref');
+      expect(result.type).toBe('ref');
+      expect(result.id).toBe('myref');
+      expect(result.raw).toBe('@ref:myref');
+    });
+
+    it('should return literal for non-@ strings', () => {
+      const result = parseRef('add');
+      expect(result.type).toBe('literal');
+      expect(result.raw).toBe('add');
+    });
+
+    it('should return literal for unknown @ types', () => {
+      const result = parseRef('@unknown');
+      expect(result.type).toBe('literal');
+    });
+
+    it('should return literal for empty ID after colon', () => {
+      const result = parseRef('@rpc:');
+      expect(result.type).toBe('literal');
     });
   });
 });

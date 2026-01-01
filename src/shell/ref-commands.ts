@@ -1,7 +1,7 @@
 /**
- * Shell ref commands: ref add, ref ls, ref rm (Phase 4.1)
+ * Shell ref commands: ref add, ref ls, ref rm, ref <@target> (Phase 4.1-4.2)
  *
- * These commands manage user-defined references.
+ * These commands manage user-defined references and resolve references.
  *
  * Commands:
  * - ref add <name> @this     : Save current context as named reference
@@ -9,6 +9,13 @@
  * - ref add <name> @rpc:<id> : Save specific RPC as named reference
  * - ref ls                   : List all user-defined references
  * - ref rm <name>            : Remove a user-defined reference
+ *
+ * Resolve mode (argument starts with @):
+ * - ref @this                : Resolve and display current context
+ * - ref @last                : Resolve and display latest session/RPC
+ * - ref @rpc:<id>            : Resolve and display specific RPC reference
+ * - ref @ref:<name>          : Resolve and display user-defined reference
+ * - ref @... --json          : Output RefStruct as JSON
  *
  * Pipe support:
  * - pwd --json | ref add <name> : Save piped JSON as reference
@@ -23,7 +30,9 @@ import {
   createRefDataProvider,
   createRefFromContext,
   parseRef,
+  isRef,
   refFromJson,
+  refToJson,
   type RefStruct,
 } from './ref-resolver.js';
 
@@ -69,19 +78,36 @@ export async function handleRef(
   stdinData?: string
 ): Promise<void> {
   if (args.length === 0) {
-    printInfo('Usage: ref <subcommand>');
+    printInfo('Usage: ref <subcommand> or ref <@target>');
+    printInfo('');
+    printInfo('Subcommands:');
     printInfo('  ref add <name> @this     Save current context');
     printInfo('  ref add <name> @last     Save latest session/rpc');
     printInfo('  ref add <name> @rpc:<id> Save specific RPC');
     printInfo('  ref ls                   List all refs');
     printInfo('  ref rm <name>            Remove a ref');
     printInfo('');
+    printInfo('Resolve mode (@ prefix):');
+    printInfo('  ref @this                Resolve current context');
+    printInfo('  ref @last                Resolve latest session/RPC');
+    printInfo('  ref @rpc:<id>            Resolve specific RPC');
+    printInfo('  ref @ref:<name>          Resolve saved reference');
+    printInfo('  ref @... --json          Output as JSON');
+    printInfo('');
     printInfo('Pipe support:');
     printInfo('  pwd --json | ref add <name>');
     return;
   }
 
-  const subcommand = args[0];
+  const firstArg = args[0];
+
+  // Resolve mode: if first argument starts with @, resolve the reference
+  if (isRef(firstArg)) {
+    await handleRefResolve(args, context, configPath);
+    return;
+  }
+
+  const subcommand = firstArg;
   const subArgs = args.slice(1);
 
   switch (subcommand) {
@@ -100,7 +126,75 @@ export async function handleRef(
     default:
       printError(`Unknown subcommand: ${subcommand}`);
       printInfo('Available: add, ls, rm');
+      printInfo('Or use: ref @this, ref @last, ref @rpc:<id>, ref @ref:<name>');
   }
+}
+
+/**
+ * Handle 'ref @...' - resolve and display a reference (Phase 4.2)
+ *
+ * This is "resolve mode" - when the first argument starts with @
+ *
+ * Examples:
+ *   ref @this           - Show current context as reference
+ *   ref @last           - Show latest session/RPC as reference
+ *   ref @rpc:abc123     - Show specific RPC reference
+ *   ref @ref:myname     - Show saved user-defined reference
+ *   ref @this --json    - Output as JSON for piping
+ */
+async function handleRefResolve(
+  args: string[],
+  context: ShellContext,
+  configPath: string
+): Promise<void> {
+  const isJson = args.includes('--json');
+  const target = args.find(a => !a.startsWith('-') && a.startsWith('@'));
+
+  if (!target) {
+    printError('No reference target specified');
+    return;
+  }
+
+  const manager = new ConfigManager(configPath);
+  const eventsStore = new EventsStore(manager.getConfigDir());
+  const dataProvider = createRefDataProvider(eventsStore);
+  const resolver = new RefResolver(dataProvider);
+
+  // Special handling for @this - use createRefFromContext directly
+  const parsed = parseRef(target);
+  let ref: RefStruct;
+
+  if (parsed.type === 'this') {
+    ref = createRefFromContext(context);
+    ref.source = '@this';
+  } else {
+    const result = resolver.resolve(target, context);
+    if (!result.success || !result.ref) {
+      printError(result.error || `Failed to resolve: ${target}`);
+      return;
+    }
+    ref = result.ref;
+  }
+
+  // Output
+  if (isJson) {
+    console.log(refToJson(ref));
+    return;
+  }
+
+  // Human-readable format
+  console.log();
+  console.log(`Reference: ${target}`);
+  console.log(`  Kind: ${ref.kind}`);
+  if (ref.connector) console.log(`  Connector: ${ref.connector}`);
+  if (ref.session) console.log(`  Session: ${ref.session.slice(0, 8)}...`);
+  if (ref.rpc) console.log(`  RPC: ${ref.rpc}`);
+  if (ref.proto) console.log(`  Proto: ${ref.proto}`);
+  if (ref.level) console.log(`  Level: ${ref.level}`);
+  if (ref.captured_at) console.log(`  Captured: ${ref.captured_at}`);
+  console.log();
+  printInfo('Tip: Use --json to get JSON output for piping');
+  printInfo('     Use "show ..." to view resource details instead of address');
 }
 
 /**

@@ -393,23 +393,33 @@ Navigation:
     cd <connector>        Enter connector context
     cd <session>          Enter session (in connector context)
     cd <conn>/<sess>      Enter session directly
+    cd @last              Jump to latest session/RPC
+    cd @ref:<name>        Jump to saved reference
     cd ..                 Go up one level
-    cd ../..              Go up two levels
     cd -                  Go to previous location
   ls [-l] [--json]        List items at current level
-  show [target] [--json]  Show details
-  pwd [--json]            Show current context (--json for RefStruct)
+  pwd [--json]            Show current path (--json for RefStruct)
+
+Resource Details (show):
+  show [target] [--json]  Show resource details (request/response data)
+  show @rpc:abc           Show specific RPC details
+  show @ref:<name>        Show referenced resource details
+
+Reference Resolution (ref):
+  ref @this               Resolve current context to RefStruct
+  ref @last               Resolve latest session/RPC
+  ref @rpc:abc            Resolve specific RPC
+  ref @ref:<name>         Resolve saved reference
+  ref add <name> @...     Save a reference
+  ref ls                  List all user-defined references
+  ref rm <name>           Remove a reference
 
 Tool Commands:
   tool ls                 List tools on current connector
   tool show <name>        Show tool details (description, schema)
   send <name>             Call a tool interactively
-
-Reference Commands:
-  ref add <name> @this    Save current context as reference
-  ref add <name> @last    Save latest session/rpc
-  ref ls                  List all user-defined references
-  ref rm <name>           Remove a reference
+  send @last              Replay last RPC call
+  send @ref:<name>        Replay from saved reference
 
 Shell Commands:
   help [command]          Show help
@@ -420,10 +430,10 @@ ProofScan Commands:
   ${getAllowedCommands().join(', ')}
 
 Tips:
+  - @ is the dereference operator (e.g., @this, @last, @ref:<name>)
+  - show = resource details (data), ref = address resolution (RefStruct)
   - Press TAB for auto-completion
-  - Prompt shows: proofscan:/connector/session (proto)
-  - Commands auto-apply current context
-  - Use @ref:<name> to reference saved refs
+  - Use pipes: pwd --json | ref add myname
 `);
   }
 

@@ -272,11 +272,19 @@ export async function handleSend(
   const target = args.find(a => !a.startsWith('-'));
 
   if (!target) {
-    printError('Usage: send <tool-name> or send @last or send @rpc:<id>');
-    printInfo('Examples:');
-    printInfo('  send get_stock_info     Interactive tool call');
+    printError('Usage: send <tool-name> or send @<ref>');
+    printInfo('');
+    printInfo('Interactive tool call:');
+    printInfo('  send <tool-name>        Call a tool with interactive argument builder');
+    printInfo('');
+    printInfo('Replay mode (@ prefix):');
     printInfo('  send @last              Replay last RPC call');
-    printInfo('  send @rpc:abc123        Replay specific RPC');
+    printInfo('  send @rpc:<id>          Replay specific RPC');
+    printInfo('  send @ref:<name>        Replay from saved reference');
+    printInfo('');
+    printInfo('Options:');
+    printInfo('  --json                  Output result as JSON');
+    printInfo('  --dry-run               Show what would be sent, don\'t execute');
     return;
   }
 
