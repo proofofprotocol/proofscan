@@ -100,3 +100,4 @@ $ cd /home/user/webapp && pfscan --version
 - Initial global install failed due to permissions (EACCES error)
 - Successfully installed using sudo
 - proofscan CLI is operational and accessible via `pfscan` command
+- Credits: 10000 -> 9964 (Session 1 baseline cost)
