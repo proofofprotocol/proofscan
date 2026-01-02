@@ -10,9 +10,15 @@ such as Genspark.
 - Reproducibility over convenience
 
 ## Required Artifacts
-- pfscan view --json -> events.json
-- pfscan tree --json -> tree.json
-- RUNLOG.md updated
+Each validation session MUST produce the following artifacts
+inside a session-specific directory under `validation/`:
+
+- RUNLOG.md (command execution log)
+- events.json (pfscan view --json)
+- tree.json (pfscan tree --json)
+
+Directory format:
+validation/session-YYYY-MM-DD-<target>/
 
 ## Prohibited
 - Simulated outputs
@@ -25,5 +31,7 @@ such as Genspark.
 3. MCP server import
 4. scan start
 5. view/tree capture
-6. commit + push
+6. move artifacts under validation/session-YYYY-MM-DD-<target>/
+7. commit + push
+
 
