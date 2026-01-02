@@ -1,0 +1,35 @@
+[
+  {
+    "ts_ms": 1767357788745,
+    "kind": "notify",
+    "direction": "→",
+    "label": "[transport]",
+    "connector_id": "time",
+    "session_id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+    "status": "-",
+    "size_bytes": 69,
+    "raw_json": "{\"type\":\"connect_attempt\",\"command\":\"uvx\",\"args\":[\"mcp-server-time\"]}"
+  },
+  {
+    "ts_ms": 1767357788754,
+    "kind": "notify",
+    "direction": "←",
+    "label": "[transport]",
+    "connector_id": "time",
+    "session_id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+    "status": "-",
+    "size_bytes": 45,
+    "raw_json": "{\"type\":\"error\",\"message\":\"spawn uvx ENOENT\"}"
+  },
+  {
+    "ts_ms": 1767357788756,
+    "kind": "notify",
+    "direction": "→",
+    "label": "response",
+    "connector_id": "time",
+    "session_id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+    "status": "ERR",
+    "size_bytes": 48,
+    "raw_json": "{\"type\":\"scan_error\",\"error\":\"spawn uvx ENOENT\"}"
+  }
+]

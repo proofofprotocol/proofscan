@@ -101,3 +101,168 @@ $ cd /home/user/webapp && pfscan --version
 - Successfully installed using sudo
 - proofscan CLI is operational and accessible via `pfscan` command
 - Credits: 10000 -> 9964 (Session 1 baseline cost)
+
+---
+
+## Session: MCP Time Server Scan (Evidence Export)
+**Date**: 2026-01-02  
+**Environment**: Genspark Sandbox  
+**Purpose**: Import MCP time server config, run scan, and export evidence artifacts
+
+---
+
+## 1. Confirm Proofscan Installation
+
+### Check Proofscan Version
+```bash
+$ cd /home/user/webapp && pfscan --version
+0.9.1
+```
+**Exit Code**: 0
+
+---
+
+## 2. Import MCP Server Configuration
+
+### Import Time Server Config via stdin
+```bash
+$ cd /home/user/webapp && echo '{"mcpServers":{"time":{"command":"uvx","args":["mcp-server-time"]}}}' | pfscan connectors import --from mcpServers --stdin
+✓ Imported 1 connector(s): time
+```
+**Exit Code**: 0
+
+---
+
+## 3. Run Scan
+
+### Start Scan for Time Connector
+```bash
+$ cd /home/user/webapp && pfscan scan start --id time
+Scanning connector: time...
+✗ Scan failed!
+  Connector: time
+  Session: a83f1a79-4ddc-4bd6-9079-954715de1e3c
+  Error: spawn uvx ENOENT
+  Events: 3 recorded
+```
+**Exit Code**: 1
+
+---
+
+## 4. Export Evidence Artifacts
+
+### Export Events to JSON
+```bash
+$ cd /home/user/webapp && pfscan view --json --limit 200 > events.json
+```
+**Exit Code**: 0
+
+### Export Tree to JSON
+```bash
+$ cd /home/user/webapp && pfscan tree --json > tree.json
+```
+**Exit Code**: 0
+
+### Verify Exported Files
+```bash
+$ cd /home/user/webapp && ls -lh events.json tree.json
+-rw-r--r-- 1 user user 963 Jan  2 12:43 events.json
+-rw-r--r-- 1 user user 598 Jan  2 12:43 tree.json
+```
+**Exit Code**: 0
+
+---
+
+## Evidence Artifacts Content
+
+### events.json
+```json
+[
+  {
+    "ts_ms": 1767357788745,
+    "kind": "notify",
+    "direction": "→",
+    "label": "[transport]",
+    "connector_id": "time",
+    "session_id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+    "status": "-",
+    "size_bytes": 69,
+    "raw_json": "{\"type\":\"connect_attempt\",\"command\":\"uvx\",\"args\":[\"mcp-server-time\"]}"
+  },
+  {
+    "ts_ms": 1767357788754,
+    "kind": "notify",
+    "direction": "←",
+    "label": "[transport]",
+    "connector_id": "time",
+    "session_id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+    "status": "-",
+    "size_bytes": 45,
+    "raw_json": "{\"type\":\"error\",\"message\":\"spawn uvx ENOENT\"}"
+  },
+  {
+    "ts_ms": 1767357788756,
+    "kind": "notify",
+    "direction": "→",
+    "label": "response",
+    "connector_id": "time",
+    "session_id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+    "status": "ERR",
+    "size_bytes": 48,
+    "raw_json": "{\"type\":\"scan_error\",\"error\":\"spawn uvx ENOENT\"}"
+  }
+]
+```
+
+### tree.json
+```json
+[
+  {
+    "type": "connector",
+    "id": "time",
+    "label": "time",
+    "meta": {
+      "session_count": 1
+    },
+    "children": [
+      {
+        "type": "session",
+        "id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+        "label": "a83f1a79... (0 rpcs, 3 events)",
+        "meta": {
+          "connector_id": "time",
+          "started_at": "2026-01-02T12:43:08.722Z",
+          "ended_at": "2026-01-02T12:43:08.757Z",
+          "exit_reason": "error",
+          "duration_ms": 35,
+          "rpc_count": 0,
+          "event_count": 3
+        },
+        "children": []
+      }
+    ]
+  }
+]
+```
+
+---
+
+## Summary
+- **Proofscan Version**: 0.9.1
+- **Connector Imported**: time (uvx mcp-server-time)
+- **Session ID**: a83f1a79-4ddc-4bd6-9079-954715de1e3c
+- **Scan Status**: ❌ FAILED (spawn uvx ENOENT)
+- **Events Recorded**: 3
+- **Duration**: 35ms
+- **Artifacts Exported**: events.json (963 bytes), tree.json (598 bytes)
+
+---
+
+## Notes
+- Scan failed because `uvx` command is not available in the sandbox environment
+- Despite the failure, proofscan successfully recorded 3 events:
+  1. Connect attempt (transport notification)
+  2. Error notification (spawn uvx ENOENT)
+  3. Scan error response
+- Evidence artifacts were successfully exported as JSON
+- This validates proofscan's error handling and event recording capabilities

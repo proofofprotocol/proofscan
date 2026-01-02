@@ -1,0 +1,27 @@
+[
+  {
+    "type": "connector",
+    "id": "time",
+    "label": "time",
+    "meta": {
+      "session_count": 1
+    },
+    "children": [
+      {
+        "type": "session",
+        "id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+        "label": "a83f1a79... (0 rpcs, 3 events)",
+        "meta": {
+          "connector_id": "time",
+          "started_at": "2026-01-02T12:43:08.722Z",
+          "ended_at": "2026-01-02T12:43:08.757Z",
+          "exit_reason": "error",
+          "duration_ms": 35,
+          "rpc_count": 0,
+          "event_count": 3
+        },
+        "children": []
+      }
+    ]
+  }
+]
