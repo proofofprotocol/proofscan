@@ -1,0 +1,79 @@
+[
+  {
+    "type": "connector",
+    "id": "echo",
+    "label": "echo",
+    "meta": {
+      "session_count": 1
+    },
+    "children": [
+      {
+        "type": "session",
+        "id": "e697c7cb-eacc-403d-b428-6d40b7ab396b",
+        "label": "e697c7cb... (2 rpcs, 19 events)",
+        "meta": {
+          "connector_id": "echo",
+          "started_at": "2026-01-02T13:23:50.908Z",
+          "ended_at": "2026-01-02T13:23:57.611Z",
+          "exit_reason": "normal",
+          "duration_ms": 6703,
+          "rpc_count": 2,
+          "event_count": 19
+        },
+        "children": [
+          {
+            "type": "rpc",
+            "id": "2",
+            "label": "✓ tools/list (id=2, 24ms)",
+            "meta": {
+              "method": "tools/list",
+              "success": 1,
+              "error_code": null,
+              "latency_ms": 24,
+              "request_ts": "2026-01-02T13:23:57.583Z",
+              "response_ts": "2026-01-02T13:23:57.607Z"
+            }
+          },
+          {
+            "type": "rpc",
+            "id": "1",
+            "label": "✓ initialize (id=1, 6546ms)",
+            "meta": {
+              "method": "initialize",
+              "success": 1,
+              "error_code": null,
+              "latency_ms": 6546,
+              "request_ts": "2026-01-02T13:23:51.031Z",
+              "response_ts": "2026-01-02T13:23:57.577Z"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "connector",
+    "id": "time",
+    "label": "time",
+    "meta": {
+      "session_count": 1
+    },
+    "children": [
+      {
+        "type": "session",
+        "id": "a83f1a79-4ddc-4bd6-9079-954715de1e3c",
+        "label": "a83f1a79... (0 rpcs, 3 events)",
+        "meta": {
+          "connector_id": "time",
+          "started_at": "2026-01-02T12:43:08.722Z",
+          "ended_at": "2026-01-02T12:43:08.757Z",
+          "exit_reason": "error",
+          "duration_ms": 35,
+          "rpc_count": 0,
+          "event_count": 3
+        },
+        "children": []
+      }
+    ]
+  }
+]
