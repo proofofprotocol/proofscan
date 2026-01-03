@@ -47,6 +47,7 @@ import {
   createShellCommand,
   createSecretsCommand,
   createToolCommand,
+  createProxyCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -230,6 +231,9 @@ program.addCommand(secretCmd);
 // tool (Phase 4.4: CLI tool commands - ls, show, call)
 program.addCommand(createToolCommand(getConfigPath));
 
+// proxy (Phase 5.0: MCP Proxy server)
+program.addCommand(createProxyCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -243,7 +247,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'help'
+  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'help'
 ]);
 
 // Shell-only commands (not available as CLI commands)
