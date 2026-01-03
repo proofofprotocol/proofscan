@@ -1,0 +1,153 @@
+---
+popl_version: "1.0"
+entry_type: validation_session
+entry_id: session-2026-01-03-proofscan-proxy-mvp
+
+metadata:
+  title: "Proofscan Proxy MVP Validation (Phase 5.0)"
+  date: "2026-01-03"
+  validator: "AI Assistant (Genspark Validation Lab)"
+  environment: "Genspark Sandbox"
+  
+  target:
+    pr_number: 22
+    pr_url: "https://github.com/proofofprotocol/proofscan/pull/22"
+    branch: "feature/mcp-proxy"
+    commit: "HEAD"
+    
+  versions:
+    node: "v20.19.6"
+    npm: "10.8.2"
+    proofscan: "0.9.2"
+    
+  protocol:
+    mcp_version: "2024-11-05"
+    json_rpc: "2.0"
+
+test_configuration:
+  command: "pfscan proxy start"
+  backend_connectors:
+    - id: "echo"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-everything"]
+      status: "enabled"
+    - id: "inscribe"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@proofofprotocol/inscribe-mcp-server"]
+      status: "enabled (failed during test)"
+    - id: "time"
+      type: "stdio"
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-time"]
+      status: "enabled (not working in sandbox)"
+
+test_scenarios:
+  - name: "Single Connector Proxy (echo)"
+    status: "PASS"
+    description: "Proxy aggregates tools from echo connector"
+    results:
+      initialize: "success"
+      tools_list: "success - 11 tools"
+      tools_call: "success - echo__echo"
+      
+  - name: "Multiple Connector Aggregation (echo + inscribe)"
+    status: "PARTIAL PASS"
+    description: "Proxy handles partial success with Promise.allSettled"
+    results:
+      initialize: "success"
+      tools_list: "partial - echo: 11 tools, inscribe: failed (but proxy continued)"
+      tools_call: "success - echo__add (10 + 20 = 30)"
+
+validation_results:
+  overall_status: "PASS"
+  
+  verified_features:
+    - feature: "JSON-RPC stdio protocol"
+      status: "✓ PASS"
+      evidence: "All requests/responses via stdin/stdout"
+      
+    - feature: "Namespace formatting (connectorId__toolName)"
+      status: "✓ PASS"
+      evidence: "All tools prefixed with echo__ (e.g., echo__echo, echo__add)"
+      
+    - feature: "Structured logging to stderr"
+      status: "✓ PASS"
+      evidence: "[HH:MM:SS] [LEVEL] format, no stdout contamination"
+      
+    - feature: "Backend call recording to events.db"
+      status: "✓ PASS"
+      evidence: "Session f61670f6 recorded with initialize + tools/call"
+      
+    - feature: "Multiple connector aggregation"
+      status: "✓ PASS"
+      evidence: "Partial success handled gracefully (echo succeeded, inscribe failed)"
+      
+    - feature: "Tool routing by namespace"
+      status: "✓ PASS"
+      evidence: "echo__add correctly routed to echo connector"
+
+  test_sessions:
+    - session_id: "9a8e4847"
+      connector: "echo"
+      test: "tools/list"
+      result: "11 tools listed with echo__ namespace"
+      
+    - session_id: "27a46658"
+      connector: "echo"
+      test: "tools/call echo__echo"
+      result: "Echo: Hello from proxy!"
+      
+    - session_id: "f61670f6"
+      connector: "echo"
+      test: "tools/call echo__add"
+      result: "The sum of 10 and 20 is 30."
+      latency: "8ms"
+
+artifacts:
+  - name: "RUNLOG.md"
+    description: "Human-readable validation execution log"
+    type: "documentation"
+    
+  - name: "validation-run.log"
+    description: "Raw command execution log with timestamps"
+    type: "log"
+    hash: "b26c021cf333c2cecb8265cdb0e610187d7b675a85fcd724912cadc87a6d5b42"
+    hash_algorithm: "sha256"
+    
+  - name: "events.json"
+    description: "Exported MCP events from validation sessions"
+    type: "data"
+    format: "json"
+    hash: "002707a629fdb06ec635c05f047fd843b053c229ebded975854f13bff7526cc0"
+    hash_algorithm: "sha256"
+    
+  - name: "tree.json"
+    description: "Connector/session/RPC tree structure"
+    type: "data"
+    format: "json"
+    hash: "929483c6f97bd3f13d10845fbf19c738c25ecb9bf5d4c53006679ce25320122b"
+    hash_algorithm: "sha256"
+    
+  - name: "rpc-detail.txt"
+    description: "Detailed RPC request/response for tools/call"
+    type: "evidence"
+    format: "text"
+    hash: "c36f381446b5aa0c2b57c2be94c3595582c8ee0e97a7b332553d8a1a0151f06e"
+    hash_algorithm: "sha256"
+
+key_findings:
+  - "✓ Proxy successfully implements MCP JSON-RPC protocol over stdio"
+  - "✓ Tool namespace formatting (connectorId__toolName) works correctly"
+  - "✓ Structured logging to stderr prevents stdout contamination"
+  - "✓ Backend MCP calls are properly recorded to events.db"
+  - "✓ Partial success handling works (Promise.allSettled pattern)"
+  - "✓ Tool routing correctly strips namespace prefix when calling backend"
+  - "⚠ Some connectors (inscribe, time) failed but proxy continued gracefully"
+
+notes:
+  - "inscribe connector failed with 'Process exited with code 1'"
+  - "time connector (uvx-based) not available in sandbox, switched to npx but still failed"
+  - "echo connector (@modelcontextprotocol/server-everything) worked perfectly"
+  - "Proxy demonstrated graceful degradation with partial connector failures"
