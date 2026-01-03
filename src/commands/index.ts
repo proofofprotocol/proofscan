@@ -30,3 +30,6 @@ export * from './secrets.js';
 
 // Phase 4.4: Tool CLI commands
 export * from './tool.js';
+
+// Phase 5.0: MCP Proxy
+export * from './proxy.js';
