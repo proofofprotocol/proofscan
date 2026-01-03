@@ -27,3 +27,6 @@ export * from './shell.js';
 
 // Phase 3.6: Secrets management
 export * from './secrets.js';
+
+// Phase 4.4: Tool CLI commands
+export * from './tool.js';

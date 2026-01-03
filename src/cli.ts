@@ -46,6 +46,7 @@ import {
   createDoctorCommand,
   createShellCommand,
   createSecretsCommand,
+  createToolCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -72,6 +73,7 @@ Common Commands:
   rpc           View RPC call details (list, show)
   summary       Show session summary
   permissions   Show permission stats per category
+  tool          MCP tool operations (ls, show, call)
 
 Management:
   archive, a    Archive and prune old data
@@ -79,9 +81,6 @@ Management:
   connectors    Connector management
   secrets       Secret management (list, set, edit, prune, export, import)
   doctor        Diagnose and fix database issues
-
-Shell-only Commands (run: pfscan shell):
-  tool ls | tool show <name> | send <name>
 
 Shortcuts:
   v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
@@ -93,6 +92,8 @@ Examples:
   pfscan view --pairs         # View request/response pairs
   pfscan tree                 # Show structure overview
   pfscan scan start mcp       # Start scanning connector 'mcp'
+  pfscan tool ls mcp          # List tools on connector
+  pfscan tool call mcp echo --args '{"msg":"hi"}'
 `;
 
 program
@@ -226,6 +227,9 @@ const secretCmd = createSecretsCommand(getConfigPath);
 secretCmd.name('secret').description('Alias for secrets');
 program.addCommand(secretCmd);
 
+// tool (Phase 4.4: CLI tool commands - ls, show, call)
+program.addCommand(createToolCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -239,11 +243,11 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'help'
+  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'help'
 ]);
 
 // Shell-only commands (not available as CLI commands)
-const SHELL_ONLY_COMMANDS = new Set(['tool', 'send']);
+const SHELL_ONLY_COMMANDS = new Set(['send']);
 
 /**
  * Check if no subcommand is provided (only options like --config, --json)

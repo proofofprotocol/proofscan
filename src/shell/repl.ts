@@ -276,7 +276,18 @@ export class ShellRepl {
     }
 
     // Handle tool commands (shell-native)
+    // 'tool call' is an alias for 'send' (CLI/shell command unification)
     if (command === 'tool') {
+      if (args[0] === 'call') {
+        // tool call <tool-name> [...] → handleSend(<tool-name>, [...])
+        if (!this.rl) {
+          printError('Shell not initialized');
+          return;
+        }
+        const sendArgs = args.slice(1); // Remove 'call' from args
+        await handleSend(sendArgs, this.context, this.configPath, this.rl);
+        return;
+      }
       await handleTool(args, this.context, this.configPath);
       return;
     }
