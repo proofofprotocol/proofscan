@@ -20,7 +20,53 @@ import {
   formatInputSchema,
   type ToolContext,
 } from '../tools/adapter.js';
+import type { Connector } from '../types/index.js';
 import { output, getOutputOptions } from '../utils/output.js';
+
+/** Default stdin read timeout in milliseconds */
+const STDIN_TIMEOUT_MS = 5000;
+
+/** Minimum allowed timeout in seconds */
+const MIN_TIMEOUT_SEC = 1;
+
+/** Maximum allowed timeout in seconds */
+const MAX_TIMEOUT_SEC = 300;
+
+/**
+ * Parse and validate timeout value
+ */
+function parseTimeout(timeoutStr: string): number {
+  const timeout = parseInt(timeoutStr, 10);
+  if (isNaN(timeout) || timeout < MIN_TIMEOUT_SEC || timeout > MAX_TIMEOUT_SEC) {
+    throw new Error(`Invalid timeout: must be ${MIN_TIMEOUT_SEC}-${MAX_TIMEOUT_SEC} seconds`);
+  }
+  return timeout;
+}
+
+/**
+ * Validate and get connector, with proper error messages
+ */
+async function validateConnector(
+  getConfigPath: () => string,
+  connectorId: string
+): Promise<{ connector: Connector; configDir: string }> {
+  const manager = new ConfigManager(getConfigPath());
+  const configDir = manager.getConfigDir();
+  const connector = await getConnector(getConfigPath(), connectorId);
+
+  if (!connector) {
+    console.error(`Connector not found: ${connectorId}`);
+    process.exit(1);
+  }
+
+  if (!connector.enabled) {
+    console.error(`Connector is disabled: ${connectorId}`);
+    console.error(`Enable it with: pfscan connectors enable --id ${connectorId}`);
+    process.exit(1);
+  }
+
+  return { connector, configDir };
+}
 
 /**
  * Read arguments from various sources
@@ -40,27 +86,52 @@ async function resolveArgs(options: {
   }
 
   if (options.argsFile) {
+    // Validate file exists and is readable
+    if (!fs.existsSync(options.argsFile)) {
+      throw new Error(`File not found: ${options.argsFile}`);
+    }
+    const stat = fs.statSync(options.argsFile);
+    if (!stat.isFile()) {
+      throw new Error(`Not a file: ${options.argsFile}`);
+    }
     try {
       const content = fs.readFileSync(options.argsFile, 'utf-8');
       return JSON.parse(content);
     } catch (e) {
+      if (e instanceof SyntaxError) {
+        throw new Error(`Invalid JSON in file ${options.argsFile}: ${e.message}`);
+      }
       throw new Error(`Failed to read --args-file: ${e instanceof Error ? e.message : e}`);
     }
   }
 
   if (options.stdin) {
+    // Check if stdin is a TTY (no pipe)
+    if (process.stdin.isTTY) {
+      throw new Error('--stdin requires piped input (e.g., echo \'{"key":"value"}\' | pfscan tool call ...)');
+    }
+
     return new Promise((resolve, reject) => {
       let data = '';
+      const timeoutId = setTimeout(() => {
+        process.stdin.destroy();
+        reject(new Error(`Timeout reading from stdin after ${STDIN_TIMEOUT_MS}ms`));
+      }, STDIN_TIMEOUT_MS);
+
       process.stdin.setEncoding('utf-8');
       process.stdin.on('data', (chunk) => { data += chunk; });
       process.stdin.on('end', () => {
+        clearTimeout(timeoutId);
         try {
           resolve(JSON.parse(data || '{}'));
         } catch (e) {
           reject(new Error(`Invalid JSON from stdin: ${e instanceof Error ? e.message : e}`));
         }
       });
-      process.stdin.on('error', reject);
+      process.stdin.on('error', (err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      });
     });
   }
 
@@ -72,6 +143,7 @@ async function resolveArgs(options: {
  * Truncate string to max length
  */
 function truncate(str: string, maxLen: number): string {
+  if (maxLen < 4) return str.slice(0, maxLen);
   if (str.length <= maxLen) return str;
   return str.slice(0, maxLen - 3) + '...';
 }
@@ -89,20 +161,8 @@ export function createToolCommand(getConfigPath: () => string): Command {
     .option('--timeout <sec>', 'Timeout in seconds', '30')
     .action(async (connectorId: string, options: { timeout: string }) => {
       try {
-        const manager = new ConfigManager(getConfigPath());
-        const configDir = manager.getConfigDir();
-        const connector = await getConnector(getConfigPath(), connectorId);
-
-        if (!connector) {
-          console.error(`Connector not found: ${connectorId}`);
-          process.exit(1);
-        }
-
-        if (!connector.enabled) {
-          console.error(`Connector is disabled: ${connectorId}`);
-          console.error(`Enable it with: pfscan connectors enable --id ${connectorId}`);
-          process.exit(1);
-        }
+        const timeout = parseTimeout(options.timeout);
+        const { connector, configDir } = await validateConnector(getConfigPath, connectorId);
 
         const ctx: ToolContext = {
           connectorId,
@@ -110,7 +170,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
         };
 
         const result = await listTools(ctx, connector, {
-          timeout: parseInt(options.timeout, 10),
+          timeout,
         });
 
         if (result.error) {
@@ -179,19 +239,8 @@ export function createToolCommand(getConfigPath: () => string): Command {
     .option('--timeout <sec>', 'Timeout in seconds', '30')
     .action(async (connectorId: string, toolName: string, options: { timeout: string }) => {
       try {
-        const manager = new ConfigManager(getConfigPath());
-        const configDir = manager.getConfigDir();
-        const connector = await getConnector(getConfigPath(), connectorId);
-
-        if (!connector) {
-          console.error(`Connector not found: ${connectorId}`);
-          process.exit(1);
-        }
-
-        if (!connector.enabled) {
-          console.error(`Connector is disabled: ${connectorId}`);
-          process.exit(1);
-        }
+        const timeout = parseTimeout(options.timeout);
+        const { connector, configDir } = await validateConnector(getConfigPath, connectorId);
 
         const ctx: ToolContext = {
           connectorId,
@@ -199,7 +248,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
         };
 
         const result = await getTool(ctx, connector, toolName, {
-          timeout: parseInt(options.timeout, 10),
+          timeout,
         });
 
         if (result.error) {
@@ -295,28 +344,16 @@ export function createToolCommand(getConfigPath: () => string): Command {
       }
     ) => {
       try {
-        const manager = new ConfigManager(getConfigPath());
-        const configDir = manager.getConfigDir();
-        const connector = await getConnector(getConfigPath(), connectorId);
+        const timeout = parseTimeout(options.timeout);
 
-        if (!connector) {
-          console.error(`Connector not found: ${connectorId}`);
-          process.exit(1);
-        }
-
-        if (!connector.enabled) {
-          console.error(`Connector is disabled: ${connectorId}`);
-          process.exit(1);
-        }
-
-        // Resolve arguments
+        // Resolve arguments first (before connector validation for dry-run)
         const args = await resolveArgs({
           args: options.args,
           argsFile: options.argsFile,
           stdin: options.stdin,
         });
 
-        // Dry run - show what would be sent
+        // Dry run - show what would be sent (no connector validation needed)
         if (options.dryRun) {
           if (getOutputOptions().json) {
             output({
@@ -336,13 +373,15 @@ export function createToolCommand(getConfigPath: () => string): Command {
           return;
         }
 
+        const { connector, configDir } = await validateConnector(getConfigPath, connectorId);
+
         const ctx: ToolContext = {
           connectorId,
           configDir,
         };
 
         const result = await callTool(ctx, connector, toolName, args, {
-          timeout: parseInt(options.timeout, 10),
+          timeout,
         });
 
         if (getOutputOptions().json) {
