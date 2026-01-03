@@ -8,6 +8,9 @@ import type { ToolInfo } from '../tools/adapter.js';
 /** Namespace separator for tool names */
 export const NAMESPACE_SEPARATOR = '__';
 
+/** Default timeout in seconds for backend calls */
+export const DEFAULT_TIMEOUT = 30;
+
 /** Proxy startup options */
 export interface ProxyOptions {
   /** Connectors to expose through the proxy */
@@ -16,6 +19,8 @@ export interface ProxyOptions {
   configDir: string;
   /** Enable verbose logging */
   verbose?: boolean;
+  /** Timeout in seconds for backend calls (default: 30) */
+  timeout?: number;
 }
 
 /** MCP JSON-RPC error codes */

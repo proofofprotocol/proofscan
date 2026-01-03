@@ -22,9 +22,11 @@ export function createProxyCommand(getConfigPath: () => string): Command {
     .description('Start MCP proxy server (stdio)')
     .option('--connectors <ids>', 'Connector IDs to expose (comma-separated)')
     .option('--all', 'Expose all enabled connectors')
+    .option('--timeout <seconds>', 'Timeout for backend calls in seconds (default: 30)', '30')
     .action(async (options: {
       connectors?: string;
       all?: boolean;
+      timeout: string;
     }) => {
       // Set up logging - use global verbose option from CLI
       const globalOpts = getOutputOptions();
@@ -99,11 +101,19 @@ export function createProxyCommand(getConfigPath: () => string): Command {
         logger.info(`Using ${connectors.length} connector(s): ${connectors.map(c => c.id).join(', ')}`);
       }
 
+      // Parse timeout
+      const timeout = parseInt(options.timeout, 10);
+      if (isNaN(timeout) || timeout < 1 || timeout > 300) {
+        logger.error('Invalid timeout: must be 1-300 seconds');
+        process.exit(1);
+      }
+
       // Create and start server
       const server = new McpProxyServer({
         connectors,
         configDir,
         verbose: globalOpts.verbose,
+        timeout,
       });
 
       // Handle signals for graceful shutdown

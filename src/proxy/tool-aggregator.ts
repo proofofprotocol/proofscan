@@ -10,6 +10,7 @@ import { listTools, type ToolInfo } from '../tools/adapter.js';
 import { logger } from './logger.js';
 import {
   NAMESPACE_SEPARATOR,
+  DEFAULT_TIMEOUT,
   type ProxyOptions,
   type NamespacedTool,
   type ParsedNamespace,
@@ -21,10 +22,12 @@ import {
 export class ToolAggregator {
   private readonly connectors: Connector[];
   private readonly configDir: string;
+  private readonly timeout: number;
 
   constructor(options: ProxyOptions) {
     this.connectors = options.connectors;
     this.configDir = options.configDir;
+    this.timeout = options.timeout ?? DEFAULT_TIMEOUT;
   }
 
   /**
@@ -44,7 +47,7 @@ export class ToolAggregator {
           configDir: this.configDir,
         };
 
-        const result = await listTools(ctx, connector, { timeout: 30 });
+        const result = await listTools(ctx, connector, { timeout: this.timeout });
 
         if (result.error) {
           throw new Error(result.error);
@@ -82,8 +85,19 @@ export class ToolAggregator {
 
   /**
    * Add namespace prefix to a tool
+   *
+   * Warns if connector ID or tool name contains the namespace separator,
+   * as this can cause ambiguous parsing.
    */
   private addNamespace(connectorId: string, tool: ToolInfo): NamespacedTool {
+    // Warn about potential namespace collisions
+    if (connectorId.includes(NAMESPACE_SEPARATOR)) {
+      logger.warn(`Connector ID contains separator '${NAMESPACE_SEPARATOR}': ${connectorId}`);
+    }
+    if (tool.name.includes(NAMESPACE_SEPARATOR)) {
+      logger.warn(`Tool name contains separator '${NAMESPACE_SEPARATOR}': ${tool.name} in ${connectorId}`);
+    }
+
     return {
       ...tool,
       connectorId,

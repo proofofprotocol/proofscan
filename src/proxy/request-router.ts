@@ -7,7 +7,7 @@
 
 import { callTool } from '../tools/adapter.js';
 import { logger } from './logger.js';
-import type { ProxyOptions, RouteResult } from './types.js';
+import { DEFAULT_TIMEOUT, type ProxyOptions, type RouteResult } from './types.js';
 import { ToolAggregator } from './tool-aggregator.js';
 
 /**
@@ -16,10 +16,12 @@ import { ToolAggregator } from './tool-aggregator.js';
 export class RequestRouter {
   private readonly aggregator: ToolAggregator;
   private readonly configDir: string;
+  private readonly timeout: number;
 
   constructor(options: ProxyOptions, aggregator: ToolAggregator) {
     this.aggregator = aggregator;
     this.configDir = options.configDir;
+    this.timeout = options.timeout ?? DEFAULT_TIMEOUT;
   }
 
   /**
@@ -74,7 +76,7 @@ export class RequestRouter {
 
     try {
       const result = await callTool(ctx, connector, toolName, args, {
-        timeout: 30,
+        timeout: this.timeout,
       });
 
       if (result.success) {

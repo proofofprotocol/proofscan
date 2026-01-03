@@ -32,6 +32,9 @@ const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'proofscan-proxy';
 const SERVER_VERSION = '0.7.0';
 
+/** Maximum buffer size in bytes (1MB) - prevents memory exhaustion attacks */
+const MAX_BUFFER_SIZE = 1024 * 1024;
+
 /**
  * MCP Proxy Server
  *
@@ -97,6 +100,15 @@ export class McpProxyServer extends EventEmitter {
    */
   private handleData(chunk: string): void {
     this.buffer += chunk;
+
+    // Prevent memory exhaustion from large messages without newlines
+    if (this.buffer.length > MAX_BUFFER_SIZE) {
+      logger.error(`Buffer overflow: ${this.buffer.length} bytes exceeds ${MAX_BUFFER_SIZE}`);
+      this.sendError(null, MCP_ERROR.INVALID_REQUEST, 'Message too large');
+      this.buffer = '';
+      return;
+    }
+
     this.processBuffer();
   }
 
@@ -129,7 +141,9 @@ export class McpProxyServer extends EventEmitter {
       this.buffer = this.buffer.slice(newlineIndex + 1);
 
       if (line) {
-        this.processMessage(line);
+        this.processMessage(line).catch((err) => {
+          logger.error(`Message processing error: ${err instanceof Error ? err.message : err}`);
+        });
       }
     }
   }
@@ -188,6 +202,11 @@ export class McpProxyServer extends EventEmitter {
    * Handle a JSON-RPC request (requires response)
    */
   private async handleRequest(request: JsonRpcRequest): Promise<void> {
+    // Check if server is still running (prevents race condition on shutdown)
+    if (!this.running) {
+      return;
+    }
+
     const { id, method, params } = request;
 
     logger.info(`Request: ${method}`);
