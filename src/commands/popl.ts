@@ -98,7 +98,6 @@ async function resolveEntryId(
   cwd: string,
   idOrPrefix: string
 ): Promise<{ success: true; entryId: string; entryPath: string } | { success: false; error: string; candidates?: string[] }> {
-  const entriesDir = getPoplEntriesDir(cwd);
   const entries = await listPoplEntries(cwd);
 
   // Exact match first
