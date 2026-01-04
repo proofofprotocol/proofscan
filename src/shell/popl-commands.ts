@@ -197,7 +197,7 @@ export async function handlePopl(
       await handlePoplList(subArgs);
       break;
     case 'show':
-      await handlePoplShow(subArgs);
+      await handlePoplShow(subArgs, configPath);
       break;
     default:
       // Check if it's a direct @reference (popl @last)
@@ -220,7 +220,7 @@ function printPoplHelp(): void {
   printInfo('  popl init                  Initialize .popl in current directory');
   printInfo('  popl session [@ref]        Create POPL entry for session');
   printInfo('  popl ls [-s|--oneline]     List POPL entries');
-  printInfo('  popl show <id> [view]      Show POPL entry or artifact');
+  printInfo('  popl show <id|@ref> [view] Show POPL entry or artifact');
   printInfo('');
   printInfo('Views for show command:');
   printInfo('  popl, status, rpc, log     (default: popl)');
@@ -230,12 +230,17 @@ function printPoplHelp(): void {
   printInfo('  popl @last               Create entry for latest session');
   printInfo('  popl @ref:name           Create entry for named reference');
   printInfo('');
+  printInfo('Options for session:');
+  printInfo('  --json                   Output JSON for piping');
+  printInfo('  --title <title>          Set custom title');
+  printInfo('');
   printInfo('Examples:');
   printInfo('  popl init');
   printInfo('  popl ls --oneline');
   printInfo('  popl show 01JG status');
-  printInfo('  popl show 01JGTEST123 rpc');
   printInfo('  popl session @last --title "My audit"');
+  printInfo('  popl @last --json | ref add myentry');
+  printInfo('  popl show @ref:myentry');
 }
 
 /**
@@ -264,6 +269,11 @@ async function handlePoplInit(): Promise<void> {
 
 /**
  * Handle 'popl session' command with @reference resolution
+ *
+ * Options:
+ * - --json: Output JSON only (for piping to ref add)
+ * - --title <title>: Set custom title
+ * - --unsafe-include-raw: Include unsanitized artifacts
  */
 async function handlePoplSession(
   args: string[],
@@ -285,6 +295,7 @@ async function handlePoplSession(
   let refArg: string | undefined;
   let title: string | undefined;
   let unsafeIncludeRaw = false;
+  let jsonOutput = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -292,6 +303,8 @@ async function handlePoplSession(
       title = args[++i];
     } else if (arg === '--unsafe-include-raw') {
       unsafeIncludeRaw = true;
+    } else if (arg === '--json') {
+      jsonOutput = true;
     } else if (arg.startsWith('@') || !arg.startsWith('-')) {
       refArg = arg;
     }
@@ -318,14 +331,22 @@ async function handlePoplSession(
     const resolved = resolver.resolve(refArg, context);
 
     if (!resolved.success || !resolved.ref) {
-      printError(`Failed to resolve reference: ${resolved.error || 'unknown error'}`);
+      if (jsonOutput) {
+        console.log(JSON.stringify({ error: resolved.error || 'unknown error' }));
+      } else {
+        printError(`Failed to resolve reference: ${resolved.error || 'unknown error'}`);
+      }
       return;
     }
 
     // Must have a session
     if (!resolved.ref.session) {
-      printError(`Reference does not point to a session: ${refArg}`);
-      printInfo('POPL entries require a session. Use @last or cd into a session first.');
+      if (jsonOutput) {
+        console.log(JSON.stringify({ error: `Reference does not point to a session: ${refArg}` }));
+      } else {
+        printError(`Reference does not point to a session: ${refArg}`);
+        printInfo('POPL entries require a session. Use @last or cd into a session first.');
+      }
       return;
     }
 
@@ -336,7 +357,9 @@ async function handlePoplSession(
   }
 
   // Create POPL entry using service layer
-  printInfo(`Creating POPL entry for session: ${sessionId.slice(0, 8)}...`);
+  if (!jsonOutput) {
+    printInfo(`Creating POPL entry for session: ${sessionId.slice(0, 8)}...`);
+  }
 
   const result = await createSessionPoplEntry(sessionId, configDir, {
     outputRoot: cwd,
@@ -345,7 +368,22 @@ async function handlePoplSession(
   });
 
   if (!result.success) {
-    printError(`Failed to create POPL entry: ${result.error}`);
+    if (jsonOutput) {
+      console.log(JSON.stringify({ error: result.error }));
+    } else {
+      printError(`Failed to create POPL entry: ${result.error}`);
+    }
+    return;
+  }
+
+  // JSON output for piping (no local absolute paths for public ledger safety)
+  if (jsonOutput) {
+    const output = {
+      kind: 'popl',
+      entry_id: result.entryId,
+      target: `popl/${result.entryId}`,
+    };
+    console.log(JSON.stringify(output));
     return;
   }
 
@@ -421,12 +459,18 @@ async function handlePoplList(args: string[]): Promise<void> {
 
 /**
  * Handle 'popl show' command
+ *
+ * Supports:
+ * - popl show <entry-id>       : Direct entry ID (with prefix matching)
+ * - popl show <id> [view]      : Show specific artifact view
+ * - popl show @ref:<name>      : Resolve ref to POPL entry
+ * - popl show @popl:<id>       : Explicit POPL reference
  */
-async function handlePoplShow(args: string[]): Promise<void> {
+async function handlePoplShow(args: string[], configPath: string): Promise<void> {
   const cwd = process.cwd();
 
   if (args.length === 0) {
-    printError('Usage: popl show <entry-id> [view]');
+    printError('Usage: popl show <entry-id|@ref:name> [view]');
     printInfo('Views: popl, status, rpc, log');
     return;
   }
@@ -436,9 +480,39 @@ async function handlePoplShow(args: string[]): Promise<void> {
     return;
   }
 
-  // Parse arguments: <entry-id> [view]
-  const entryIdArg = args[0];
+  // Parse arguments: <entry-id|@ref> [view]
+  let entryIdArg = args[0];
   const view = args.length > 1 ? args[1].toLowerCase() : undefined;
+
+  // Check if it's a @ref:<name> or @popl:<id> reference
+  if (isRef(entryIdArg)) {
+    const manager = new ConfigManager(configPath);
+    const eventsStore = new EventsStore(manager.getConfigDir());
+    const dataProvider = createRefDataProvider(eventsStore);
+    const resolver = new RefResolver(dataProvider);
+
+    const result = resolver.resolve(entryIdArg, {});
+
+    if (!result.success || !result.ref) {
+      printError(`Failed to resolve reference: ${result.error || 'unknown error'}`);
+      return;
+    }
+
+    // Must be a popl kind reference
+    if (result.ref.kind !== 'popl') {
+      printError(`Reference is not a POPL entry: ${entryIdArg}`);
+      printInfo(`Reference kind: ${result.ref.kind}`);
+      return;
+    }
+
+    // Get entry_id from the resolved ref
+    if (!result.ref.entry_id) {
+      printError(`Reference does not have a POPL entry ID: ${entryIdArg}`);
+      return;
+    }
+
+    entryIdArg = result.ref.entry_id;
+  }
 
   // Validate view if provided
   if (view && !VALID_VIEWS.includes(view)) {

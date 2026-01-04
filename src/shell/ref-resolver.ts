@@ -18,8 +18,9 @@ import { getContextLevel, type ContextLevel } from './router-commands.js';
 
 /**
  * Reference kind - what type of entity the reference points to
+ * Note: 'popl' kind stores POPL entry ID - target format is 'popl/<entry_id>'
  */
-export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context';
+export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context' | 'popl';
 
 /**
  * RefStruct - The universal reference structure
@@ -44,6 +45,10 @@ export interface RefStruct {
   captured_at?: string;
   /** Original reference string (e.g., "@this", "@rpc:abc123") */
   source?: string;
+  /** Target path for popl kind (e.g., "popl/<entry_id>") - no local absolute paths */
+  target?: string;
+  /** POPL entry ID (for kind='popl') */
+  entry_id?: string;
 }
 
 /**
@@ -51,8 +56,8 @@ export interface RefStruct {
  */
 export interface ParsedRef {
   /** Reference type */
-  type: 'this' | 'last' | 'rpc' | 'session' | 'fav' | 'ref' | 'literal';
-  /** Optional identifier (e.g., RPC ID, favorite name) */
+  type: 'this' | 'last' | 'rpc' | 'session' | 'fav' | 'ref' | 'popl' | 'literal';
+  /** Optional identifier (e.g., RPC ID, favorite name, POPL entry ID) */
   id?: string;
   /** Original input string */
   raw: string;
@@ -138,6 +143,8 @@ export function parseRef(input: string): ParsedRef {
       return { type: 'fav', id: refId, raw: input };
     case 'ref':
       return { type: 'ref', id: refId, raw: input };
+    case 'popl':
+      return { type: 'popl', id: refId, raw: input };
     default:
       // Unknown type - treat as literal
       return { type: 'literal', raw: input };
@@ -364,6 +371,31 @@ export class RefResolver {
   }
 
   /**
+   * Resolve @popl:<id> to POPL entry reference
+   * Note: This creates a RefStruct directly without DB lookup
+   * The actual POPL entry existence check is done by the caller
+   */
+  resolvePopl(entryId: string): ResolveResult {
+    if (!entryId) {
+      return {
+        success: false,
+        error: 'POPL reference requires an entry ID',
+      };
+    }
+
+    return {
+      success: true,
+      ref: {
+        kind: 'popl',
+        entry_id: entryId,
+        target: `popl/${entryId}`,
+        captured_at: new Date().toISOString(),
+        source: `@popl:${entryId}`,
+      },
+    };
+  }
+
+  /**
    * Resolve any reference string
    */
   resolve(input: string, context: ShellContext): ResolveResult {
@@ -394,6 +426,11 @@ export class RefResolver {
           return { success: false, error: 'User reference requires a name' };
         }
         return this.resolveUserRef(parsed.id);
+      case 'popl':
+        if (!parsed.id) {
+          return { success: false, error: 'POPL reference requires an entry ID' };
+        }
+        return this.resolvePopl(parsed.id);
       case 'literal':
         return {
           success: false,
@@ -425,7 +462,10 @@ export class RefResolver {
 
       // Replace with the most specific ID from the ref
       const ref = result.ref!;
-      if (ref.rpc) {
+      if (ref.entry_id) {
+        // For popl refs, use entry_id
+        resolved.push(ref.entry_id);
+      } else if (ref.rpc) {
         resolved.push(ref.rpc);
       } else if (ref.session) {
         resolved.push(ref.session);
@@ -483,12 +523,29 @@ export function refToJson(ref: RefStruct): string {
 
 /**
  * Parse RefStruct from JSON string
+ * Also supports popl-style JSON with target field
  */
 export function refFromJson(json: string): RefStruct | null {
   try {
     const parsed = JSON.parse(json);
-    // Validate required fields
-    if (!parsed.kind || !['connector', 'session', 'rpc', 'tool_call', 'context'].includes(parsed.kind)) {
+
+    // Check for popl-style JSON: { kind?: 'popl', target: 'popl/<id>', entry_id?: '<id>' }
+    if (parsed.target && typeof parsed.target === 'string') {
+      const targetMatch = parsed.target.match(/^popl\/(.+)$/);
+      if (targetMatch) {
+        const entryId = targetMatch[1];
+        return {
+          kind: 'popl',
+          entry_id: parsed.entry_id || entryId,
+          target: parsed.target,
+          captured_at: parsed.captured_at || new Date().toISOString(),
+        };
+      }
+    }
+
+    // Validate required fields for standard refs
+    const validKinds = ['connector', 'session', 'rpc', 'tool_call', 'context', 'popl'];
+    if (!parsed.kind || !validKinds.includes(parsed.kind)) {
       return null;
     }
     return parsed as RefStruct;
@@ -506,7 +563,7 @@ export function createRefDataProvider(eventsStore: {
   getLatestRpc(sessionId: string): { rpc_id: string; method: string } | null;
   getRpcById(rpcId: string, sessionId?: string): { rpc_id: string; session_id: string; method: string } | null;
   getSessionByPrefix(prefix: string, connectorId?: string): { session_id: string; connector_id: string } | null;
-  getUserRef(name: string): { kind: RefKind; connector: string | null; session: string | null; rpc: string | null; proto: string | null; level: string | null; captured_at: string } | null;
+  getUserRef(name: string): { kind: RefKind; connector: string | null; session: string | null; rpc: string | null; proto: string | null; level: string | null; captured_at: string; entry_id?: string | null; target?: string | null } | null;
 }): RefDataProvider {
   return {
     getLatestSession: (connectorId?: string) => eventsStore.getLatestSession(connectorId),
@@ -516,6 +573,17 @@ export function createRefDataProvider(eventsStore: {
     getUserRef: (name: string) => {
       const ref = eventsStore.getUserRef(name);
       if (!ref) return null;
+
+      // For popl kind, include entry_id and target
+      if (ref.kind === 'popl') {
+        return {
+          kind: ref.kind,
+          entry_id: ref.entry_id || undefined,
+          target: ref.target || undefined,
+          captured_at: ref.captured_at,
+        };
+      }
+
       return {
         kind: ref.kind,
         connector: ref.connector || undefined,

@@ -428,6 +428,11 @@ export class EventsStore {
 
   /**
    * Save or update a user-defined reference
+   *
+   * For popl kind refs:
+   * - entry_id is stored in connector field
+   * - target is stored in session field
+   * This avoids DB schema changes while maintaining backwards compatibility.
    */
   saveUserRef(
     name: string,
@@ -439,18 +444,30 @@ export class EventsStore {
       proto?: string;
       level?: string;
       captured_at?: string;
+      /** For popl kind: POPL entry ID */
+      entry_id?: string;
+      /** For popl kind: target path (e.g., 'popl/<entry_id>') */
+      target?: string;
     }
   ): UserRef {
+    // For popl kind, store entry_id in connector and target in session
+    // Use nullish coalescing (??) to preserve empty strings if explicitly set
+    const connector = ref.kind === 'popl' ? (ref.entry_id ?? null) : (ref.connector ?? null);
+    const session = ref.kind === 'popl' ? (ref.target ?? null) : (ref.session ?? null);
+
     const userRef: UserRef = {
       name,
       kind: ref.kind,
-      connector: ref.connector || null,
-      session: ref.session || null,
-      rpc: ref.rpc || null,
-      proto: ref.proto || null,
-      level: ref.level || null,
+      connector,
+      session,
+      rpc: ref.rpc ?? null,
+      proto: ref.proto ?? null,
+      level: ref.level ?? null,
       captured_at: ref.captured_at || new Date().toISOString(),
       created_at: new Date().toISOString(),
+      // Virtual fields for popl kind (reconstructed in getUserRef)
+      target: ref.kind === 'popl' ? (ref.target ?? null) : null,
+      entry_id: ref.kind === 'popl' ? (ref.entry_id ?? null) : null,
     };
 
     // Use INSERT ... ON CONFLICT: created_at NOT in UPDATE SET, so original is preserved on conflict
@@ -470,8 +487,8 @@ export class EventsStore {
     stmt.run(
       userRef.name,
       userRef.kind,
-      userRef.connector,
-      userRef.session,
+      connector,
+      session,
       userRef.rpc,
       userRef.proto,
       userRef.level,
@@ -484,10 +501,33 @@ export class EventsStore {
 
   /**
    * Get a user-defined reference by name
+   *
+   * For popl kind refs, reconstructs entry_id and target from stored fields:
+   * - entry_id from connector field
+   * - target from session field
    */
   getUserRef(name: string): UserRef | null {
     const stmt = this.db.prepare(`SELECT * FROM user_refs WHERE name = ?`);
-    return stmt.get(name) as UserRef | null;
+    const row = stmt.get(name) as UserRef | null;
+    if (!row) return null;
+
+    // For popl kind, restore entry_id and target
+    if (row.kind === 'popl') {
+      return {
+        ...row,
+        entry_id: row.connector, // entry_id was stored in connector
+        target: row.session,     // target was stored in session
+        connector: null,         // Clear connector for popl refs
+        session: null,           // Clear session for popl refs
+      };
+    }
+
+    // For non-popl refs, add null entry_id and target
+    return {
+      ...row,
+      entry_id: null,
+      target: null,
+    };
   }
 
   /**
@@ -501,10 +541,29 @@ export class EventsStore {
 
   /**
    * List all user-defined references
+   *
+   * For popl kind refs, reconstructs entry_id and target from stored fields.
    */
   listUserRefs(): UserRef[] {
     const stmt = this.db.prepare(`SELECT * FROM user_refs ORDER BY created_at DESC`);
-    return stmt.all() as UserRef[];
+    const rows = stmt.all() as UserRef[];
+
+    return rows.map(row => {
+      if (row.kind === 'popl') {
+        return {
+          ...row,
+          entry_id: row.connector,
+          target: row.session,
+          connector: null,
+          session: null,
+        };
+      }
+      return {
+        ...row,
+        entry_id: null,
+        target: null,
+      };
+    });
   }
 
   /**

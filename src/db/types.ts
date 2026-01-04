@@ -100,7 +100,8 @@ export interface ArchivePlan {
 }
 
 // User-defined references (Phase 4.1)
-export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context';
+// Note: 'popl' kind stores target as 'popl/<entry_id>' (no local paths for public ledger safety)
+export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context' | 'popl';
 
 export interface UserRef {
   name: string;
@@ -112,4 +113,8 @@ export interface UserRef {
   level: string | null;
   captured_at: string;
   created_at: string;
+  /** For popl kind: target path (e.g., 'popl/<entry_id>') */
+  target: string | null;
+  /** For popl kind: POPL entry ID */
+  entry_id: string | null;
 }
