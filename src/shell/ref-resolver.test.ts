@@ -71,6 +71,13 @@ describe('parseRef', () => {
     const result = parseRef('@rpc:');
     expect(result.type).toBe('literal');
   });
+
+  it('should parse @popl:<id>', () => {
+    const result = parseRef('@popl:01KE4EKCVK');
+    expect(result.type).toBe('popl');
+    expect(result.id).toBe('01KE4EKCVK');
+    expect(result.raw).toBe('@popl:01KE4EKCVK');
+  });
 });
 
 describe('isRef', () => {
@@ -81,6 +88,7 @@ describe('isRef', () => {
     expect(isRef('@session:abc')).toBe(true);
     expect(isRef('@fav:name')).toBe(true);
     expect(isRef('@ref:name')).toBe(true);
+    expect(isRef('@popl:01KE4EKCVK')).toBe(true);
   });
 
   it('should return false for non-refs', () => {
@@ -288,6 +296,42 @@ describe('RefResolver', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('Reference not found');
     });
+
+    it('should resolve @ref:<name> for popl kind', () => {
+      vi.mocked(mockDataProvider.getUserRef).mockReturnValue({
+        kind: 'popl',
+        entry_id: '01KE4EKCVK',
+        target: 'popl/01KE4EKCVK',
+        captured_at: '2024-01-01T00:00:00.000Z',
+      });
+
+      const result = resolver.resolveUserRef('mypopl');
+
+      expect(result.success).toBe(true);
+      expect(result.ref?.kind).toBe('popl');
+      expect(result.ref?.entry_id).toBe('01KE4EKCVK');
+      expect(result.ref?.target).toBe('popl/01KE4EKCVK');
+    });
+  });
+
+  describe('resolvePopl', () => {
+    it('should resolve @popl:<id>', () => {
+      const result = resolver.resolvePopl('01KE4EKCVK');
+
+      expect(result.success).toBe(true);
+      expect(result.ref?.kind).toBe('popl');
+      expect(result.ref?.entry_id).toBe('01KE4EKCVK');
+      expect(result.ref?.target).toBe('popl/01KE4EKCVK');
+      expect(result.ref?.source).toBe('@popl:01KE4EKCVK');
+      expect(result.ref?.captured_at).toBeDefined();
+    });
+
+    it('should fail when entry_id is empty', () => {
+      const result = resolver.resolvePopl('');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('entry ID');
+    });
   });
 
   describe('resolve (unified)', () => {
@@ -312,6 +356,23 @@ describe('RefResolver', () => {
 
       expect(result.success).toBe(true);
       expect(result.ref?.rpc).toBe('rpc-123');
+    });
+
+    it('should resolve @popl:<id>', () => {
+      const context: ShellContext = {};
+      const result = resolver.resolve('@popl:01KE4EKCVK', context);
+
+      expect(result.success).toBe(true);
+      expect(result.ref?.kind).toBe('popl');
+      expect(result.ref?.entry_id).toBe('01KE4EKCVK');
+      expect(result.ref?.target).toBe('popl/01KE4EKCVK');
+    });
+
+    it('should fail for @popl without id', () => {
+      const context: ShellContext = {};
+      const result = resolver.resolve('@popl:', context);
+
+      expect(result.success).toBe(false);
     });
 
     it('should fail for literal strings', () => {
@@ -354,6 +415,18 @@ describe('RefResolver', () => {
       expect(errors).toHaveLength(1);
       expect(errors[0]).toContain('RPC not found');
       expect(resolved).toEqual(['@rpc:nonexistent']); // Keep original on error
+    });
+
+    it('should resolve @popl:<id> to entry_id', () => {
+      const context: ShellContext = {};
+
+      const { resolved, errors } = resolver.resolveArgs(
+        ['@popl:01KE4EKCVK'],
+        context
+      );
+
+      expect(errors).toHaveLength(0);
+      expect(resolved).toEqual(['01KE4EKCVK']);
     });
   });
 });
@@ -421,5 +494,37 @@ describe('refToJson / refFromJson', () => {
 
   it('should return null for invalid kind', () => {
     expect(refFromJson('{"kind": "invalid"}')).toBeNull();
+  });
+
+  it('should parse POPL-style JSON with target', () => {
+    const json = '{"kind":"popl","target":"popl/01KE4EKCVK","entry_id":"01KE4EKCVK"}';
+    const ref = refFromJson(json);
+
+    expect(ref?.kind).toBe('popl');
+    expect(ref?.entry_id).toBe('01KE4EKCVK');
+    expect(ref?.target).toBe('popl/01KE4EKCVK');
+  });
+
+  it('should infer entry_id from target if missing', () => {
+    const json = '{"target":"popl/01KE4EKCVK"}';
+    const ref = refFromJson(json);
+
+    expect(ref?.kind).toBe('popl');
+    expect(ref?.entry_id).toBe('01KE4EKCVK');
+    expect(ref?.target).toBe('popl/01KE4EKCVK');
+  });
+
+  it('should serialize and deserialize POPL RefStruct', () => {
+    const ref: RefStruct = {
+      kind: 'popl',
+      entry_id: '01KE4EKCVK',
+      target: 'popl/01KE4EKCVK',
+      captured_at: '2024-01-01T00:00:00.000Z',
+    };
+
+    const json = refToJson(ref);
+    const parsed = refFromJson(json);
+
+    expect(parsed).toEqual(ref);
   });
 });

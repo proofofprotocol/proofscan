@@ -46,6 +46,36 @@ const REF_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const RESERVED_NAMES = ['this', 'last', 'rpc', 'session', 'fav', 'ref'];
 
 /**
+ * Pattern for valid POPL entry IDs
+ * ULID format: 26 alphanumeric characters (Crockford's Base32)
+ * Also allows shorter prefixes for prefix matching
+ */
+const ENTRY_ID_PATTERN = /^[0-9A-HJKMNP-TV-Z]+$/i;
+
+/** Minimum entry ID length for validation */
+const ENTRY_ID_MIN_LENGTH = 8;
+
+/**
+ * Validate POPL entry ID format
+ * @returns Error message if invalid, null if valid
+ */
+function validateEntryId(entryId: string): string | null {
+  if (!entryId) {
+    return 'Entry ID is required';
+  }
+  if (entryId.length < ENTRY_ID_MIN_LENGTH) {
+    return `Entry ID too short (min ${ENTRY_ID_MIN_LENGTH} chars): ${entryId}`;
+  }
+  if (entryId.includes('/') || entryId.includes('..')) {
+    return `Invalid entry ID (contains path characters): ${entryId}`;
+  }
+  if (!ENTRY_ID_PATTERN.test(entryId)) {
+    return `Invalid entry ID format (expected ULID): ${entryId}`;
+  }
+  return null;
+}
+
+/**
  * Validate reference name
  * @returns Error message if invalid, null if valid
  */
@@ -241,6 +271,14 @@ async function handleRefAdd(
     // Try JSON first
     const ref = refFromJson(stdinData);
     if (ref) {
+      // Validate entry_id for popl refs
+      if (ref.kind === 'popl' && ref.entry_id) {
+        const entryIdError = validateEntryId(ref.entry_id);
+        if (entryIdError) {
+          printError(entryIdError);
+          return;
+        }
+      }
       await saveRef(name, ref, configPath);
       return;
     }
@@ -250,6 +288,14 @@ async function handleRefAdd(
     const poplMatch = trimmed.match(/^popl\/(.+)$/);
     if (poplMatch) {
       const entryId = poplMatch[1];
+
+      // Validate entry_id format
+      const entryIdError = validateEntryId(entryId);
+      if (entryIdError) {
+        printError(entryIdError);
+        return;
+      }
+
       const poplRef: RefStruct = {
         kind: 'popl',
         entry_id: entryId,

@@ -451,22 +451,23 @@ export class EventsStore {
     }
   ): UserRef {
     // For popl kind, store entry_id in connector and target in session
-    const connector = ref.kind === 'popl' ? (ref.entry_id || null) : (ref.connector || null);
-    const session = ref.kind === 'popl' ? (ref.target || null) : (ref.session || null);
+    // Use nullish coalescing (??) to preserve empty strings if explicitly set
+    const connector = ref.kind === 'popl' ? (ref.entry_id ?? null) : (ref.connector ?? null);
+    const session = ref.kind === 'popl' ? (ref.target ?? null) : (ref.session ?? null);
 
     const userRef: UserRef = {
       name,
       kind: ref.kind,
       connector,
       session,
-      rpc: ref.rpc || null,
-      proto: ref.proto || null,
-      level: ref.level || null,
+      rpc: ref.rpc ?? null,
+      proto: ref.proto ?? null,
+      level: ref.level ?? null,
       captured_at: ref.captured_at || new Date().toISOString(),
       created_at: new Date().toISOString(),
       // Virtual fields for popl kind (reconstructed in getUserRef)
-      target: ref.kind === 'popl' ? (ref.target || null) : null,
-      entry_id: ref.kind === 'popl' ? (ref.entry_id || null) : null,
+      target: ref.kind === 'popl' ? (ref.target ?? null) : null,
+      entry_id: ref.kind === 'popl' ? (ref.entry_id ?? null) : null,
     };
 
     // Use INSERT ... ON CONFLICT: created_at NOT in UPDATE SET, so original is preserved on conflict
