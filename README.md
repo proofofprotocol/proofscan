@@ -4,130 +4,85 @@
 
 MCP Server scanner - eliminate black boxes by capturing JSON-RPC from connection to tools/list.
 
+**Version:** 0.10.3
+
 ## Overview
 
-proofscan provides visibility into MCP (Model Context Protocol) server communication. It:
+proofscan provides complete visibility into MCP (Model Context Protocol) server communication. It:
 
-- Connects to MCP servers via stdio transport
-- Captures all JSON-RPC messages (requests, responses, notifications)
-- Stores events in SQLite for efficient querying and analysis
-- Supports importing server configurations from mcp.so / Claude Desktop format
-- Provides intuitive CLI commands for viewing and exploring data
+- 🔍 **Captures** all JSON-RPC messages (requests, responses, notifications)
+- 💾 **Stores** events in SQLite for efficient querying and analysis
+- 🌳 **Visualizes** connector → session → RPC hierarchies
+- 🔧 **Tests** MCP tools directly from CLI
+- 🎭 **Proxies** multiple MCP servers with unified tool namespace
+- 📊 **Generates** public-safe audit trails (POPL)
+- 🐚 **Interactive** shell mode with TAB completion
+
+## Quick Links
+
+- 📖 **[User Guide](docs/GUIDE.md)** - Complete CLI reference and examples
+- 🐚 **[Shell Mode Guide](docs/SHELL.md)** - Interactive shell and @references
+- 🎭 **[Proxy Guide](docs/PROXY.md)** - MCP proxy server documentation
+- 📦 **[POPL Guide](docs/POPL.md)** - Public Observable Proof Ledger
+- 🔧 **[API Documentation](docs/API.md)** - TypeScript API for developers
 
 ## Installation
 
 ```bash
+# Global installation
 npm install -g proofscan
-```
 
-Or run without installing:
-
-```bash
+# Or run without installing
 npx proofscan --help
 ```
 
-## CLI Commands (v0.4.0)
+**Requirements:** Node.js v18+ (v20+ recommended)
 
-The CLI is available as both `pfscan` (short) and `proofscan` (full).
+## Quick Start
 
-### Command Structure (git-style)
-
-```
-Common Commands:
-  view, v       View recent events timeline (default)
-  tree, t       Show connector → session → rpc structure
-  explore, e    Interactive data browser
-  scan, s       Run a new scan
-  status, st    Show system status
-  rpc           View RPC call details (list, show)
-
-Management:
-  archive, a    Archive and prune old data
-  config, c     Configuration management
-  connectors    Connector management
-  popl          Public Observable Proof Ledger
-
-Advanced:
-  tool          MCP tool operations (ls, show, call)
-  proxy         MCP proxy server
-  shell         Interactive shell mode
-
-Shortcuts:
-  v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
-```
-
-**Note:** Running `pfscan` without arguments is equivalent to `pfscan view`.
-
-## Quickstart
-
-### 1. Initialize Configuration
+### 1. Initialize
 
 ```bash
-pfscan config init
-pfscan config path   # Show config location
+pfscan config init        # Create configuration
+pfscan config path        # Show config location
 ```
 
-### 2. Import MCP Server
+### 2. Add MCP Server
 
 ```bash
-# From mcp.so / Claude Desktop format
-echo '{"mcpServers":{"time":{"command":"uvx","args":["mcp-server-time"]}}}' \
+# From Claude Desktop / mcp.so format
+echo '{"mcpServers":{"time":{"command":"npx","args":["-y","@modelcontextprotocol/server-time"]}}}' \
   | pfscan connectors import --from mcpServers --stdin
+
+# Or add manually
+pfscan connectors add --id time --stdio "npx -y @modelcontextprotocol/server-time"
 ```
 
 ### 3. Scan and View
 
 ```bash
 pfscan scan start --id time   # Run scan
-pfscan                        # View recent events (same as pfscan view)
+pfscan                        # View events (default command)
 pfscan tree                   # Show structure
-pfscan status                 # Show system status
+pfscan status                 # System status
 ```
 
-## View Command (Phase 2.1)
+## Key Features
 
-The `view` command displays a timeline of recent events with millisecond precision.
+### 📊 Event Timeline
 
 ```bash
 $ pfscan view --limit 10
-Time         Sym Dir St Method                         Session      Extra
--------------------------------------------------------------------------
-21:01:58.743 → → ✓ initialize                     ses=f2442c... lat=269ms size=183B
-21:01:59.018 ← ← ✓ initialize                     ses=f2442c...
-21:01:59.025 • →   notifications/initialized      ses=f2442c...
-21:01:59.037 → → ✓ tools/list                     ses=f2442c...
-21:01:59.049 ← ← ✓ tools/list                     ses=f2442c... lat=12ms size=1.0KB
+Time         Sym Dir St Method              Session      Extra
+-------------------------------------------------------------------
+21:01:58.743 → → ✓ initialize            f2442c... lat=269ms
+21:01:59.018 ← ← ✓ initialize            f2442c...
+21:01:59.025 • →   notifications/initi... f2442c...
+21:01:59.037 → → ✓ tools/list            f2442c...
+21:01:59.049 ← ← ✓ tools/list            f2442c... lat=12ms size=1.0KB
 ```
 
-### View Options
-
-```bash
-pfscan view --limit 50           # Show 50 events
-pfscan view --since 24h          # Events in last 24 hours
-pfscan view --since 7d           # Events in last 7 days
-pfscan view --errors             # Show only errors
-pfscan view --method tools       # Filter by method name
-pfscan view --connector time     # Filter by connector
-pfscan view --session abc123     # Filter by session (partial match)
-pfscan view --fulltime           # Show full timestamp (YYYY-MM-DD HH:MM:SS.mmm)
-pfscan view --with-sessions      # Include session start/end events
-pfscan view --json               # Output as JSON (EventLine array)
-```
-
-### Event Symbols
-
-| Symbol | Meaning |
-|--------|---------|
-| ▶ | Session start |
-| ■ | Session end |
-| → | Request (Client → Server) |
-| ← | Response (Server → Client) |
-| • | Notification |
-| ✖ | Error |
-
-## Tree Command (Phase 2.1)
-
-The `tree` command shows a hierarchical view of connector → session → rpc.
+### 🌳 Hierarchical Tree
 
 ```bash
 $ pfscan tree
@@ -138,182 +93,107 @@ $ pfscan tree
     └── 📋 3cf5a66e... (2 rpcs, 8 events)
         ├── ↔️ ✓ tools/list (id=2, 13ms)
         └── ↔️ ✓ initialize (id=1, 271ms)
-
-1 connector(s), 2 session(s), 4 rpc(s)
 ```
 
-### Tree Options
+### 🐚 Interactive Shell
 
 ```bash
-pfscan tree time              # Show specific connector
-pfscan tree --sessions 10     # Show 10 sessions per connector
-pfscan tree --rpc 20          # Show 20 RPCs per session
-pfscan tree --rpc-all         # Show all RPCs
-pfscan tree --method init     # Filter by method name
-pfscan tree --status ok       # Filter by status (ok, err, all)
-pfscan tree --compact         # Compact output (no icons)
-pfscan tree --since 24h       # Filter by time
-pfscan tree --json            # Output as JSON (TreeNode array)
+$ pfscan shell
+proofscan> pwd
+Context: session=f2442c9b (connector=time)
+
+proofscan> tool ls
+Found 2 tools: get_current_time, get_timezone
+
+proofscan> ref add mytask @this
+✓ Reference 'mytask' saved
+
+proofscan> popl @last --title "Time Server Test"
+✓ POPL entry created: 20260104-f2442c9b
 ```
 
-## Explore Command (Phase 2.1)
-
-The `explore` command provides interactive navigation through data.
+### 🎭 MCP Proxy
 
 ```bash
-$ pfscan explore
-═══════════════════════════════════════════════════════════════
-  proofscan explore
-═══════════════════════════════════════════════════════════════
-  Path: connectors
-───────────────────────────────────────────────────────────────
+# Start proxy with multiple backends
+pfscan proxy start --connectors time,weather
 
-  Connectors:
+# In another terminal - use as unified MCP server
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | pfscan proxy start --all
 
-    [1] time (3 sessions)
-
-  > 1
+# Tools are namespaced: time__get_current_time, weather__get_forecast
 ```
 
-### Explore Navigation
-
-- **Number**: Select item
-- **b**: Go back
-- **t**: Show tree view
-- **?**: Help
-- **q**: Quit
-- **p**: View request/response pair (in RPC view)
+### 🔧 Direct Tool Testing
 
 ```bash
-pfscan explore                    # Start from connectors
-pfscan explore --session abc123   # Jump to specific session
+# List tools
+pfscan tool ls time
+
+# Show tool schema
+pfscan tool show time get_current_time
+
+# Call tool
+pfscan tool call time get_current_time --args '{}'
 ```
 
-## RPC Command (Phase 2.2)
-
-The `rpc` command provides detailed inspection of individual RPC calls.
-
-### List RPCs for a Session
-
-```bash
-$ pfscan rpc list --session f2442c
-Time         St RPC      Method                         Latency
-----------------------------------------------------------------
-21:01:59.037 ✓ 2        tools/list                     12ms
-21:01:58.743 ✓ 1        initialize                     269ms
-
-2 RPCs: 2 OK, 0 ERR, 0 pending
-hint: Use `pfscan rpc show --session <ses> --id <rpc>` for details
-```
-
-### Show RPC Details
-
-```bash
-$ pfscan rpc show --session f2442c --id 2
-════════════════════════════════════════════════════════════
-RPC: tools/list
-════════════════════════════════════════════════════════════
-
-Info:
-  RPC ID:      2
-  Session:     f2442c9b...
-  Connector:   time
-  Status:      OK
-
-Timing:
-  Request:     2025-12-28T12:01:59.037Z
-  Response:    2025-12-28T12:01:59.049Z
-  Latency:     12ms
-
-Size:
-  Request:     58B
-  Response:    1.0KB
-
-────────────────────────────────────────────────────────────
-Request:
-────────────────────────────────────────────────────────────
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "method": "tools/list"
-}
-
-────────────────────────────────────────────────────────────
-Response:
-────────────────────────────────────────────────────────────
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "result": {
-    "tools": [...]
-  }
-}
-```
-
-### RPC Options
-
-```bash
-pfscan rpc list --session <id>          # List RPCs (partial session ID OK)
-pfscan rpc list --session <id> --limit 50  # Show 50 RPCs
-pfscan rpc list --session <id> --fulltime  # Full timestamps
-pfscan rpc show --session <id> --id <rpc>  # Show request/response JSON
-pfscan rpc list --json                  # JSON output
-pfscan rpc show --json                  # JSON output
-```
-
-### Workflow: From view to RPC details
-
-```bash
-# 1. View events with pairs mode to see RPC IDs
-pfscan view --pairs
-# Output shows: ... rpc=2        ses=f2442c... ...
-
-# 2. Get details for specific RPC
-pfscan rpc show --session f2442c --id 2
-```
-
-## Status Command (Phase 2.1)
-
-The `status` command shows database and system status.
-
-```bash
-$ pfscan status
-proofscan Status
-═════════════════════════════════════════════════════
-
-Configuration:
-  Config file:  /home/user/.config/proofscan/config.json
-  Data dir:     /home/user/.config/proofscan
-
-Database:
-  events.db:    72.0KB
-  proofs.db:    24.0KB
-  Schema ver:   1
-  Tables:       sessions, rpc_calls, events
-
-Data Summary:
-  Connectors:   1
-  Sessions:     3
-  RPC calls:    6
-  Events:       24
-  Latest:       2025-12-28T12:01:58.610Z
-```
-
-## Global Options
+## Command Overview
 
 ```
--c, --config <path>  Path to config file
---json               Output in JSON format
--v, --verbose        Verbose output
+Common Commands:
+  view, v       View recent events timeline (default)
+  tree, t       Show connector → session → rpc structure
+  explore, e    Interactive data browser
+  scan, s       Run a new scan
+  status, st    Show system status
+  shell         Interactive shell (REPL) with TAB completion
+  rpc           View RPC call details (list, show)
+  summary       Show session summary
+  permissions   Show permission stats per category
+  tool          MCP tool operations (ls, show, call)
+
+Management:
+  archive, a    Archive and prune old data
+  config, c     Configuration management
+  connectors    Connector management
+  secrets       Secret management
+  doctor        Diagnose and fix database issues
+  popl          Public Observable Proof Ledger
+
+Advanced:
+  proxy         MCP proxy server operations
+  log           View proxy logs
+  monitor       Monitor scan events
+  sessions      Session management
+  events        Event export
+
+Shortcuts:
+  v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
 ```
 
-## Config File Format
+## Documentation
 
-Config is stored in the OS-standard location:
+### For Users
 
+- **[User Guide](docs/GUIDE.md)** - Complete CLI command reference with examples
+- **[Shell Mode](docs/SHELL.md)** - Interactive shell, @references, and advanced workflows
+- **[Proxy Guide](docs/PROXY.md)** - MCP proxy server setup and usage
+- **[POPL Guide](docs/POPL.md)** - Creating public audit trails
+
+### For Developers
+
+- **[API Documentation](docs/API.md)** - TypeScript API and EventLine model
+- **[Architecture](docs/ARCHITECTURE.md)** - Internal design and database schema
+- **[Contributing](CONTRIBUTING.md)** - Development setup and guidelines
+
+## Configuration
+
+Config location (OS-standard):
 - **Windows**: `%APPDATA%\proofscan\config.json`
 - **macOS**: `~/Library/Application Support/proofscan/config.json`
 - **Linux**: `~/.config/proofscan/config.json`
+
+Basic config structure:
 
 ```json
 {
@@ -324,8 +204,8 @@ Config is stored in the OS-standard location:
       "enabled": true,
       "transport": {
         "type": "stdio",
-        "command": "uvx",
-        "args": ["mcp-server-time"]
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-time"]
       }
     }
   ],
@@ -337,13 +217,7 @@ Config is stored in the OS-standard location:
 }
 ```
 
-### Retention Settings
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `keep_last_sessions` | 50 | Keep last N sessions per connector |
-| `raw_days` | 7 | Clear raw JSON after N days |
-| `max_db_mb` | 500 | Target database size limit |
+See **[User Guide](docs/GUIDE.md#configuration)** for details.
 
 ## Data Storage
 
@@ -352,166 +226,119 @@ proofscan uses a 2-file SQLite structure:
 ```
 ~/.config/proofscan/
 ├── config.json
-├── events.db     # Sessions, events, RPC calls (can be pruned)
-└── proofs.db     # Immutable proof records (never pruned)
+├── events.db          # Sessions, events, RPC calls (can be pruned)
+├── proofs.db          # Immutable proof records (never pruned)
+├── proxy-runtime-state.json  # Proxy state (if proxy used)
+└── proxy-logs.jsonl   # Proxy logs (if proxy used)
 ```
 
-### EventLine Model (Phase 2.1)
-
-Internally, all events are normalized to the `EventLine` format:
-
-```typescript
-interface EventLine {
-  ts_ms: number;           // Timestamp (epoch ms)
-  kind: 'session_start' | 'session_end' | 'req' | 'res' | 'notify' | 'error';
-  direction?: '→' | '←';  // → = Client→Server, ← = Server→Client
-  label: string;           // Method name or event type
-  connector_id?: string;
-  session_id?: string;
-  rpc_id?: string | number;
-  status: 'OK' | 'ERR' | '-';
-  latency_ms?: number;
-  size_bytes?: number;
-  raw_json?: string;
-  meta?: Record<string, unknown>;
-}
-```
-
-This normalized model allows the schema to evolve without breaking the CLI.
-
-## Archive Command
-
-Archive and prune old data based on retention settings.
+## Global Options
 
 ```bash
-pfscan archive status               # Show database status
-pfscan archive plan                 # Show what would be archived
-pfscan archive run                  # Dry run
-pfscan archive run --yes            # Actually execute
-pfscan archive run --yes --vacuum   # Execute and reclaim space
+-c, --config <path>  Path to config file
+--json               Output in JSON format
+-v, --verbose        Verbose output
+-h, --help           Display help
+-V, --version        Show version
 ```
 
-## JSON Output
+## Examples
 
-All commands support `--json` for machine-readable output:
+### Basic Workflow
 
 ```bash
-$ pfscan view --json --limit 3
-[
-  {
-    "ts_ms": 1766923317974,
-    "kind": "req",
-    "direction": "→",
-    "label": "tools/list",
-    "connector_id": "time",
-    "session_id": "3cf5a66e-...",
-    "rpc_id": "2",
-    "status": "OK",
-    "size_bytes": 58
-  },
-  ...
-]
+# 1. Import MCP server
+cat claude_desktop_config.json | pfscan connectors import --from mcpServers --stdin
 
-$ pfscan tree --json
-[
-  {
-    "type": "connector",
-    "id": "time",
-    "label": "time",
-    "meta": { "session_count": 3 },
-    "children": [...]
-  }
-]
+# 2. Run scan
+pfscan scan start --id myserver
+
+# 3. View results
+pfscan                         # Recent events
+pfscan tree                    # Hierarchical view
+pfscan rpc list --session abc  # RPC details
 ```
 
-## Connector Management
+### Shell Mode Workflow
 
 ```bash
-pfscan connectors list                        # List all
-pfscan connectors show --id <id>              # Show details
-pfscan connectors add --id <id> --stdio "cmd" # Add connector
-pfscan connectors enable --id <id>            # Enable
-pfscan connectors disable --id <id>           # Disable
-pfscan connectors remove --id <id>            # Remove
-
-# Import from mcpServers format
-pfscan connectors import --from mcpServers --stdin
-pfscan connectors import --from mcpServers --file <path>
-```
-
-## Session Management
-
-```bash
-pfscan sessions list [--connector <id>] [--last <N>]
-pfscan sessions show --id <session_id>
-pfscan sessions prune [--before <date>] [--keep-last <N>] [--yes]
-```
-
-## POPL (Public Observable Proof Ledger)
-
-POPL generates public-safe audit trails from MCP sessions. All sensitive data (paths, secrets, PII) is automatically sanitized.
-
-### Initialize POPL
-
-```bash
-cd /path/to/project
-pfscan popl init          # Creates .popl/ directory
-```
-
-### Create POPL Entry
-
-```bash
-# CLI: Requires explicit session ID
-pfscan popl session --session <session-id>
-pfscan popl session --session abc123 --title "My Audit"
-
-# Shell: Supports @references
 pfscan shell
-> popl @last              # Latest session
-> popl @this              # Current session
-> popl session @ref:name  # Named reference
+
+# Navigate to session
+proofscan> cc time
+proofscan> pwd
+Context: connector=time
+
+proofscan> up abc123
+Context: session=abc123 (connector=time)
+
+# Save reference and use later
+proofscan> ref add important @this
+proofscan> tool call get_current_time --args '{}'
+proofscan> popl @last --title "Production Test"
 ```
 
-### List and View Entries
+### Proxy Mode
 
 ```bash
-pfscan popl list          # List all entries
-pfscan popl show <id>     # Show entry details
+# Terminal 1: Start proxy
+pfscan -v proxy start --connectors server1,server2
+
+# Terminal 2: Check status
+pfscan proxy status
+pfscan log --tail 20
+
+# Use proxy with Claude Desktop
+# Add to claude_desktop_config.json:
+# {
+#   "mcpServers": {
+#     "proofscan-proxy": {
+#       "command": "pfscan",
+#       "args": ["proxy", "start", "--all"]
+#     }
+#   }
+# }
 ```
-
-### POPL.yml Structure
-
-Each entry generates:
-- `POPL.yml` - Entry metadata and evidence summary
-- `status.json` - Session summary (safe for public)
-- `rpc.sanitized.jsonl` - Sanitized RPC events
-- `validation-run.log` - Generation log
-
-### Sanitization (Ruleset v1)
-
-Automatically redacted:
-- **Paths**: `/home/user/...`, `C:\Users\...`
-- **Secrets**: API keys, tokens, JWT, auth headers
-- **RPC Payloads**: Arguments/results replaced with SHA-256 hashes
-
-### Trust Levels
-
-| Level | Label | Description |
-|-------|-------|-------------|
-| 0 | Recorded | Self-reported, no verification |
-| 1 | Verified | Signature verified |
-| 2 | Attested | Third-party attestation |
-| 3 | Certified | Formal certification |
 
 ## Development
 
 ```bash
-npm install         # Install dependencies
-npm run build       # Build TypeScript
-npm run dev         # Watch mode
-npm test            # Run tests
+git clone https://github.com/proofofprotocol/proofscan.git
+cd proofscan
+npm install
+npm run build
+npm test
+
+# Run from source
+node dist/cli.js --help
 ```
+
+## Use Cases
+
+- 🔍 **Debug MCP servers**: See exactly what's happening in JSON-RPC communication
+- 📊 **Analyze tool usage**: Track which tools are called and how often
+- 🎯 **Performance monitoring**: Measure RPC latency and identify bottlenecks
+- 🔐 **Security auditing**: Review permission requests and data access
+- 📝 **Documentation**: Generate public-safe logs for bug reports
+- 🧪 **Testing**: Verify MCP server behavior and tool schemas
+- 🎭 **Integration**: Use proxy mode to aggregate multiple MCP servers
+
+## Related Projects
+
+- **[Model Context Protocol](https://modelcontextprotocol.io)** - Official MCP specification
+- **[MCP Servers](https://github.com/modelcontextprotocol/servers)** - Official server implementations
+- **[@proofofprotocol/inscribe-mcp-server](https://github.com/proofofprotocol/inscribe-mcp-server)** - Blockchain-backed proof storage
 
 ## License
 
 MIT
+
+## Support
+
+- 📖 **Documentation**: See [docs/](docs/) directory
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/proofofprotocol/proofscan/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/proofofprotocol/proofscan/discussions)
+
+---
+
+**Made with ❤️ by [Proof of Protocol](https://github.com/proofofprotocol)**
