@@ -36,3 +36,6 @@ export * from './proxy.js';
 
 // Phase 5.0+: Log viewing
 export * from './log.js';
+
+// Phase 6.0: POPL (Public Observable Proof Ledger)
+export * from './popl.js';

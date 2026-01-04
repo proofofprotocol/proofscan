@@ -49,6 +49,7 @@ import {
   createToolCommand,
   createProxyCommand,
   createLogCommand,
+  createPoplCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -238,6 +239,9 @@ program.addCommand(createProxyCommand(getConfigPath));
 // log (Phase 5.0+: Proxy log viewing)
 program.addCommand(createLogCommand(getConfigPath));
 
+// popl (Phase 6.0: Public Observable Proof Ledger)
+program.addCommand(createPoplCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -251,7 +255,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'help'
+  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'help'
 ]);
 
 // Shell-only commands (not available as CLI commands)
