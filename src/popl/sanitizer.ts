@@ -14,6 +14,9 @@ import { createHash } from 'crypto';
 /** Current sanitization ruleset version */
 export const SANITIZER_RULESET_VERSION = 1;
 
+/** Maximum string length to process with regex (ReDoS prevention) */
+const MAX_REGEX_INPUT_LENGTH = 1000;
+
 /** Redacted placeholder for paths */
 const REDACTED_PATH = '<redacted:path>';
 
@@ -92,22 +95,37 @@ export interface SanitizeResult {
 
 /**
  * Check if a string looks like an absolute path
+ * Includes length check to prevent ReDoS attacks
  */
 function isAbsolutePath(value: string): boolean {
+  // Skip long strings to prevent ReDoS
+  if (value.length > MAX_REGEX_INPUT_LENGTH) {
+    return false;
+  }
   return PATH_PATTERNS.some((pattern) => pattern.test(value));
 }
 
 /**
  * Check if a key name suggests it contains a secret
+ * Includes length check to prevent ReDoS attacks
  */
 function isSecretKey(key: string): boolean {
+  // Skip long strings to prevent ReDoS
+  if (key.length > MAX_REGEX_INPUT_LENGTH) {
+    return false;
+  }
   return SECRET_KEY_PATTERNS.some((pattern) => pattern.test(key));
 }
 
 /**
  * Check if a value looks like a secret
+ * Includes length check to prevent ReDoS attacks
  */
 function isSecretValue(value: string): boolean {
+  // Skip long strings to prevent ReDoS
+  if (value.length > MAX_REGEX_INPUT_LENGTH) {
+    return false;
+  }
   return SECRET_VALUE_PATTERNS.some((pattern) => pattern.test(value));
 }
 
