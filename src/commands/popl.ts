@@ -55,12 +55,21 @@ function getObservedTime(doc: PoplDocument): string {
 
 /**
  * Format timestamp for oneline display
- * Returns: YYYY-MM-DD HH:mm:ss TZ
+ * Returns: YYYY-MM-DD HH:mm:ss TZ (e.g., "2026-01-04 20:35:00 +09:00")
+ *
+ * Uses manual formatting instead of toLocaleString() for:
+ * - Consistent output format across all locales and platforms
+ * - Fixed field widths for CLI column alignment
+ * - Explicit timezone offset (not timezone name which varies by OS)
  */
 function formatTimestamp(isoString: string): string {
   try {
     const date = new Date(isoString);
-    // Format in local timezone
+    if (isNaN(date.getTime())) {
+      // Invalid date - return original string
+      return isoString;
+    }
+    // Format in local timezone (manual for consistency across locales)
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -409,11 +418,11 @@ export function createPoplCommand(getConfigPath: () => string): Command {
           if (getOutputOptions().json) {
             output({
               success: false,
-              error: `Invalid view: ${view}`,
+              error: `Invalid view: ${viewLower}`,
               valid_views: VALID_VIEWS,
             });
           } else {
-            console.error(`Invalid view: ${view}`);
+            console.error(`Invalid view: ${viewLower}`);
             console.error(`Valid views: ${VALID_VIEWS.join(', ')}`);
           }
           process.exit(1);
