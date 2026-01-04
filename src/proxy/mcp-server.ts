@@ -1,5 +1,5 @@
 /**
- * MCP Proxy Server (Phase 5.0)
+ * MCP Proxy Server (Phase 5.0+)
  *
  * A stdio-based MCP server that aggregates tools from multiple backend
  * connectors and routes requests accordingly.
@@ -12,9 +12,14 @@
  */
 
 import { EventEmitter } from 'events';
-import { logger } from './logger.js';
+import { join } from 'path';
+import { logger, initializeRingBuffer, isVerbose } from './logger.js';
 import { ToolAggregator } from './tool-aggregator.js';
 import { RequestRouter } from './request-router.js';
+import {
+  RuntimeStateManager,
+  type ConnectorSummary,
+} from './runtime-state.js';
 import {
   MCP_ERROR,
   type ProxyOptions,
@@ -35,6 +40,9 @@ const SERVER_VERSION = '0.7.0';
 /** Maximum buffer size in bytes (1MB) - prevents memory exhaustion attacks */
 const MAX_BUFFER_SIZE = 1024 * 1024;
 
+/** Maximum log lines in ring buffer */
+const MAX_LOG_LINES = 1000;
+
 /**
  * MCP Proxy Server
  *
@@ -42,16 +50,26 @@ const MAX_BUFFER_SIZE = 1024 * 1024;
  * All logging goes to stderr.
  */
 export class McpProxyServer extends EventEmitter {
+  private readonly options: ProxyOptions;
   private readonly aggregator: ToolAggregator;
   private readonly router: RequestRouter;
+  private readonly stateManager: RuntimeStateManager;
   private buffer = '';
   private initialized = false;
   private running = false;
 
+  /** Current client info (extracted from initialize) */
+  private currentClient: {
+    name: string;
+    protocolVersion: string;
+  } | null = null;
+
   constructor(options: ProxyOptions) {
     super();
+    this.options = options;
     this.aggregator = new ToolAggregator(options);
     this.router = new RequestRouter(options, this.aggregator);
+    this.stateManager = new RuntimeStateManager(options.configDir);
   }
 
   /**
@@ -65,7 +83,24 @@ export class McpProxyServer extends EventEmitter {
     }
 
     this.running = true;
-    logger.info('MCP proxy server starting...');
+    logger.info('MCP proxy server starting...', 'server');
+
+    // Initialize ring buffer for log viewing
+    initializeRingBuffer({
+      maxLines: MAX_LOG_LINES,
+      logPath: join(this.options.configDir, 'proxy-logs.jsonl'),
+      onCountChange: (count) => {
+        this.stateManager.updateLogCount(count);
+      },
+    });
+
+    // Build connector summaries for status display
+    const connectorSummaries = await this.buildConnectorSummaries();
+
+    // Initialize runtime state
+    const logLevel = isVerbose() ? 'INFO' : 'WARN';
+    await this.stateManager.initialize(connectorSummaries, logLevel);
+    this.stateManager.startHeartbeat();
 
     // Set up stdin
     process.stdin.setEncoding('utf-8');
@@ -75,6 +110,36 @@ export class McpProxyServer extends EventEmitter {
 
     // Resume stdin
     process.stdin.resume();
+
+    logger.info(`Proxy started with ${connectorSummaries.length} connector(s)`, 'server');
+  }
+
+  /**
+   * Build connector summaries for status display
+   */
+  private async buildConnectorSummaries(): Promise<ConnectorSummary[]> {
+    const summaries: ConnectorSummary[] = [];
+
+    for (const connector of this.options.connectors) {
+      try {
+        // Try to get tool count - this doesn't actually connect yet
+        // The actual connection happens when tools/list is called
+        summaries.push({
+          id: connector.id,
+          toolCount: 0, // Will be updated on first tools/list
+          healthy: true,
+        });
+      } catch (error) {
+        summaries.push({
+          id: connector.id,
+          toolCount: 0,
+          healthy: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return summaries;
   }
 
   /**
@@ -86,7 +151,15 @@ export class McpProxyServer extends EventEmitter {
     }
 
     this.running = false;
-    logger.info('MCP proxy server stopping...');
+    logger.info('MCP proxy server stopping...', 'server');
+
+    // Stop heartbeat
+    this.stateManager.stopHeartbeat();
+
+    // Mark proxy as stopped (async but we don't wait)
+    this.stateManager.markStopped().catch(() => {
+      // Ignore errors during shutdown
+    });
 
     // Clean up stdin
     process.stdin.pause();
@@ -103,7 +176,7 @@ export class McpProxyServer extends EventEmitter {
 
     // Prevent memory exhaustion from large messages without newlines
     if (this.buffer.length > MAX_BUFFER_SIZE) {
-      logger.error(`Buffer overflow: ${this.buffer.length} bytes exceeds ${MAX_BUFFER_SIZE}`);
+      logger.error(`Buffer overflow: ${this.buffer.length} bytes exceeds ${MAX_BUFFER_SIZE}`, 'server');
       this.sendError(null, MCP_ERROR.INVALID_REQUEST, 'Message too large');
       this.buffer = '';
       return;
@@ -116,7 +189,17 @@ export class McpProxyServer extends EventEmitter {
    * Handle stdin end
    */
   private handleEnd(): void {
-    logger.info('stdin closed');
+    logger.info('stdin closed', 'server');
+
+    // Mark current client as gone
+    if (this.currentClient) {
+      this.stateManager
+        .updateClient(this.currentClient.name, { state: 'gone' })
+        .catch(() => {
+          // Ignore errors during shutdown
+        });
+    }
+
     this.stop();
   }
 
@@ -258,12 +341,25 @@ export class McpProxyServer extends EventEmitter {
     params: InitializeParams | undefined
   ): Promise<void> {
     if (this.initialized) {
-      logger.warn('Already initialized');
+      logger.warn('Already initialized', 'init');
     }
 
     const clientVersion = params?.protocolVersion || 'unknown';
     const clientName = params?.clientInfo?.name || 'unknown';
-    logger.info(`Client: ${clientName} (protocol=${clientVersion})`);
+    logger.info(`Client: ${clientName} (protocol=${clientVersion})`, 'init');
+
+    // Track client
+    this.currentClient = {
+      name: clientName,
+      protocolVersion: clientVersion,
+    };
+
+    // Update client state
+    await this.stateManager.updateClient(clientName, {
+      name: clientName,
+      protocolVersion: clientVersion,
+      state: 'active',
+    });
 
     this.initialized = true;
 
@@ -328,6 +424,11 @@ export class McpProxyServer extends EventEmitter {
 
     const { name, arguments: args = {} } = params;
     logger.info(`tools/call name=${name}`);
+
+    // Record tool call for client tracking
+    if (this.currentClient) {
+      await this.stateManager.recordToolCall(this.currentClient.name);
+    }
 
     const result = await this.router.routeToolCall(name, args as Record<string, unknown>);
 

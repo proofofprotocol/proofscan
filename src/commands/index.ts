@@ -33,3 +33,6 @@ export * from './tool.js';
 
 // Phase 5.0: MCP Proxy
 export * from './proxy.js';
+
+// Phase 5.0+: Log viewing
+export * from './log.js';
