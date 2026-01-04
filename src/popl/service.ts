@@ -7,7 +7,7 @@
 
 import { mkdir, writeFile, readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, relative, isAbsolute } from 'path';
 import { ulid } from 'ulid';
 import * as yaml from 'yaml';
 
@@ -80,6 +80,7 @@ export async function initPoplDir(root: string): Promise<void> {
 
 /**
  * Load POPL config from .popl/config.json
+ * Returns empty config with warning on parse error.
  */
 export async function loadPoplConfig(root: string): Promise<PoplConfig> {
   const configPath = join(getPoplDir(root), POPL_CONFIG_FILE);
@@ -91,9 +92,24 @@ export async function loadPoplConfig(root: string): Promise<PoplConfig> {
   try {
     const content = await readFile(configPath, 'utf-8');
     return JSON.parse(content) as PoplConfig;
-  } catch {
+  } catch (error) {
+    // Log warning for invalid config (don't fail silently)
+    console.warn(
+      `Warning: Failed to parse .popl/config.json: ${error instanceof Error ? error.message : String(error)}`
+    );
     return {};
   }
+}
+
+/**
+ * Convert absolute path to relative path for POPL output
+ * Ensures no absolute paths leak into POPL.yml
+ */
+function toRelativePath(absolutePath: string, baseDir: string): string {
+  if (!isAbsolute(absolutePath)) {
+    return absolutePath;
+  }
+  return relative(baseDir, absolutePath);
 }
 
 /**
@@ -216,11 +232,12 @@ export async function createSessionPoplEntry(
     const poplYmlContent = yaml.stringify(poplDoc);
     await writeFile(poplYmlPath, poplYmlContent, 'utf-8');
 
+    // Return relative paths for display (avoid leaking absolute paths)
     return {
       success: true,
       entryId,
-      entryPath,
-      poplYmlPath,
+      entryPath: toRelativePath(entryPath, outputRoot),
+      poplYmlPath: toRelativePath(poplYmlPath, outputRoot),
     };
   } catch (error) {
     return {

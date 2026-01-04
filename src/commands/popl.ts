@@ -90,6 +90,34 @@ export function createPoplCommand(getConfigPath: () => string): Command {
         const configDir = manager.getConfigDir();
         const cwd = process.cwd();
 
+        // Validate session ID format (ULID is 26 chars, but allow shorter for partial IDs)
+        const sessionId = options.session.trim();
+        if (!sessionId || sessionId.length < 8) {
+          if (getOutputOptions().json) {
+            output({
+              success: false,
+              error: 'Invalid session ID: must be at least 8 characters',
+            });
+          } else {
+            console.error('Invalid session ID: must be at least 8 characters.');
+          }
+          process.exit(1);
+        }
+
+        // Check for @reference (should use shell, not CLI)
+        if (sessionId.startsWith('@')) {
+          if (getOutputOptions().json) {
+            output({
+              success: false,
+              error: '@references are not supported in CLI. Use shell mode or provide session ID.',
+            });
+          } else {
+            console.error('@references are not supported in CLI.');
+            console.error('Use shell mode (pfscan shell) or provide the full session ID.');
+          }
+          process.exit(1);
+        }
+
         if (!hasPoplDir(cwd)) {
           if (getOutputOptions().json) {
             output({
@@ -103,7 +131,7 @@ export function createPoplCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
-        const result = await createSessionPoplEntry(options.session, configDir, {
+        const result = await createSessionPoplEntry(sessionId, configDir, {
           outputRoot: cwd,
           title: options.title,
           unsafeIncludeRaw: options.unsafeIncludeRaw,
