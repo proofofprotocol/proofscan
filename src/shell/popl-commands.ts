@@ -621,3 +621,90 @@ async function handlePoplShow(args: string[], configPath: string): Promise<void>
   console.log(`\nTip: Use "popl show ${entryId.slice(0, 8)} <view>" to see artifact content`);
   console.log(`     Views: ${VALID_VIEWS.join(', ')}`);
 }
+
+/**
+ * Get POPL JSON output for piping (used by repl.ts for pipe support)
+ *
+ * This is similar to handlePoplSession but returns JSON string instead of printing.
+ * Used for: popl @last --json | ref add <name>
+ *
+ * @returns JSON string or null on failure
+ */
+export async function getPoplJsonOutput(
+  args: string[],
+  context: ShellContext,
+  configPath: string
+): Promise<string | null> {
+  const cwd = process.cwd();
+  const manager = new ConfigManager(configPath);
+  const configDir = manager.getConfigDir();
+
+  // Check .popl exists
+  if (!hasPoplDir(cwd)) {
+    return null;
+  }
+
+  // Parse arguments (same as handlePoplSession)
+  let refArg: string | undefined;
+  let title: string | undefined;
+  let unsafeIncludeRaw = false;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--title' && i + 1 < args.length) {
+      title = args[++i];
+    } else if (arg === '--unsafe-include-raw') {
+      unsafeIncludeRaw = true;
+    } else if (arg.startsWith('@') || !arg.startsWith('-')) {
+      refArg = arg;
+    }
+  }
+
+  // Default to @this if no reference and we have context
+  if (!refArg) {
+    if (context.session) {
+      refArg = '@this';
+    } else {
+      refArg = '@last';
+    }
+  }
+
+  // Resolve reference to session ID
+  let sessionId: string;
+
+  if (isRef(refArg)) {
+    const eventsStore = new EventsStore(configDir);
+    const dataProvider = createRefDataProvider(eventsStore);
+    const resolver = new RefResolver(dataProvider);
+
+    const resolved = resolver.resolve(refArg, context);
+
+    if (!resolved.success || !resolved.ref || !resolved.ref.session) {
+      return null;
+    }
+
+    sessionId = resolved.ref.session;
+  } else {
+    sessionId = refArg;
+  }
+
+  // Create POPL entry using service layer
+  const result = await createSessionPoplEntry(sessionId, configDir, {
+    outputRoot: cwd,
+    title,
+    unsafeIncludeRaw,
+  });
+
+  if (!result.success || !result.entryId) {
+    return null;
+  }
+
+  // Return JSON (same format as handlePoplSession --json)
+  const output = {
+    kind: 'popl',
+    entry_id: result.entryId,
+    target: `popl/${result.entryId}`,
+  };
+
+  return JSON.stringify(output);
+}

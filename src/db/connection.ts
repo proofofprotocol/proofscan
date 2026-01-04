@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -113,12 +113,12 @@ function ensureCriticalTables(db: Database.Database): void {
     }
   }
 
-  // Phase 4.1: Ensure user_refs table exists
+  // Phase 4.1: Ensure user_refs table exists (with popl kind support)
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS user_refs (
         name TEXT PRIMARY KEY,
-        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context')),
+        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
         connector TEXT,
         session TEXT,
         rpc TEXT,
@@ -212,6 +212,35 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
       db.exec('BEGIN TRANSACTION');
 
       const statements = EVENTS_DB_MIGRATION_3_TO_4
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Ignore "table already exists" errors
+          if (err instanceof Error &&
+              !err.message.includes('already exists')) {
+            throw err;
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  // Migration 4 → 5: Add 'popl' to user_refs kind constraint (Phase 6.0)
+  if (fromVersion < 5) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      const statements = EVENTS_DB_MIGRATION_4_TO_5
         .split(';')
         .map(s => s.trim())
         .filter(s => s.length > 0 && !s.startsWith('--'));
@@ -423,6 +452,17 @@ export function diagnoseEventsDb(configDir?: string): DbDiagnostic {
       }
     }
 
+    // Check if user_refs table needs 'popl' kind constraint update (Phase 6.0)
+    if (result.tables.includes('user_refs')) {
+      const tableInfo = db.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='user_refs'"
+      ).get() as { sql: string } | undefined;
+
+      if (tableInfo?.sql && !tableInfo.sql.includes("'popl'")) {
+        result.missingColumns.push({ table: 'user_refs', column: 'kind:popl' });
+      }
+    }
+
   } catch (err) {
     result.error = err instanceof Error ? err.message : String(err);
   } finally {
@@ -488,7 +528,7 @@ export function fixEventsDb(configDir?: string): { success: boolean; fixed: stri
         db.exec(`
           CREATE TABLE IF NOT EXISTS user_refs (
             name TEXT PRIMARY KEY,
-            kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context')),
+            kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
             connector TEXT,
             session TEXT,
             rpc TEXT,
@@ -501,6 +541,34 @@ export function fixEventsDb(configDir?: string): { success: boolean; fixed: stri
           CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
         `);
         fixed.push('table:user_refs');
+      } else {
+        // Phase 6.0: Check if user_refs table needs 'popl' kind constraint update
+        const tableInfo = db.prepare(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='user_refs'"
+        ).get() as { sql: string } | undefined;
+
+        if (tableInfo?.sql && !tableInfo.sql.includes("'popl'")) {
+          // Recreate table with updated constraint (SQLite doesn't support ALTER CONSTRAINT)
+          db.exec(`
+            CREATE TABLE user_refs_new (
+              name TEXT PRIMARY KEY,
+              kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+              connector TEXT,
+              session TEXT,
+              rpc TEXT,
+              proto TEXT,
+              level TEXT,
+              captured_at TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            );
+            INSERT INTO user_refs_new SELECT * FROM user_refs;
+            DROP TABLE user_refs;
+            ALTER TABLE user_refs_new RENAME TO user_refs;
+            CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
+            CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
+          `);
+          fixed.push('constraint:user_refs.kind:popl');
+        }
       }
 
       // Check if sessions table exists before trying to add columns
