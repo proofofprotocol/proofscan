@@ -70,7 +70,7 @@ Context is displayed in the prompt and used by commands that accept @references.
 | `pwd` | Show current context | `pwd` |
 | `pwd --json` | Show context as JSON | `pwd --json` |
 | `cc <connector>` | Change connector | `cc time` |
-| `up <session>` | Navigate up to session | `up abc123` |
+| `cd <session>` | Navigate to session | `cd abc123` |
 | `ls` | List items in current context | `ls` |
 | `show` | Show details of current context | `show` |
 
@@ -90,7 +90,7 @@ proofscan> pwd
 Context: connector=time
 
 # Navigate to session (partial ID works)
-proofscan> up f2442c
+proofscan> cd f2442c
 ✓ Switched to session: f2442c9b (connector=time)
 
 # Show full context
@@ -177,16 +177,16 @@ time    weather    filesystem
 Navigate to a session (partial ID supported).
 
 ```bash
-proofscan> up f2442c
+proofscan> cd f2442c
 ✓ Switched to session: f2442c9b (connector=time)
 
 # From connector context
 proofscan> cc time
-proofscan> up <TAB>
+proofscan> cd <TAB>
 f2442c9b...    3cf5a66e...    7a1b3c5d...
 
 # Supports partial matching
-proofscan> up f24
+proofscan> cd f24
 ✓ Switched to session: f2442c9b
 ```
 
@@ -203,7 +203,7 @@ Sessions in connector 'time':
   [2] 3cf5a66e... (2 RPCs, 8 events) 2026-01-04 11:45
 
 # In session context: list RPCs
-proofscan> up f2442c
+proofscan> cd f2442c
 proofscan> ls
 RPCs in session 'f2442c9b':
   [1] initialize (id=1, 269ms)
@@ -233,7 +233,7 @@ Sessions: 3
 Enabled: yes
 
 # In session context
-proofscan> up f2442c
+proofscan> cd f2442c
 proofscan> show
 Session: f2442c9b
 Connector: time
@@ -525,7 +525,7 @@ time    weather    filesystem
 ### Session Completion
 
 ```bash
-proofscan> up <TAB>
+proofscan> cd <TAB>
 f2442c9b    3cf5a66e    7a1b3c5d
 
 proofscan> rpc list --session <TAB>
@@ -561,7 +561,7 @@ mytask    lastscan    initcall    mycontext
 proofscan> up abc<TAB>  # Completes to abc123...
 
 # Use partial IDs
-proofscan> up f24       # Matches f2442c9b
+proofscan> cd f24       # Matches f2442c9b
 ```
 
 ### Context Shortcuts
@@ -572,7 +572,7 @@ proofscan> ref add wip @this
 
 # Resume later
 proofscan> ref @ref:wip
-proofscan> up @ref:wip
+proofscan> cd @ref:wip
 ```
 
 ### POPL Workflow
@@ -600,7 +600,7 @@ proofscan> popl show <entry-id>
 # Add multiple references
 proofscan> cc time
 proofscan> ref add time-ctx @this
-proofscan> up f2442c
+proofscan> cd f2442c
 proofscan> ref add time-session @this
 proofscan> tool call get_current_time --args '{}'
 proofscan> ref add time-call @last
@@ -656,7 +656,7 @@ proofscan> cc time
 proofscan> ls
 
 # Select session
-proofscan> up f2442c
+proofscan> cd f2442c
 
 # Show details
 proofscan> show

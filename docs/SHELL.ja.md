@@ -70,7 +70,7 @@ proofscan> scan start --id time
 | `pwd` | 現在のコンテキストを表示 | `pwd` |
 | `pwd --json` | コンテキストを JSON で表示 | `pwd --json` |
 | `cc <connector>` | コネクタを変更 | `cc time` |
-| `up <session>` | セッションに移動 | `up abc123` |
+| `cd <session>` | セッションに移動 | `cd abc123` |
 | `ls` | 現在のコンテキストの項目を一覧表示 | `ls` |
 | `show` | 現在のコンテキストの詳細を表示 | `show` |
 
@@ -90,7 +90,7 @@ proofscan> pwd
 Context: connector=time
 
 # セッションに移動 (部分 ID でも可)
-proofscan> up f2442c
+proofscan> cd f2442c
 ✓ Switched to session: f2442c9b (connector=time)
 
 # 完全なコンテキストを表示
@@ -177,16 +177,16 @@ time    weather    filesystem
 セッションに移動します (部分 ID サポート)。
 
 ```bash
-proofscan> up f2442c
+proofscan> cd f2442c
 ✓ Switched to session: f2442c9b (connector=time)
 
 # コネクタコンテキストから
 proofscan> cc time
-proofscan> up <TAB>
+proofscan> cd <TAB>
 f2442c9b...    3cf5a66e...    7a1b3c5d...
 
 # 部分マッチをサポート
-proofscan> up f24
+proofscan> cd f24
 ✓ Switched to session: f2442c9b
 ```
 
@@ -203,7 +203,7 @@ Sessions in connector 'time':
   [2] 3cf5a66e... (2 RPCs, 8 events) 2026-01-04 11:45
 
 # セッションコンテキスト内: RPC を一覧表示
-proofscan> up f2442c
+proofscan> cd f2442c
 proofscan> ls
 RPCs in session 'f2442c9b':
   [1] initialize (id=1, 269ms)
@@ -233,7 +233,7 @@ Sessions: 3
 Enabled: yes
 
 # セッションコンテキスト内
-proofscan> up f2442c
+proofscan> cd f2442c
 proofscan> show
 Session: f2442c9b
 Connector: time
@@ -525,7 +525,7 @@ time    weather    filesystem
 ### セッション補完
 
 ```bash
-proofscan> up <TAB>
+proofscan> cd <TAB>
 f2442c9b    3cf5a66e    7a1b3c5d
 
 proofscan> rpc list --session <TAB>
@@ -561,7 +561,7 @@ mytask    lastscan    initcall    mycontext
 proofscan> up abc<TAB>  # abc123... に補完
 
 # 部分 ID を使用
-proofscan> up f24       # f2442c9b にマッチ
+proofscan> cd f24       # f2442c9b にマッチ
 ```
 
 ### コンテキストショートカット
@@ -572,7 +572,7 @@ proofscan> ref add wip @this
 
 # 後で再開
 proofscan> ref @ref:wip
-proofscan> up @ref:wip
+proofscan> cd @ref:wip
 ```
 
 ### POPL ワークフロー
@@ -600,7 +600,7 @@ proofscan> popl show <entry-id>
 # 複数の参照を追加
 proofscan> cc time
 proofscan> ref add time-ctx @this
-proofscan> up f2442c
+proofscan> cd f2442c
 proofscan> ref add time-session @this
 proofscan> tool call get_current_time --args '{}'
 proofscan> ref add time-call @last
@@ -656,7 +656,7 @@ proofscan> cc time
 proofscan> ls
 
 # セッション選択
-proofscan> up f2442c
+proofscan> cd f2442c
 
 # 詳細表示
 proofscan> show
