@@ -5,7 +5,7 @@
  * State is written to a JSON file in configDir.
  */
 
-import { writeFile, readFile, mkdir } from 'fs/promises';
+import { writeFile, readFile, mkdir, rename, unlink } from 'fs/promises';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 
@@ -198,8 +198,10 @@ export class RuntimeStateManager {
         lastSeen: now,
       };
 
-      // Increment sessions on re-initialize
-      if (update.state === 'active' && !update.sessions) {
+      // Increment sessions on re-initialize (when state becomes 'active' but
+      // sessions field is not explicitly provided in update, indicating this
+      // is a new initialize call rather than a regular activity update)
+      if (update.state === 'active' && !('sessions' in update)) {
         this.state.clients[clientName].sessions += 1;
       }
     } else {
@@ -262,7 +264,7 @@ export class RuntimeStateManager {
   }
 
   /**
-   * Persist state to file (atomic write)
+   * Persist state to file (atomic write using rename)
    */
   private async persist(): Promise<void> {
     const json = JSON.stringify(this.state, null, 2);
@@ -274,17 +276,9 @@ export class RuntimeStateManager {
       await mkdir(dir, { recursive: true });
     }
 
-    // Atomic write: write to temp file, then rename
+    // Atomic write: write to temp file, then rename (atomic on POSIX)
     await writeFile(tempPath, json, 'utf-8');
-    await writeFile(this.statePath, json, 'utf-8');
-
-    // Try to remove temp file (ignore errors)
-    try {
-      const { unlink } = await import('fs/promises');
-      await unlink(tempPath);
-    } catch {
-      // Ignore
-    }
+    await rename(tempPath, this.statePath);
   }
 
   /**
@@ -311,7 +305,7 @@ export class RuntimeStateManager {
   }
 
   /**
-   * Check if proxy is likely still running (heartbeat within threshold)
+   * Check if proxy is likely still running (heartbeat within threshold + PID check)
    */
   static isProxyAlive(state: ProxyRuntimeState): boolean {
     if (state.proxy.state !== 'RUNNING') {
@@ -320,6 +314,16 @@ export class RuntimeStateManager {
 
     if (!state.proxy.heartbeat) {
       return false;
+    }
+
+    // Check if PID is still running (process.kill with signal 0 checks existence)
+    if (state.proxy.pid > 0) {
+      try {
+        process.kill(state.proxy.pid, 0);
+      } catch {
+        // Process doesn't exist - proxy is dead
+        return false;
+      }
     }
 
     const heartbeatTime = new Date(state.proxy.heartbeat).getTime();
