@@ -117,6 +117,7 @@ The shell supports a powerful @reference syntax for accessing data without typin
 | `@rpc:<id>` | Specific RPC by ID |
 | `@session:<id>` | Specific session by ID (partial OK) |
 | `@ref:<name>` | User-defined named reference |
+| `@popl:<id>` | POPL entry by entry ID |
 
 ### Using References
 
@@ -493,7 +494,7 @@ Files:
 
 ## Pipe Support
 
-The shell supports piping data between commands.
+The shell supports piping data between commands, enabling powerful workflows for saving references and automating tasks.
 
 ### Basic Piping
 
@@ -505,6 +506,71 @@ proofscan> pwd --json | ref add mycontext
 proofscan> view --limit 1 --json | ref add lastevent
 ```
 
+### POPL Entry Piping
+
+Save POPL entries as named references for easy access later:
+
+```bash
+# Create POPL entry and save as reference
+proofscan> popl @last --json | ref add myentry
+✓ Saved reference: myentry
+  Kind: popl
+  Entry ID: 01KE4EKCVK...
+  Target: popl/01KE4EKCVK...
+
+# View saved POPL reference
+proofscan> ref @ref:myentry
+Reference: @ref:myentry
+  Kind: popl
+  Entry ID: 01KE4EKCVK...
+  Target: popl/01KE4EKCVK...
+
+# Use the reference with popl show
+proofscan> popl show @ref:myentry
+Entry: 01KE4EKCVK...
+Title: My Session
+...
+```
+
+### POPL Pipe Workflow Examples
+
+```bash
+# Workflow 1: Create and save POPL entry in one command
+proofscan> popl @last --json | ref add production-test
+✓ Saved reference: production-test
+
+# Workflow 2: Review entries quickly
+proofscan> ref ls
+Name              Kind       Target
+───────────────────────────────────────────────────
+production-test   popl       popl/01KE4EKCVK...
+debug-session     popl       popl/01KE5ABCDE...
+
+# Workflow 3: Use @ref with popl commands
+proofscan> popl show @ref:production-test status
+# Shows status.json artifact of the referenced entry
+
+# Workflow 4: Chain with prefix matching
+proofscan> popl show 01KE4 popl
+# Shows POPL.yml content using entry ID prefix
+```
+
+### Input Formats for `ref add`
+
+When piping to `ref add`, two input formats are supported:
+
+**1. JSON format (recommended):**
+```bash
+proofscan> popl @this --json | ref add myentry
+# Input: {"kind":"popl","entry_id":"01KE...","target":"popl/01KE..."}
+```
+
+**2. Simple string format:**
+```bash
+# Direct string input (for scripts)
+echo "popl/01KE4EKCVK" | ref add myentry
+```
+
 ### Supported Pipe Commands
 
 | Left Side | Right Side | Description |
@@ -513,6 +579,34 @@ proofscan> view --limit 1 --json | ref add lastevent
 | `view --json` | `ref add <name>` | Save event as reference |
 | `rpc list --json` | `ref add <name>` | Save RPC list as reference |
 | `rpc show --json` | `ref add <name>` | Save RPC details as reference |
+| `popl @... --json` | `ref add <name>` | Save POPL entry as reference |
+| `popl session --json` | `ref add <name>` | Save POPL entry as reference |
+
+### Reference Types
+
+The ref system supports different kinds of references:
+
+| Kind | Source | Fields |
+|------|--------|--------|
+| `connector` | `@this` (at connector) | connector |
+| `session` | `@this` (at session), `@last` | connector, session |
+| `rpc` | `@rpc:<id>`, `@last` (at session) | connector, session, rpc |
+| `popl` | `popl @... --json` | entry_id, target |
+
+### @popl Reference Syntax
+
+In addition to `@ref:<name>`, you can reference POPL entries directly:
+
+```bash
+# Direct POPL entry reference
+proofscan> popl show @popl:01KE4EKCVK
+
+# With prefix matching
+proofscan> popl show 01KE4
+
+# With saved reference
+proofscan> popl show @ref:myentry
+```
 
 ## TAB Completion
 
