@@ -77,6 +77,7 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   secret: ['list', 'set', 'edit', 'prune', 'export', 'import'],
   tool: ['ls', 'list', 'show'],
   ref: ['add', 'ls', 'list', 'rm', 'remove', 'delete'],
+  popl: ['init', 'session', 'ls', 'list', 'show'],
 };
 
 /**
@@ -115,6 +116,10 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'secrets import': ['--overwrite'],
   'secrets set': ['--clip'],
   'secrets edit': ['--clip'],
+  popl: ['--title', '--unsafe-include-raw'],
+  'popl ls': ['-s', '--oneline'],
+  'popl list': ['-s', '--oneline'],
+  'popl session': ['--title', '--unsafe-include-raw'],
 };
 
 /**

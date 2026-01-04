@@ -37,7 +37,7 @@ import {
 import { handleTool, handleSend } from './tool-commands.js';
 import { handleRef } from './ref-commands.js';
 import { handleInscribe } from './inscribe-commands.js';
-import { handlePopl } from './popl-commands.js';
+import { handlePopl, getPoplEntryIdsSync } from './popl-commands.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -109,6 +109,7 @@ export class ShellRepl {
   private connectorsCache: CacheEntry<string[]> | null = null;
   private sessionsCache: Map<string, CacheEntry<string[]>> = new Map();
   private rpcsCache: Map<string, CacheEntry<string[]>> = new Map();
+  private poplEntriesCache: CacheEntry<string[]> | null = null;
 
   constructor(configPath: string) {
     this.configPath = configPath;
@@ -129,6 +130,7 @@ export class ShellRepl {
     this.connectorsCache = null;
     this.sessionsCache.clear();
     this.rpcsCache.clear();
+    this.poplEntriesCache = null;
   }
 
   /**
@@ -182,6 +184,19 @@ export class ShellRepl {
           const rpcs = store.getRpcCalls(sessionId);
           const ids = rpcs.map((_, i) => String(i + 1));
           this.rpcsCache.set(sessionId, { data: ids, expiry: now + CACHE_TTL_MS });
+          return ids;
+        } catch {
+          return [];
+        }
+      },
+      getPoplEntryIds: (limit: number = DEFAULT_COMPLETION_LIMIT) => {
+        const now = Date.now();
+        if (this.poplEntriesCache && this.poplEntriesCache.expiry > now) {
+          return this.poplEntriesCache.data.slice(0, limit);
+        }
+        try {
+          const ids = getPoplEntryIdsSync(limit);
+          this.poplEntriesCache = { data: ids, expiry: now + CACHE_TTL_MS };
           return ids;
         } catch {
           return [];

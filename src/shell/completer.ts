@@ -19,6 +19,7 @@ export type DynamicDataProvider = {
   getConnectorIds: () => string[];
   getSessionPrefixes: (connectorId?: string, limit?: number) => string[];
   getRpcIds: (sessionId?: string) => string[];
+  getPoplEntryIds?: (limit?: number) => string[];
 };
 
 /**
@@ -323,6 +324,21 @@ function getCommandCompletions(
   if ((firstToken === 'view' || firstToken === 'v') && tokens.length === 1) {
     if (!currentToken.startsWith('-')) {
       candidates.push(...dataProvider.getConnectorIds());
+    }
+  }
+
+  // For popl show command, suggest entry IDs and views
+  if (firstToken === 'popl' && tokens.length >= 2 && tokens[1] === 'show') {
+    if (tokens.length === 2) {
+      // `popl show <entry-id>` - suggest entry IDs
+      if (dataProvider.getPoplEntryIds && !currentToken.startsWith('-')) {
+        candidates.push(...dataProvider.getPoplEntryIds(DEFAULT_COMPLETION_LIMIT));
+      }
+    } else if (tokens.length === 3) {
+      // `popl show <entry-id> <view>` - suggest view names
+      if (!currentToken.startsWith('-')) {
+        candidates.push('popl', 'status', 'rpc', 'log');
+      }
     }
   }
 

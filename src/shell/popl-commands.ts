@@ -36,7 +36,138 @@ import {
   readPoplEntry,
   getPoplEntriesDir,
 } from '../popl/index.js';
-import { join } from 'path';
+import { join, relative } from 'path';
+import { existsSync, readdirSync } from 'fs';
+import { readFile } from 'fs/promises';
+import type { PoplDocument } from '../popl/types.js';
+
+/** View names mapping to artifact files */
+const VIEW_ARTIFACT_MAP: Record<string, string> = {
+  popl: 'POPL.yml',
+  status: 'status.json',
+  rpc: 'rpc.sanitized.jsonl',
+  log: 'validation-run.log',
+};
+
+/** Valid view names */
+export const VALID_VIEWS = Object.keys(VIEW_ARTIFACT_MAP);
+
+/**
+ * Get the observed time from a POPL document
+ * Priority: capture.window.ended_at > capture.window.started_at > entry.created_at
+ */
+function getObservedTime(doc: PoplDocument): string {
+  if (doc.capture?.window?.ended_at) {
+    return doc.capture.window.ended_at;
+  }
+  if (doc.capture?.window?.started_at) {
+    return doc.capture.window.started_at;
+  }
+  return doc.entry.created_at;
+}
+
+/**
+ * Format timestamp for oneline display
+ * Returns: YYYY-MM-DD HH:mm:ss TZ (e.g., "2026-01-04 20:35:00 +09:00")
+ */
+function formatTimestamp(isoString: string): string {
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) {
+      return isoString;
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+
+    const tzOffset = -date.getTimezoneOffset();
+    const tzHours = Math.floor(Math.abs(tzOffset) / 60);
+    const tzMins = Math.abs(tzOffset) % 60;
+    const tzSign = tzOffset >= 0 ? '+' : '-';
+    const tz = `${tzSign}${String(tzHours).padStart(2, '0')}:${String(tzMins).padStart(2, '0')}`;
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} ${tz}`;
+  } catch {
+    return isoString;
+  }
+}
+
+/**
+ * Resolve entry ID by prefix matching
+ */
+async function resolveEntryId(
+  cwd: string,
+  idOrPrefix: string
+): Promise<{ success: true; entryId: string; entryPath: string } | { success: false; error: string; candidates?: string[] }> {
+  const entries = await listPoplEntries(cwd);
+
+  // Exact match first
+  const exactMatch = entries.find(e => e.id === idOrPrefix);
+  if (exactMatch) {
+    return { success: true, entryId: exactMatch.id, entryPath: exactMatch.path };
+  }
+
+  // Prefix match
+  const prefixMatches = entries.filter(e => e.id.startsWith(idOrPrefix));
+
+  if (prefixMatches.length === 0) {
+    return { success: false, error: `Entry not found: ${idOrPrefix}` };
+  }
+
+  if (prefixMatches.length === 1) {
+    return { success: true, entryId: prefixMatches[0].id, entryPath: prefixMatches[0].path };
+  }
+
+  // Multiple matches - ambiguous
+  return {
+    success: false,
+    error: `Ambiguous entry ID prefix: ${idOrPrefix} (${prefixMatches.length} matches)`,
+    candidates: prefixMatches.map(e => e.id),
+  };
+}
+
+/**
+ * Get POPL entry ID prefixes for TAB completion (async version)
+ */
+export async function getPoplEntryPrefixes(limit: number = 50): Promise<string[]> {
+  const cwd = process.cwd();
+  if (!hasPoplDir(cwd)) {
+    return [];
+  }
+  try {
+    const entries = await listPoplEntries(cwd);
+    return entries.slice(0, limit).map(e => e.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get POPL entry IDs synchronously for TAB completion
+ * Uses readdirSync to avoid async issues with readline completer
+ */
+export function getPoplEntryIdsSync(limit: number = 50): string[] {
+  const cwd = process.cwd();
+  if (!hasPoplDir(cwd)) {
+    return [];
+  }
+  try {
+    const entriesDir = getPoplEntriesDir(cwd);
+    if (!existsSync(entriesDir)) {
+      return [];
+    }
+    const entries = readdirSync(entriesDir, { withFileTypes: true });
+    return entries
+      .filter(e => e.isDirectory())
+      .map(e => e.name)
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Handle 'popl' shell command
@@ -63,7 +194,7 @@ export async function handlePopl(
       break;
     case 'ls':
     case 'list':
-      await handlePoplList();
+      await handlePoplList(subArgs);
       break;
     case 'show':
       await handlePoplShow(subArgs);
@@ -86,10 +217,13 @@ function printPoplHelp(): void {
   printInfo('Usage: popl <subcommand>');
   printInfo('');
   printInfo('Subcommands:');
-  printInfo('  popl init                Initialize .popl in current directory');
-  printInfo('  popl session [@ref]      Create POPL entry for session');
-  printInfo('  popl ls                  List POPL entries');
-  printInfo('  popl show <entry-id>     Show POPL entry details');
+  printInfo('  popl init                  Initialize .popl in current directory');
+  printInfo('  popl session [@ref]        Create POPL entry for session');
+  printInfo('  popl ls [-s|--oneline]     List POPL entries');
+  printInfo('  popl show <id> [view]      Show POPL entry or artifact');
+  printInfo('');
+  printInfo('Views for show command:');
+  printInfo('  popl, status, rpc, log     (default: popl)');
   printInfo('');
   printInfo('Reference shortcuts:');
   printInfo('  popl @this               Create entry for current session');
@@ -98,9 +232,10 @@ function printPoplHelp(): void {
   printInfo('');
   printInfo('Examples:');
   printInfo('  popl init');
-  printInfo('  popl session @last');
-  printInfo('  popl session @this --title "My audit"');
-  printInfo('  popl @last');
+  printInfo('  popl ls --oneline');
+  printInfo('  popl show 01JG status');
+  printInfo('  popl show 01JGTEST123 rpc');
+  printInfo('  popl session @last --title "My audit"');
 }
 
 /**
@@ -224,8 +359,11 @@ async function handlePoplSession(
 /**
  * Handle 'popl ls' command
  */
-async function handlePoplList(): Promise<void> {
+async function handlePoplList(args: string[]): Promise<void> {
   const cwd = process.cwd();
+
+  // Parse options
+  const oneline = args.includes('-s') || args.includes('--oneline');
 
   if (!hasPoplDir(cwd)) {
     printError('.popl directory not found.');
@@ -242,19 +380,37 @@ async function handlePoplList(): Promise<void> {
       return;
     }
 
-    console.log(`\nPOPL Entries (${entries.length}):\n`);
+    if (oneline) {
+      // One-line format: <timestamp> | <title> | <id>
+      for (const entry of entries) {
+        const doc = await readPoplEntry(entry.path);
+        if (doc) {
+          const observed = getObservedTime(doc);
+          const formatted = formatTimestamp(observed);
+          const title = doc.entry.title || '(no title)';
+          console.log(`${formatted} | ${title} | ${doc.entry.id}`);
+        } else {
+          console.log(`(invalid) | (invalid POPL.yml) | ${entry.id}`);
+        }
+      }
+    } else {
+      // Default detailed format
+      console.log(`\nPOPL Entries (${entries.length}):\n`);
 
-    for (const entry of entries) {
-      const doc = await readPoplEntry(entry.path);
-      if (doc) {
-        console.log(`  ${doc.entry.id}`);
-        console.log(`    Title: ${doc.entry.title}`);
-        console.log(`    Target: ${doc.target.kind} (${doc.target.ids.connector_id || 'N/A'})`);
-        console.log(`    Created: ${doc.entry.created_at}`);
-        console.log(`    Trust: ${doc.entry.trust.label}`);
-        console.log('');
-      } else {
-        console.log(`  ${entry.id} ${dimText('(invalid POPL.yml)')}`);
+      for (const entry of entries) {
+        const doc = await readPoplEntry(entry.path);
+        if (doc) {
+          const observed = getObservedTime(doc);
+          console.log(`  ${doc.entry.id}`);
+          console.log(`    Title: ${doc.entry.title}`);
+          console.log(`    Target: ${doc.target.kind} (${doc.target.ids.connector_id || 'N/A'})`);
+          console.log(`    Observed: ${formatTimestamp(observed)}`);
+          console.log(`    Recorded: ${formatTimestamp(doc.entry.created_at)}`);
+          console.log(`    Trust: ${doc.entry.trust.label}`);
+          console.log('');
+        } else {
+          console.log(`  ${entry.id} ${dimText('(invalid POPL.yml)')}`);
+        }
       }
     }
   } catch (error) {
@@ -270,7 +426,8 @@ async function handlePoplShow(args: string[]): Promise<void> {
   const cwd = process.cwd();
 
   if (args.length === 0) {
-    printError('Usage: popl show <entry-id>');
+    printError('Usage: popl show <entry-id> [view]');
+    printInfo('Views: popl, status, rpc, log');
     return;
   }
 
@@ -279,16 +436,72 @@ async function handlePoplShow(args: string[]): Promise<void> {
     return;
   }
 
-  const entryId = args[0];
-  const entriesDir = getPoplEntriesDir(cwd);
-  const entryPath = join(entriesDir, entryId);
+  // Parse arguments: <entry-id> [view]
+  const entryIdArg = args[0];
+  const view = args.length > 1 ? args[1].toLowerCase() : undefined;
 
+  // Validate view if provided
+  if (view && !VALID_VIEWS.includes(view)) {
+    printError(`Invalid view: ${view}`);
+    printInfo(`Valid views: ${VALID_VIEWS.join(', ')}`);
+    return;
+  }
+
+  // Resolve entry ID (supports prefix matching)
+  const resolved = await resolveEntryId(cwd, entryIdArg);
+  if (!resolved.success) {
+    printError(resolved.error);
+    if (resolved.candidates && resolved.candidates.length > 0) {
+      printInfo('Matching entries:');
+      const displayLimit = 10;
+      for (const candidate of resolved.candidates.slice(0, displayLimit)) {
+        printInfo(`  ${candidate}`);
+      }
+      if (resolved.candidates.length > displayLimit) {
+        printInfo(`  ... and ${resolved.candidates.length - displayLimit} more`);
+      }
+      printInfo('Provide a longer prefix to disambiguate.');
+    }
+    return;
+  }
+
+  const { entryId, entryPath } = resolved;
+  const displayPath = relative(cwd, entryPath) || '.';
+
+  // If view is specified, show artifact content
+  if (view) {
+    const artifactFile = VIEW_ARTIFACT_MAP[view];
+    const artifactPath = join(entryPath, artifactFile);
+
+    if (!existsSync(artifactPath)) {
+      printError(`Artifact not found: ${artifactFile}`);
+      printInfo(`Path: ${relative(cwd, artifactPath)}`);
+      return;
+    }
+
+    try {
+      const content = await readFile(artifactPath, 'utf-8');
+      process.stdout.write(content);
+      // Ensure newline at end
+      if (!content.endsWith('\n')) {
+        process.stdout.write('\n');
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      printError(`Failed to read artifact: ${msg}`);
+    }
+    return;
+  }
+
+  // Default: show POPL entry metadata
   const doc = await readPoplEntry(entryPath);
 
   if (!doc) {
-    printError(`Entry not found: ${entryId}`);
+    printError(`Failed to read POPL.yml: ${entryId}`);
     return;
   }
+
+  const observed = getObservedTime(doc);
 
   // Display entry
   console.log('\nPOPL Entry');
@@ -297,7 +510,8 @@ async function handlePoplShow(args: string[]): Promise<void> {
   console.log(`ID:       ${doc.entry.id}`);
   console.log(`Title:    ${doc.entry.title}`);
   console.log(`Author:   ${doc.entry.author.name}${doc.entry.author.handle ? ` (@${doc.entry.author.handle})` : ''}`);
-  console.log(`Created:  ${doc.entry.created_at}`);
+  console.log(`Observed: ${formatTimestamp(observed)}`);
+  console.log(`Recorded: ${formatTimestamp(doc.entry.created_at)}`);
   console.log(`Trust:    ${doc.entry.trust.label} (level ${doc.entry.trust.level})`);
 
   console.log('\nTarget:');
@@ -329,5 +543,7 @@ async function handlePoplShow(args: string[]): Promise<void> {
     console.log(`    - ${artifact.name} ${dimText(`(${artifact.sha256.slice(0, 16)}...)`)}`);
   }
 
-  console.log(`\nPath: ${entryPath}`);
+  console.log(`\nPath: ${displayPath}`);
+  console.log(`\nTip: Use "popl show ${entryId.slice(0, 8)} <view>" to see artifact content`);
+  console.log(`     Views: ${VALID_VIEWS.join(', ')}`);
 }
