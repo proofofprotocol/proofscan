@@ -45,6 +45,12 @@ Management:
   archive, a    Archive and prune old data
   config, c     Configuration management
   connectors    Connector management
+  popl          Public Observable Proof Ledger
+
+Advanced:
+  tool          MCP tool operations (ls, show, call)
+  proxy         MCP proxy server
+  shell         Interactive shell mode
 
 Shortcuts:
   v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
@@ -440,6 +446,62 @@ pfscan sessions list [--connector <id>] [--last <N>]
 pfscan sessions show --id <session_id>
 pfscan sessions prune [--before <date>] [--keep-last <N>] [--yes]
 ```
+
+## POPL (Public Observable Proof Ledger)
+
+POPL generates public-safe audit trails from MCP sessions. All sensitive data (paths, secrets, PII) is automatically sanitized.
+
+### Initialize POPL
+
+```bash
+cd /path/to/project
+pfscan popl init          # Creates .popl/ directory
+```
+
+### Create POPL Entry
+
+```bash
+# CLI: Requires explicit session ID
+pfscan popl session --session <session-id>
+pfscan popl session --session abc123 --title "My Audit"
+
+# Shell: Supports @references
+pfscan shell
+> popl @last              # Latest session
+> popl @this              # Current session
+> popl session @ref:name  # Named reference
+```
+
+### List and View Entries
+
+```bash
+pfscan popl list          # List all entries
+pfscan popl show <id>     # Show entry details
+```
+
+### POPL.yml Structure
+
+Each entry generates:
+- `POPL.yml` - Entry metadata and evidence summary
+- `status.json` - Session summary (safe for public)
+- `rpc.sanitized.jsonl` - Sanitized RPC events
+- `validation-run.log` - Generation log
+
+### Sanitization (Ruleset v1)
+
+Automatically redacted:
+- **Paths**: `/home/user/...`, `C:\Users\...`
+- **Secrets**: API keys, tokens, JWT, auth headers
+- **RPC Payloads**: Arguments/results replaced with SHA-256 hashes
+
+### Trust Levels
+
+| Level | Label | Description |
+|-------|-------|-------------|
+| 0 | Recorded | Self-reported, no verification |
+| 1 | Verified | Signature verified |
+| 2 | Attested | Third-party attestation |
+| 3 | Certified | Formal certification |
 
 ## Development
 

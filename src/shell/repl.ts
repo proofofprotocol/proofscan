@@ -37,6 +37,7 @@ import {
 import { handleTool, handleSend } from './tool-commands.js';
 import { handleRef } from './ref-commands.js';
 import { handleInscribe } from './inscribe-commands.js';
+import { handlePopl } from './popl-commands.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -311,6 +312,12 @@ export class ShellRepl {
     // Handle inscribe command (shell-native, Phase 4.3)
     if (command === 'inscribe') {
       await handleInscribe(args, this.context, this.configPath);
+      return;
+    }
+
+    // Handle popl command (shell-native, Phase 6.0)
+    if (command === 'popl') {
+      await handlePopl(args, this.context, this.configPath);
       return;
     }
 
