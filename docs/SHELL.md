@@ -159,35 +159,51 @@ proofscan> pwd --json | ref add mycontext
 ✓ Reference 'mycontext' saved
 ```
 
-### cc - Change Connector
+### cd / cc - Change Context
 
-Navigate to a connector.
+Navigate between contexts (`cd` and `cc` are aliases).
 
 ```bash
-proofscan> cc time
+# Navigate to root
+proofscan> cd /
+✓ Switched to root
+
+# Navigate to connector
+proofscan> cd time
 ✓ Switched to connector: time
 
-# With TAB completion
-proofscan> cc <TAB>
-time    weather    filesystem
-```
-
-### up - Navigate to Session
-
-Navigate to a session (partial ID supported).
-
-```bash
+# Navigate to session (from connector context)
 proofscan> cd f2442c
 ✓ Switched to session: f2442c9b (connector=time)
 
+# Direct path
+proofscan> cd time/f2442c
+✓ Switched to session: f2442c9b (connector=time)
+
+# Go up one level (use .. command)
+proofscan> ..
+✓ Moved up to connector: time
+
+# Go up with cd
+proofscan> cd ..
+✓ Moved up to connector: time
+
+# Go back to previous location
+proofscan> cd -
+✓ Switched to previous location
+
+# Jump to latest session
+proofscan> cd @last
+✓ Switched to latest session
+
+# With TAB completion
+proofscan> cd <TAB>
+time    weather    filesystem
+
 # From connector context
-proofscan> cc time
+proofscan> cd time
 proofscan> cd <TAB>
 f2442c9b...    3cf5a66e...    7a1b3c5d...
-
-# Supports partial matching
-proofscan> cd f24
-✓ Switched to session: f2442c9b
 ```
 
 ### ls - List Items

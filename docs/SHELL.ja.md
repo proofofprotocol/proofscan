@@ -159,35 +159,51 @@ proofscan> pwd --json | ref add mycontext
 ✓ Reference 'mycontext' saved
 ```
 
-### cc - コネクタを変更
+### cd / cc - コンテキストの変更
 
-コネクタに移動します。
+コンテキスト間を移動します（`cd`と`cc`はエイリアス）。
 
 ```bash
-proofscan> cc time
+# ルートに移動
+proofscan> cd /
+✓ Switched to root
+
+# コネクタに移動
+proofscan> cd time
 ✓ Switched to connector: time
 
-# TAB 補完付き
-proofscan> cc <TAB>
-time    weather    filesystem
-```
-
-### up - セッションに移動
-
-セッションに移動します (部分 ID サポート)。
-
-```bash
+# セッションに移動 (コネクタコンテキストから)
 proofscan> cd f2442c
 ✓ Switched to session: f2442c9b (connector=time)
 
+# 直接パス指定
+proofscan> cd time/f2442c
+✓ Switched to session: f2442c9b (connector=time)
+
+# 一階層上に移動 (..コマンドを使用)
+proofscan> ..
+✓ Moved up to connector: time
+
+# cdで一階層上に移動
+proofscan> cd ..
+✓ Moved up to connector: time
+
+# 前の場所に戻る
+proofscan> cd -
+✓ Switched to previous location
+
+# 最新のセッションにジャンプ
+proofscan> cd @last
+✓ Switched to latest session
+
+# TAB 補完付き
+proofscan> cd <TAB>
+time    weather    filesystem
+
 # コネクタコンテキストから
-proofscan> cc time
+proofscan> cd time
 proofscan> cd <TAB>
 f2442c9b...    3cf5a66e...    7a1b3c5d...
-
-# 部分マッチをサポート
-proofscan> cd f24
-✓ Switched to session: f2442c9b
 ```
 
 ### ls - 項目を一覧表示
