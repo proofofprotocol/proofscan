@@ -37,7 +37,7 @@ import {
 import { handleTool, handleSend } from './tool-commands.js';
 import { handleRef } from './ref-commands.js';
 import { handleInscribe } from './inscribe-commands.js';
-import { handlePopl } from './popl-commands.js';
+import { handlePopl, getPoplEntryPrefixes } from './popl-commands.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -183,6 +183,18 @@ export class ShellRepl {
           const ids = rpcs.map((_, i) => String(i + 1));
           this.rpcsCache.set(sessionId, { data: ids, expiry: now + CACHE_TTL_MS });
           return ids;
+        } catch {
+          return [];
+        }
+      },
+      getPoplEntryIds: (limit: number = DEFAULT_COMPLETION_LIMIT) => {
+        // Note: This is sync but getPoplEntryPrefixes is async
+        // We return empty for now, as TAB completion is sync
+        // For better UX, we'd need async completion support
+        try {
+          // Sync workaround: return cached or empty
+          // Real entries will be fetched on command execution
+          return [];
         } catch {
           return [];
         }
