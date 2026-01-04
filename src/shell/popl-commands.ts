@@ -37,7 +37,7 @@ import {
   getPoplEntriesDir,
 } from '../popl/index.js';
 import { join, relative } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { readFile } from 'fs/promises';
 import type { PoplDocument } from '../popl/types.js';
 
@@ -130,7 +130,7 @@ async function resolveEntryId(
 }
 
 /**
- * Get POPL entry ID prefixes for TAB completion
+ * Get POPL entry ID prefixes for TAB completion (async version)
  */
 export async function getPoplEntryPrefixes(limit: number = 50): Promise<string[]> {
   const cwd = process.cwd();
@@ -140,6 +140,30 @@ export async function getPoplEntryPrefixes(limit: number = 50): Promise<string[]
   try {
     const entries = await listPoplEntries(cwd);
     return entries.slice(0, limit).map(e => e.id);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get POPL entry IDs synchronously for TAB completion
+ * Uses readdirSync to avoid async issues with readline completer
+ */
+export function getPoplEntryIdsSync(limit: number = 50): string[] {
+  const cwd = process.cwd();
+  if (!hasPoplDir(cwd)) {
+    return [];
+  }
+  try {
+    const entriesDir = getPoplEntriesDir(cwd);
+    if (!existsSync(entriesDir)) {
+      return [];
+    }
+    const entries = readdirSync(entriesDir, { withFileTypes: true });
+    return entries
+      .filter(e => e.isDirectory())
+      .map(e => e.name)
+      .slice(0, limit);
   } catch {
     return [];
   }
@@ -427,11 +451,16 @@ async function handlePoplShow(args: string[]): Promise<void> {
   const resolved = await resolveEntryId(cwd, entryIdArg);
   if (!resolved.success) {
     printError(resolved.error);
-    if (resolved.candidates && resolved.candidates.length <= 5) {
-      printInfo('Did you mean one of these?');
-      for (const candidate of resolved.candidates) {
+    if (resolved.candidates && resolved.candidates.length > 0) {
+      printInfo('Matching entries:');
+      const displayLimit = 10;
+      for (const candidate of resolved.candidates.slice(0, displayLimit)) {
         printInfo(`  ${candidate}`);
       }
+      if (resolved.candidates.length > displayLimit) {
+        printInfo(`  ... and ${resolved.candidates.length - displayLimit} more`);
+      }
+      printInfo('Provide a longer prefix to disambiguate.');
     }
     return;
   }
