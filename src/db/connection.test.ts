@@ -63,16 +63,26 @@ describe('diagnoseEventsDb', () => {
       CREATE TABLE rpc_calls (id TEXT PRIMARY KEY);
       CREATE TABLE events (id TEXT PRIMARY KEY);
       CREATE TABLE actors (id TEXT PRIMARY KEY);
-      CREATE TABLE user_refs (name TEXT PRIMARY KEY);
+      CREATE TABLE user_refs (
+        name TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+        connector TEXT,
+        session TEXT,
+        rpc TEXT,
+        proto TEXT,
+        level TEXT,
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
-    db.pragma('user_version = 4');
+    db.pragma('user_version = 5');
     db.close();
 
     const result = diagnoseEventsDb(testDir);
 
     expect(result.exists).toBe(true);
     expect(result.readable).toBe(true);
-    expect(result.userVersion).toBe(4);
+    expect(result.userVersion).toBe(5);
     expect(result.missingTables).toEqual([]);
     expect(result.missingColumns).toContainEqual({ table: 'sessions', column: 'actor_id' });
     expect(result.missingColumns).toContainEqual({ table: 'sessions', column: 'actor_kind' });
@@ -99,7 +109,7 @@ describe('diagnoseEventsDb', () => {
       CREATE TABLE actors (id TEXT PRIMARY KEY);
       CREATE TABLE user_refs (
         name TEXT PRIMARY KEY,
-        kind TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
         connector TEXT,
         session TEXT,
         rpc TEXT,
@@ -109,14 +119,14 @@ describe('diagnoseEventsDb', () => {
         created_at TEXT NOT NULL
       );
     `);
-    db.pragma('user_version = 4');
+    db.pragma('user_version = 5');
     db.close();
 
     const result = diagnoseEventsDb(testDir);
 
     expect(result.exists).toBe(true);
     expect(result.readable).toBe(true);
-    expect(result.userVersion).toBe(4);
+    expect(result.userVersion).toBe(5);
     expect(result.missingTables).toEqual([]);
     expect(result.missingColumns).toEqual([]);
   });
@@ -164,7 +174,17 @@ describe('fixEventsDb', () => {
         actor_label TEXT,
         secret_ref_count INTEGER NOT NULL DEFAULT 0
       );
-      CREATE TABLE user_refs (name TEXT PRIMARY KEY);
+      CREATE TABLE user_refs (
+        name TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+        connector TEXT,
+        session TEXT,
+        rpc TEXT,
+        proto TEXT,
+        level TEXT,
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
     db.close();
 
@@ -189,7 +209,17 @@ describe('fixEventsDb', () => {
         started_at TEXT NOT NULL
       );
       CREATE TABLE actors (id TEXT PRIMARY KEY);
-      CREATE TABLE user_refs (name TEXT PRIMARY KEY);
+      CREATE TABLE user_refs (
+        name TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+        connector TEXT,
+        session TEXT,
+        rpc TEXT,
+        proto TEXT,
+        level TEXT,
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
     db.close();
 
@@ -229,7 +259,7 @@ describe('fixEventsDb', () => {
       );
       CREATE TABLE user_refs (
         name TEXT PRIMARY KEY,
-        kind TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
         connector TEXT,
         session TEXT,
         rpc TEXT,
@@ -297,7 +327,17 @@ describe('fixEventsDb', () => {
         created_at TEXT NOT NULL,
         revoked_at TEXT
       );
-      CREATE TABLE user_refs (name TEXT PRIMARY KEY);
+      CREATE TABLE user_refs (
+        name TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+        connector TEXT,
+        session TEXT,
+        rpc TEXT,
+        proto TEXT,
+        level TEXT,
+        captured_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
     db.close();
 

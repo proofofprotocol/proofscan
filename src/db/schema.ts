@@ -3,9 +3,10 @@
  * Phase 2.1: Schema version 2 with seq, summary, payload_hash
  * Phase 3.4: Schema version 3 with actor columns, secret_ref_count, actors table
  * Phase 4.1: Schema version 4 with user_refs table for named references
+ * Phase 6.0: Schema version 5 with popl kind support in user_refs
  */
 
-export const EVENTS_DB_VERSION = 4;
+export const EVENTS_DB_VERSION = 5;
 export const PROOFS_DB_VERSION = 1;
 
 // events.db schema (version 3)
@@ -79,9 +80,10 @@ CREATE INDEX IF NOT EXISTS idx_actors_kind ON actors(kind);
 CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
 
 -- User refs table (Phase 4.1: named references)
+-- Note: 'popl' kind uses connector column for entry_id and session column for target
 CREATE TABLE IF NOT EXISTS user_refs (
   name TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context')),
+  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
   connector TEXT,
   session TEXT,
   rpc TEXT,
@@ -150,9 +152,10 @@ CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
  */
 export const EVENTS_DB_MIGRATION_3_TO_4 = `
 -- Create user_refs table for named references
+-- Note: 'popl' kind uses connector column for entry_id and session column for target
 CREATE TABLE IF NOT EXISTS user_refs (
   name TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context')),
+  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
   connector TEXT,
   session TEXT,
   rpc TEXT,
@@ -164,6 +167,41 @@ CREATE TABLE IF NOT EXISTS user_refs (
 
 CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
 
+CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
+`;
+
+/**
+ * Migration from version 4 to version 5
+ * Adds 'popl' to user_refs kind CHECK constraint
+ */
+export const EVENTS_DB_MIGRATION_4_TO_5 = `
+-- Add 'popl' to user_refs kind constraint
+-- SQLite doesn't support ALTER CONSTRAINT, so we recreate the table
+
+-- Create new table with updated constraint
+CREATE TABLE user_refs_new (
+  name TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+  connector TEXT,
+  session TEXT,
+  rpc TEXT,
+  proto TEXT,
+  level TEXT,
+  captured_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+-- Copy data from old table
+INSERT INTO user_refs_new SELECT * FROM user_refs;
+
+-- Drop old table
+DROP TABLE user_refs;
+
+-- Rename new table
+ALTER TABLE user_refs_new RENAME TO user_refs;
+
+-- Recreate indexes
+CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
 CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
 `;
 

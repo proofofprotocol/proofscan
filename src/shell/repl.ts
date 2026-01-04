@@ -733,13 +733,23 @@ Tips:
 
   /**
    * Handle: pwd --json | ref add <name>
+   * Also supports: popl @... --json | ref add <name>
    */
   private async handlePipeToRefAdd(leftTokens: string[], rightTokens: string[]): Promise<void> {
     const leftCommand = leftTokens[0];
+    const hasJson = leftTokens.includes('--json');
 
-    if (leftCommand !== 'pwd' || !leftTokens.includes('--json')) {
-      printError('Pipe source must be: pwd --json');
-      printInfo('Example: pwd --json | ref add myref');
+    // Support both pwd --json and popl @... --json
+    if (leftCommand === 'popl' && hasJson) {
+      await this.handlePoplPipeToRefAdd(leftTokens, rightTokens);
+      return;
+    }
+
+    if (leftCommand !== 'pwd' || !hasJson) {
+      printError('Pipe source must be: pwd --json or popl @... --json');
+      printInfo('Examples:');
+      printInfo('  pwd --json | ref add myref');
+      printInfo('  popl @this --json | ref add myentry');
       return;
     }
 
@@ -762,6 +772,29 @@ Tips:
 
     const ref = createRefFromContext(this.context);
     const jsonOutput = refToJson(ref);
+
+    // Now call ref add with the JSON as stdin data
+    const refArgs = rightTokens.slice(1); // ['add', '<name>']
+    await handleRef(refArgs, this.context, this.configPath, jsonOutput);
+  }
+
+  /**
+   * Handle: popl @... --json | ref add <name>
+   */
+  private async handlePoplPipeToRefAdd(leftTokens: string[], rightTokens: string[]): Promise<void> {
+    // Execute popl command to get JSON output
+    // Left tokens: ['popl', '@this', '--json'] or ['popl', '@last', '--json']
+    const poplArgs = leftTokens.slice(1).filter(t => t !== '--json'); // Remove 'popl' and '--json'
+
+    // Capture popl output by calling handlePopl with JSON flag
+    const { getPoplJsonOutput } = await import('./popl-commands.js');
+
+    const jsonOutput = await getPoplJsonOutput(poplArgs, this.context, this.configPath);
+
+    if (!jsonOutput) {
+      printError('Failed to get POPL JSON output');
+      return;
+    }
 
     // Now call ref add with the JSON as stdin data
     const refArgs = rightTokens.slice(1); // ['add', '<name>']
