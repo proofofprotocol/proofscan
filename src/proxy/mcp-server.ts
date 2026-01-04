@@ -102,6 +102,13 @@ export class McpProxyServer extends EventEmitter {
     await this.stateManager.initialize(connectorSummaries, logLevel);
     this.stateManager.startHeartbeat();
 
+    // Preload tools from all connectors (eager loading)
+    // This prevents cold start delays when the first tools/list arrives
+    await this.aggregator.preloadTools();
+
+    // Update connector summaries with actual tool counts
+    await this.updateConnectorSummaries();
+
     // Set up stdin
     process.stdin.setEncoding('utf-8');
     process.stdin.on('data', (chunk: string) => this.handleData(chunk));
@@ -111,7 +118,7 @@ export class McpProxyServer extends EventEmitter {
     // Resume stdin
     process.stdin.resume();
 
-    logger.info(`Proxy started with ${connectorSummaries.length} connector(s)`, 'server');
+    logger.info(`Proxy started with ${this.options.connectors.length} connector(s)`, 'server');
   }
 
   /**
@@ -140,6 +147,40 @@ export class McpProxyServer extends EventEmitter {
     }
 
     return summaries;
+  }
+
+  /**
+   * Update connector summaries with actual tool counts after preloading
+   */
+  private async updateConnectorSummaries(): Promise<void> {
+    try {
+      const tools = await this.aggregator.getAggregatedTools();
+
+      // Group tools by connector
+      const toolsByConnector = new Map<string, number>();
+      for (const tool of tools) {
+        const count = toolsByConnector.get(tool.connectorId) ?? 0;
+        toolsByConnector.set(tool.connectorId, count + 1);
+      }
+
+      // Build updated summaries
+      const updatedSummaries: ConnectorSummary[] = [];
+      for (const connector of this.options.connectors) {
+        const toolCount = toolsByConnector.get(connector.id) ?? 0;
+        updatedSummaries.push({
+          id: connector.id,
+          toolCount,
+          healthy: toolCount > 0,
+          error: toolCount === 0 ? 'No tools loaded' : undefined,
+        });
+      }
+
+      // Re-initialize state with updated summaries
+      const logLevel = isVerbose() ? 'INFO' : 'WARN';
+      await this.stateManager.initialize(updatedSummaries, logLevel);
+    } catch (error) {
+      logger.warn(`Failed to update connector summaries: ${error instanceof Error ? error.message : error}`, 'server');
+    }
   }
 
   /**
