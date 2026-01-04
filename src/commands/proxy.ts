@@ -1,17 +1,25 @@
 /**
- * Proxy Command (Phase 5.0)
+ * Proxy Command (Phase 5.0+)
  *
  * pfscan proxy start [options]
+ * pfscan proxy status [--json]
  *
  * Starts an MCP proxy server that aggregates tools from multiple
- * backend connectors.
+ * backend connectors, and provides status display.
  */
 
 import { Command } from 'commander';
 import { ConfigManager } from '../config/index.js';
 import type { Connector } from '../types/index.js';
-import { McpProxyServer, setVerbose, logger } from '../proxy/index.js';
-import { getOutputOptions } from '../utils/output.js';
+import {
+  McpProxyServer,
+  setVerbose,
+  logger,
+  RuntimeStateManager,
+  type ProxyRuntimeState,
+} from '../proxy/index.js';
+import { output, getOutputOptions } from '../utils/output.js';
+import { formatRelativeTime } from '../utils/time.js';
 
 export function createProxyCommand(getConfigPath: () => string): Command {
   const cmd = new Command('proxy')
@@ -140,5 +148,113 @@ export function createProxyCommand(getConfigPath: () => string): Command {
       }
     });
 
+  // Status subcommand
+  cmd
+    .command('status')
+    .description('Show proxy runtime status')
+    .action(async () => {
+      const configPath = getConfigPath();
+      const manager = new ConfigManager(configPath);
+      const configDir = manager.getConfigDir();
+
+      const state = await RuntimeStateManager.read(configDir);
+
+      if (!state) {
+        if (getOutputOptions().json) {
+          output({ running: false, message: 'No proxy state found' });
+        } else {
+          console.log('Proxy Status: No state found (proxy may never have run)');
+        }
+        return;
+      }
+
+      const isAlive = RuntimeStateManager.isProxyAlive(state);
+
+      if (getOutputOptions().json) {
+        output({
+          running: isAlive,
+          ...state,
+        });
+        return;
+      }
+
+      // Human-readable output
+      console.log('Proxy Status');
+      console.log('═══════════════════════════════════════════════════\n');
+
+      // Proxy info
+      const proxyState = isAlive ? 'RUNNING' : (state.proxy.state === 'RUNNING' ? 'STALE' : 'STOPPED');
+      console.log(`State:        ${proxyState}`);
+      console.log(`Mode:         ${state.proxy.mode}`);
+      console.log(`PID:          ${state.proxy.pid}`);
+
+      if (state.proxy.startedAt) {
+        console.log(`Started:      ${state.proxy.startedAt}`);
+        const uptime = formatUptime(state.proxy.startedAt);
+        console.log(`Uptime:       ${uptime}`);
+      }
+
+      if (state.proxy.heartbeat) {
+        console.log(`Heartbeat:    ${formatRelativeTime(state.proxy.heartbeat)}`);
+      }
+
+      // Connectors
+      console.log('\nConnectors:');
+      if (state.connectors.length === 0) {
+        console.log('  (none)');
+      } else {
+        for (const conn of state.connectors) {
+          const status = conn.healthy ? '●' : '○';
+          const tools = conn.toolCount > 0 ? `${conn.toolCount} tools` : 'pending';
+          const error = conn.error ? ` (${conn.error})` : '';
+          console.log(`  ${status} ${conn.id}: ${tools}${error}`);
+        }
+      }
+
+      // Clients
+      console.log('\nClients:');
+      const clientEntries = Object.values(state.clients);
+      if (clientEntries.length === 0) {
+        console.log('  (none)');
+      } else {
+        for (const client of clientEntries) {
+          const effectiveState = RuntimeStateManager.determineClientState(client);
+          const stateIcon = effectiveState === 'active' ? '●' : effectiveState === 'idle' ? '○' : '✕';
+          console.log(`  ${stateIcon} ${client.name} (${effectiveState})`);
+          console.log(`      Last seen: ${formatRelativeTime(client.lastSeen)}`);
+          console.log(`      Sessions: ${client.sessions}, Tool calls: ${client.toolCalls}`);
+        }
+      }
+
+      // Logging
+      console.log('\nLogging:');
+      console.log(`  Level:      ${state.logging.level}`);
+      console.log(`  Buffered:   ${state.logging.bufferedLines}/${state.logging.maxLines} lines`);
+    });
+
   return cmd;
+}
+
+/**
+ * Format uptime from startedAt timestamp
+ */
+function formatUptime(startedAt: string): string {
+  const start = new Date(startedAt).getTime();
+  const now = Date.now();
+  const diffMs = now - start;
+
+  if (diffMs < 0) return '0s';
+
+  const seconds = Math.floor(diffMs / 1000) % 60;
+  const minutes = Math.floor(diffMs / 60000) % 60;
+  const hours = Math.floor(diffMs / 3600000) % 24;
+  const days = Math.floor(diffMs / 86400000);
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+
+  return parts.join(' ');
 }
