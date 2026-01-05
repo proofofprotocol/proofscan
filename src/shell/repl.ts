@@ -38,6 +38,7 @@ import { handleTool, handleSend } from './tool-commands.js';
 import { handleRef } from './ref-commands.js';
 import { handleInscribe } from './inscribe-commands.js';
 import { handlePopl, getPoplEntryIdsSync } from './popl-commands.js';
+import { resolveCommand } from './command-resolver.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -243,8 +244,22 @@ export class ShellRepl {
       const trimmed = line.trim();
 
       if (trimmed) {
-        this.history = addToHistory(this.history, trimmed);
-        await this.processLine(trimmed);
+        // Resolve command (prefix matching, context expansion)
+        const tokens = trimmed.split(/\s+/).filter(t => t !== '');
+        const resolution = resolveCommand(tokens, this.context);
+
+        if (!resolution.success) {
+          // Show error for ambiguous commands
+          printError(resolution.error!);
+          if (resolution.candidates) {
+            printInfo(`Did you mean: ${resolution.candidates.join(', ')}?`);
+          }
+        } else {
+          // Use normalized command for history (e.g., "conn ls" → "connectors ls")
+          const normalizedLine = resolution.resolved.join(' ') || trimmed;
+          this.history = addToHistory(this.history, normalizedLine);
+          await this.processLine(normalizedLine);
+        }
       }
 
       if (this.running) {

@@ -12,6 +12,7 @@ import {
   TOOL_COMMANDS,
   BLOCKED_IN_SHELL,
   DEFAULT_COMPLETION_LIMIT,
+  CONNECTORS_SUBCOMMANDS,
   getAllowedCommands,
 } from './types.js';
 
@@ -66,7 +67,16 @@ function getCandidates(
 ): string[] {
   // No tokens yet - complete top-level commands + builtins + router commands + tool commands (excluding blocked commands)
   if (completedTokens.length === 0) {
-    return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...TOOL_COMMANDS, ...getAllowedCommands()];
+    const candidates = [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...TOOL_COMMANDS, ...getAllowedCommands()];
+
+    // At root level, also add connectors subcommands for context expansion
+    // This allows typing "delete<TAB>" to complete to "delete" (which will be expanded to "connectors delete")
+    const level = getContextLevel(context);
+    if (level === 'root') {
+      candidates.push(...CONNECTORS_SUBCOMMANDS);
+    }
+
+    return [...new Set(candidates)]; // Deduplicate (ls is in both ROUTER_COMMANDS and CONNECTORS_SUBCOMMANDS)
   }
 
   const firstToken = completedTokens[0];

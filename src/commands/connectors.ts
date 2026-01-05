@@ -80,6 +80,7 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
     .option('--stdio <cmdline>', 'Command line (command and args as single string)')
     .option('--from-mcp-json <json>', 'MCP server JSON (use "-" for stdin)')
     .option('--from-mcp-file <path>', 'Path to MCP config file (e.g., claude_desktop_config.json)')
+    .option('--clip', 'Read MCP server JSON from clipboard')
     .action(async (idArg, options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
@@ -92,9 +93,72 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
         const id = idArg || options.id;
 
         // Validate mutual exclusivity
-        if (options.fromMcpJson && options.fromMcpFile) {
-          outputError('Cannot use both --from-mcp-json and --from-mcp-file');
+        const inputModes = [options.fromMcpJson, options.fromMcpFile, options.clip].filter(Boolean);
+        if (inputModes.length > 1) {
+          outputError('Cannot use multiple input options (--from-mcp-json, --from-mcp-file, --clip)');
           process.exit(1);
+        }
+
+        // --clip mode: read from clipboard with secretize processing
+        if (options.clip) {
+          if (!id) {
+            outputError('Connector ID required with --clip. Usage: connectors add <id> --clip');
+            process.exit(1);
+          }
+
+          const { readClipboard } = await import('../utils/clipboard.js');
+          let clipContent: string;
+          try {
+            clipContent = readClipboard();
+            if (!clipContent?.trim()) {
+              outputError('Clipboard is empty');
+              process.exit(1);
+            }
+          } catch (e) {
+            outputError(`Failed to read clipboard: ${e instanceof Error ? e.message : String(e)}`);
+            process.exit(1);
+          }
+
+          const result = parseMcpServerById(clipContent, id);
+
+          if (result.errors.length > 0) {
+            outputError(`Invalid JSON: ${result.errors.join(', ')}`);
+            process.exit(1);
+          }
+
+          if (result.connectors.length === 0) {
+            outputError('No connector definition found in clipboard');
+            process.exit(1);
+          }
+
+          if (result.connectors.length > 1) {
+            outputError(`Multiple connectors found (${result.connectors.length}). Use 'connectors import --clip' instead.`);
+            process.exit(1);
+          }
+
+          // Use toConnector for secretize/sanitize processing
+          const { toConnector } = await import('../config/add.js');
+          const transport = result.connectors[0].transport as StdioTransport;
+          const parsed = {
+            id,
+            command: transport.command,
+            args: transport.args,
+            env: transport.env,
+          };
+
+          const { connector, secretizeOutput } = await toConnector(parsed, {
+            configPath: getConfigPath(),
+          });
+
+          await manager.addConnector(connector);
+
+          // Show secretize results if any
+          for (const line of secretizeOutput) {
+            console.log(`  ${line}`);
+          }
+
+          outputSuccess(`Connector '${id}' added from clipboard`);
+          return;
         }
 
         // --from-mcp-json or --from-mcp-file mode
@@ -162,8 +226,11 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
         }
 
         // No mode specified
-        outputError('One of --stdio, --from-mcp-json, or --from-mcp-file is required');
+        outputError('One of --stdio, --from-mcp-json, --from-mcp-file, or --clip is required');
         console.error('\nExamples:');
+        console.error('  # From clipboard (copy JSON from mcp.so, then run)');
+        console.error('  pfscan connectors add inscribe --clip');
+        console.error('');
         console.error('  # From command line');
         console.error('  pfscan connectors add inscribe --stdio \'npx -y inscribe-mcp\'');
         console.error('');
@@ -213,16 +280,22 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
     });
 
   cmd
-    .command('remove')
-    .description('Remove a connector')
-    .requiredOption('--id <id>', 'Connector ID')
-    .action(async (options) => {
+    .command('delete')
+    .description('Delete a connector')
+    .argument('[id]', 'Connector ID')
+    .option('--id <id>', 'Connector ID (alternative to positional argument)')
+    .action(async (idArg, options) => {
       try {
+        const id = idArg || options.id;
+        if (!id) {
+          outputError('Connector ID required. Usage: connectors delete <id>');
+          process.exit(1);
+        }
         const manager = new ConfigManager(getConfigPath());
-        await manager.removeConnector(options.id);
-        outputSuccess(`Connector '${options.id}' removed`);
+        await manager.removeConnector(id);
+        outputSuccess(`Connector '${id}' deleted`);
       } catch (error) {
-        outputError('Failed to remove connector', error instanceof Error ? error : undefined);
+        outputError('Failed to delete connector', error instanceof Error ? error : undefined);
         process.exit(1);
       }
     });
