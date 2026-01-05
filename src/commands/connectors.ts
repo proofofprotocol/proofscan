@@ -136,9 +136,22 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
             process.exit(1);
           }
 
+          // Validate command for potential shell injection patterns
+          const transport = result.connectors[0].transport as StdioTransport;
+          const dangerousChars = /[;&|`$]/;
+          if (transport.command && dangerousChars.test(transport.command)) {
+            outputError('Command contains potentially unsafe characters: ; & | ` $');
+            outputError('Please review the clipboard content before adding.');
+            process.exit(1);
+          }
+          if (transport.args?.some(arg => dangerousChars.test(arg))) {
+            outputError('Arguments contain potentially unsafe characters: ; & | ` $');
+            outputError('Please review the clipboard content before adding.');
+            process.exit(1);
+          }
+
           // Use toConnector for secretize/sanitize processing
           const { toConnector } = await import('../config/add.js');
-          const transport = result.connectors[0].transport as StdioTransport;
           const parsed = {
             id,
             command: transport.command,

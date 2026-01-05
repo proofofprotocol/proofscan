@@ -403,9 +403,24 @@ export async function handleCc(
       // Absolute path: sessionPart is actually the connector ID
       const absoluteTarget = sessionPart;
 
+      // Validate absoluteTarget is not empty (handles "cd //" case)
+      if (!absoluteTarget || absoluteTarget.trim() === '') {
+        printError('Invalid path: empty connector ID');
+        printInfo('Use: cd /connector or cd /connector/session');
+        return;
+      }
+
       // Check if target contains another / (i.e., /connector/session)
-      if (absoluteTarget.includes('/')) {
-        const [absConnector, absSession] = absoluteTarget.split('/', 2);
+      // Split into segments and filter empty parts (handles multiple slashes like ///)
+      const segments = absoluteTarget.split('/').filter(s => s !== '');
+      if (segments.length > 2) {
+        printError('Invalid path format: too many segments');
+        printInfo('Use: cd /connector or cd /connector/session');
+        return;
+      }
+
+      if (segments.length === 2) {
+        const [absConnector, absSession] = segments;
 
         // Find connector
         const connectors = store.getConnectors();
@@ -432,11 +447,12 @@ export async function handleCc(
         return;
       }
 
-      // Just /connectorId - navigate to connector
+      // Just /connectorId - navigate to connector (segments.length === 1)
+      const absConnectorId = segments[0];
       const connectors = store.getConnectors();
-      const connector = connectors.find(c => c.id === absoluteTarget || c.id.startsWith(absoluteTarget));
+      const connector = connectors.find(c => c.id === absConnectorId || c.id.startsWith(absConnectorId));
       if (!connector) {
-        printError(`Connector not found: ${absoluteTarget}`);
+        printError(`Connector not found: ${absConnectorId}`);
         const available = connectors.map(c => c.id);
         if (available.length > 0) {
           printInfo(`Available connectors: ${available.join(', ')}`);

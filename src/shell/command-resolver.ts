@@ -52,16 +52,17 @@ function getContextPath(context: ShellContext): 'root' | 'connector' | 'session'
 }
 
 /**
- * All commands that should NOT go through prefix matching
- * These are handled directly by the shell
+ * All commands that should NOT go through prefix matching.
+ * These are handled directly by the shell and bypass the resolver.
+ * Using Set for O(1) lookup performance.
  */
-const PASSTHROUGH_COMMANDS = [
+const PASSTHROUGH_COMMANDS = new Set([
   ...SHELL_BUILTINS,
   ...ROUTER_COMMANDS,
   ...TOOL_COMMANDS,
   ...REF_COMMANDS,
   ...INSCRIBE_COMMANDS,
-];
+]);
 
 /**
  * Resolve command with prefix matching and context expansion
@@ -88,13 +89,22 @@ export function resolveCommand(
 
   // --- Passthrough commands (builtins, router, tool, ref, inscribe) ---
   // These are handled directly without prefix matching
-  if (PASSTHROUGH_COMMANDS.includes(firstToken)) {
+  if (PASSTHROUGH_COMMANDS.has(firstToken)) {
     return { success: true, resolved: tokens, original };
   }
 
   // --- Context expansion ---
-  // At ROOT level ONLY, allow connectors subcommands without prefix
-  // NOT inside connector context (to avoid ambiguity with ls, show, etc.)
+  // At ROOT level ONLY, allow connectors subcommands without prefix.
+  // This enables Cisco-style shorthand: typing "delete foo" at root will
+  // expand to "connectors delete foo".
+  //
+  // WHY ROOT ONLY: Inside connector context, "ls" should list sessions (not connectors),
+  // and "show" should show session details (not connector). Expanding these would
+  // cause confusing behavior and break existing navigation semantics.
+  //
+  // EXACT MATCH ONLY: We require exact match for subcommands (e.g., "delete" not "del")
+  // to avoid ambiguity. Users can still use prefix matching for the full form:
+  // "connectors del foo" → "connectors delete foo"
   const isConnectorsSubcommand = (CONNECTORS_SUBCOMMANDS as readonly string[]).includes(firstToken);
 
   if (contextPath === 'root' && isConnectorsSubcommand) {
