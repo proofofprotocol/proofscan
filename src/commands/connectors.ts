@@ -136,8 +136,18 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
             process.exit(1);
           }
 
-          // Validate command for potential shell injection patterns
-          const transport = result.connectors[0].transport as StdioTransport;
+          // Validate transport type before processing
+          const rawTransport = result.connectors[0].transport;
+          if (rawTransport.type !== 'stdio') {
+            outputError(`Unsupported transport type: ${rawTransport.type}. Only stdio is supported.`);
+            process.exit(1);
+          }
+          const transport = rawTransport as StdioTransport;
+
+          // Validate command for potential shell injection patterns.
+          // Note: This is defense-in-depth. Commands are executed via Node's child_process.spawn()
+          // with shell: false, which prevents shell injection. However, we still block common
+          // shell metacharacters as an additional safety layer against future code changes.
           const dangerousChars = /[;&|`$]/;
           if (transport.command && dangerousChars.test(transport.command)) {
             outputError('Command contains potentially unsafe characters: ; & | ` $');

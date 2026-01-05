@@ -410,6 +410,13 @@ export async function handleCc(
         return;
       }
 
+      // Validate against path traversal attempts (e.g., /.. or /../foo)
+      if (absoluteTarget.includes('..')) {
+        printError('Invalid path: path traversal not allowed');
+        printInfo('Use: cd /connector or cd /connector/session');
+        return;
+      }
+
       // Check if target contains another / (i.e., /connector/session)
       // Split into segments and filter empty parts (handles multiple slashes like ///)
       const segments = absoluteTarget.split('/').filter(s => s !== '');
