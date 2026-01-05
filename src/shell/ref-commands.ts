@@ -141,6 +141,11 @@ export async function handleRef(
   const subArgs = args.slice(1);
 
   switch (subcommand) {
+    case 'help':
+    case '-h':
+    case '--help':
+      printRefHelp();
+      break;
     case 'add':
       await handleRefAdd(subArgs, context, configPath, stdinData);
       break;
@@ -158,6 +163,30 @@ export async function handleRef(
       printInfo('Available: add, ls, rm');
       printInfo('Or use: ref @this, ref @last, ref @rpc:<id>, ref @ref:<name>');
   }
+}
+
+/**
+ * Print help for ref command
+ */
+function printRefHelp(): void {
+  printInfo('Usage: ref <subcommand> or ref <@target>');
+  printInfo('');
+  printInfo('Subcommands:');
+  printInfo('  ref add <name> @this     Save current context');
+  printInfo('  ref add <name> @last     Save latest session/rpc');
+  printInfo('  ref add <name> @rpc:<id> Save specific RPC');
+  printInfo('  ref ls                   List all refs');
+  printInfo('  ref rm <name>            Remove a ref');
+  printInfo('');
+  printInfo('Resolve mode (@ prefix):');
+  printInfo('  ref @this                Resolve current context');
+  printInfo('  ref @last                Resolve latest session/RPC');
+  printInfo('  ref @rpc:<id>            Resolve specific RPC');
+  printInfo('  ref @ref:<name>          Resolve saved reference');
+  printInfo('  ref @... --json          Output as JSON');
+  printInfo('');
+  printInfo('Pipe support:');
+  printInfo('  pwd --json | ref add <name>');
 }
 
 /**
