@@ -80,14 +80,12 @@ describe('command-resolver', () => {
         expect(result.resolved).toEqual(['archive', 'run']);
       });
 
-      it('should return ambiguous for "conn" prefix (matches connectors and connector)', () => {
+      it('should resolve "conn" prefix to connectors (unique match)', () => {
         const context: ShellContext = {};
-        // "conn" matches both "connectors" and "connector" aliases
+        // "conn" uniquely matches "connectors" (no "connector" alias)
         const result = resolveCommand(['conn', 'list'], context);
-        expect(result.success).toBe(false);
-        expect(result.error).toContain('Ambiguous');
-        expect(result.candidates).toContain('connectors');
-        expect(result.candidates).toContain('connector');
+        expect(result.success).toBe(true);
+        expect(result.resolved).toEqual(['connectors', 'list']);
       });
 
       it('should return error for ambiguous prefix', () => {

@@ -48,7 +48,7 @@ export const TOP_LEVEL_COMMANDS = [
   'status', 'st',
   'archive', 'a',
   'config', 'c',
-  'connectors', 'connector',
+  'connectors',  // 'connector' alias removed to allow 'conn' prefix matching
   'sessions',
   'monitor',
   'events',
@@ -67,7 +67,6 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   scan: ['start'],
   config: ['init', 'show', 'validate', 'path', 'ls', 'list', 'snapshot', 'restore'],
   connectors: ['list', 'show', 'add', 'enable', 'disable', 'delete', 'import'],
-  connector: ['list', 'show', 'add', 'enable', 'disable', 'delete', 'import'],
   sessions: ['list', 'show', 'prune'],
   archive: ['run', 'status'],
   events: ['ls', 'export'],
