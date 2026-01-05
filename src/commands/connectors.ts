@@ -148,14 +148,20 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
           // Note: This is defense-in-depth. Commands are executed via Node's child_process.spawn()
           // with shell: false, which prevents shell injection. However, we still block common
           // shell metacharacters as an additional safety layer against future code changes.
-          const dangerousChars = /[;&|`$]/;
+          // Characters blocked:
+          //   ; & | - command chaining/piping
+          //   ` $   - command substitution
+          //   < >   - redirection
+          //   ( )   - subshells
+          //   \     - escape sequences
+          const dangerousChars = /[;&|`$<>()\\]/;
           if (transport.command && dangerousChars.test(transport.command)) {
-            outputError('Command contains potentially unsafe characters: ; & | ` $');
+            outputError('Command contains potentially unsafe characters: ; & | ` $ < > ( ) \\');
             outputError('Please review the clipboard content before adding.');
             process.exit(1);
           }
           if (transport.args?.some(arg => dangerousChars.test(arg))) {
-            outputError('Arguments contain potentially unsafe characters: ; & | ` $');
+            outputError('Arguments contain potentially unsafe characters: ; & | ` $ < > ( ) \\');
             outputError('Please review the clipboard content before adding.');
             process.exit(1);
           }
