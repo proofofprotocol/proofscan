@@ -398,7 +398,85 @@ export async function handleCc(
     const separator = arg.includes('/') ? '/' : '|';
     const [connectorPart, sessionPart] = arg.split(separator, 2);
 
-    // Validate separated format
+    // Handle absolute path: /connectorId (e.g., cd /time)
+    if (separator === '/' && connectorPart === '') {
+      // Absolute path: sessionPart is actually the connector ID
+      const absoluteTarget = sessionPart;
+
+      // Validate absoluteTarget is not empty (handles "cd //" case)
+      if (!absoluteTarget || absoluteTarget.trim() === '') {
+        printError('Invalid path: empty connector ID');
+        printInfo('Use: cd /connector or cd /connector/session');
+        return;
+      }
+
+      // Validate against path traversal attempts (e.g., /.. or /../foo)
+      if (absoluteTarget.includes('..')) {
+        printError('Invalid path: path traversal not allowed');
+        printInfo('Use: cd /connector or cd /connector/session');
+        return;
+      }
+
+      // Check if target contains another / (i.e., /connector/session)
+      // Split into segments and filter empty parts (handles multiple slashes like ///)
+      const segments = absoluteTarget.split('/').filter(s => s !== '');
+      if (segments.length > 2) {
+        printError('Invalid path format: too many segments');
+        printInfo('Use: cd /connector or cd /connector/session');
+        return;
+      }
+
+      if (segments.length === 2) {
+        const [absConnector, absSession] = segments;
+
+        // Find connector
+        const connectors = store.getConnectors();
+        const connector = connectors.find(c => c.id === absConnector || c.id.startsWith(absConnector));
+        if (!connector) {
+          printError(`Connector not found: ${absConnector}`);
+          const available = connectors.map(c => c.id);
+          if (available.length > 0) {
+            printInfo(`Available connectors: ${available.join(', ')}`);
+          }
+          return;
+        }
+
+        // Find session by prefix
+        const sessions = store.getSessions(connector.id, MAX_SESSIONS_SEARCH);
+        const matches = sessions.filter(s => s.session_id.startsWith(absSession));
+
+        if (matches.length === 0) {
+          printError(`Session not found: ${absSession}`);
+          return;
+        }
+
+        await selectSessionFromMatches(matches, absSession, context, store, connector.id);
+        return;
+      }
+
+      // Just /connectorId - navigate to connector (segments.length === 1)
+      const absConnectorId = segments[0];
+      const connectors = store.getConnectors();
+      const connector = connectors.find(c => c.id === absConnectorId || c.id.startsWith(absConnectorId));
+      if (!connector) {
+        printError(`Connector not found: ${absConnectorId}`);
+        const available = connectors.map(c => c.id);
+        if (available.length > 0) {
+          printInfo(`Available connectors: ${available.join(', ')}`);
+        }
+        return;
+      }
+
+      savePreviousLocation(context);
+      context.connector = connector.id;
+      context.session = undefined;
+      context.proto = detectConnectorProto(store, connector.id);
+      setCurrentSession('', connector.id);
+      printSuccess(`→ /${connector.id}`);
+      return;
+    }
+
+    // Validate separated format (relative path: connector/session)
     if (!connectorPart || !sessionPart) {
       printError(`Invalid format: ${arg}`);
       printInfo('Use: cd connector/session or connector|session (e.g., mcp/abc12345)');

@@ -66,8 +66,8 @@ export const TOP_LEVEL_COMMANDS = [
 export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   scan: ['start'],
   config: ['init', 'show', 'validate', 'path', 'ls', 'list', 'snapshot', 'restore'],
-  connectors: ['list', 'show', 'add', 'enable', 'disable', 'remove', 'import'],
-  connector: ['list', 'show', 'add', 'enable', 'disable', 'remove', 'import'],
+  connectors: ['list', 'show', 'add', 'enable', 'disable', 'delete', 'import'],
+  connector: ['list', 'show', 'add', 'enable', 'disable', 'delete', 'import'],
   sessions: ['list', 'show', 'prune'],
   archive: ['run', 'status'],
   events: ['ls', 'export'],
@@ -76,9 +76,17 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   secrets: ['list', 'set', 'edit', 'prune', 'export', 'import'],
   secret: ['list', 'set', 'edit', 'prune', 'export', 'import'],
   tool: ['ls', 'list', 'show'],
-  ref: ['add', 'ls', 'list', 'rm', 'remove', 'delete'],
+  ref: ['add', 'ls', 'list', 'delete'],
   popl: ['init', 'session', 'ls', 'list', 'show'],
 };
+
+/**
+ * Connectors subcommands for context abbreviation and prefix matching
+ * At root level, these can be used without 'connectors' prefix
+ */
+export const CONNECTORS_SUBCOMMANDS = [
+  'list', 'ls', 'show', 'add', 'enable', 'disable', 'delete', 'import'
+] as const;
 
 /**
  * Common options for commands
