@@ -10,25 +10,7 @@ import { setCurrentSession } from '../utils/state.js';
 
 export function createScanCommand(getConfigPath: () => string): Command {
   const cmd = new Command('scan')
-    .description('Scan MCP servers (use: scan start --id <connector>)')
-    .allowUnknownOption(true)
-    .action((_options, command) => {
-      // Detect common mistake: `pfscan scan --id xxx` instead of `pfscan scan start --id xxx`
-      const args = command.args || [];
-      const rawArgs = process.argv.slice(2);
-
-      // Check if --id was passed directly to scan (not to a subcommand)
-      if (rawArgs.includes('--id') && !args.includes('start')) {
-        console.error('Error: --id is an option for `scan start`, not `scan` directly.\n');
-        console.error('Try: pfscan scan start --id <connector-id>');
-        console.error('     pfscan s start --id <connector-id>\n');
-        console.error('Run `pfscan scan --help` for available subcommands.');
-        process.exit(2);
-      }
-
-      // If no subcommand provided, show help
-      cmd.help();
-    });
+    .description('Scan MCP servers (use: scan start --id <connector>)');
 
   cmd
     .command('start')

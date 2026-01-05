@@ -48,6 +48,18 @@ export async function handleTool(
   const subArgs = args.slice(1);
 
   switch (subcommand) {
+    case 'help':
+    case '-h':
+    case '--help':
+      printInfo('Usage: tool <subcommand>');
+      printInfo('');
+      printInfo('Subcommands:');
+      printInfo('  tool ls              List tools on current connector');
+      printInfo('  tool show <name>     Show tool details');
+      printInfo('');
+      printInfo('Options:');
+      printInfo('  --json               Output in JSON format');
+      break;
     case 'ls':
     case 'list':
       await handleToolLs(subArgs, context, configPath);

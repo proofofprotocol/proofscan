@@ -186,6 +186,11 @@ export async function handlePopl(
   const subArgs = args.slice(1);
 
   switch (subcommand) {
+    case 'help':
+    case '-h':
+    case '--help':
+      printPoplHelp();
+      break;
     case 'init':
       await handlePoplInit();
       break;
@@ -469,9 +474,21 @@ async function handlePoplList(args: string[]): Promise<void> {
 async function handlePoplShow(args: string[], configPath: string): Promise<void> {
   const cwd = process.cwd();
 
-  if (args.length === 0) {
-    printError('Usage: popl show <entry-id|@ref:name> [view]');
-    printInfo('Views: popl, status, rpc, log');
+  // Handle --help/-h for show subcommand
+  if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+    printInfo('Usage: popl show <entry-id|@ref:name> [view]');
+    printInfo('');
+    printInfo('Show details of a POPL entry or view an artifact.');
+    printInfo('');
+    printInfo('Arguments:');
+    printInfo('  <entry-id>   POPL entry ID or prefix (supports prefix matching)');
+    printInfo('  @ref:name    User-defined reference pointing to POPL entry');
+    printInfo('  [view]       Optional artifact view: popl, status, rpc, log');
+    printInfo('');
+    printInfo('Examples:');
+    printInfo('  popl show 01JG               Show entry by prefix');
+    printInfo('  popl show 01JG status        Show status.json artifact');
+    printInfo('  popl show @ref:myentry rpc   Show rpc.sanitized.jsonl');
     return;
   }
 
