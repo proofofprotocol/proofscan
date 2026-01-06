@@ -3,6 +3,8 @@
  *
  * pfscan catalog search <query>        # Search servers by name/description
  * pfscan catalog view <server> [field] # View server details or specific field
+ * pfscan catalog sources               # Show available catalog sources
+ * pfscan catalog sources set <name>    # Set default catalog source
  *
  * Provides access to the MCP server registry for discovering and inspecting
  * available MCP servers.
@@ -18,8 +20,17 @@ import {
   getFieldValue,
   formatFieldValue,
   type ServerInfo,
+  CATALOG_SOURCES,
+  DEFAULT_CATALOG_SOURCE,
+  getSource,
+  isValidSource,
+  getSourceNames,
+  isSourceReady,
+  getAuthErrorMessage,
+  formatSourceLine,
 } from '../registry/index.js';
-import { output, getOutputOptions } from '../utils/output.js';
+import { ConfigManager } from '../config/index.js';
+import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
 
 /** Braille spinner frames */
 const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -81,6 +92,42 @@ function stopSpinner(spinner: Ora | null): void {
 }
 
 /**
+ * Get the effective catalog source from config or default
+ * Priority: 1) config.catalog.defaultSource, 2) DEFAULT_CATALOG_SOURCE
+ */
+async function getEffectiveSource(getConfigPath: () => string): Promise<string> {
+  try {
+    const manager = new ConfigManager(getConfigPath());
+    const config = await manager.loadOrDefault();
+    return config.catalog?.defaultSource || DEFAULT_CATALOG_SOURCE;
+  } catch {
+    return DEFAULT_CATALOG_SOURCE;
+  }
+}
+
+/**
+ * Create a RegistryClient for the effective source
+ * Validates source and checks authentication
+ */
+async function createClientForSource(
+  getConfigPath: () => string,
+  sourceOverride?: string
+): Promise<RegistryClient> {
+  const sourceName = sourceOverride || (await getEffectiveSource(getConfigPath));
+  const source = getSource(sourceName);
+
+  if (!source) {
+    throw new Error(`Unknown catalog source: ${sourceName}`);
+  }
+
+  if (!isSourceReady(source)) {
+    throw new Error(getAuthErrorMessage(source));
+  }
+
+  return new RegistryClient({ baseUrl: source.baseUrl });
+}
+
+/**
  * Format search results with two-line format
  * Line 1: NAME (full)
  * Line 2: VERSION + truncated DESC
@@ -99,9 +146,8 @@ function formatSearchResults(servers: ServerInfo[]): void {
     // Line 2: version + description (truncated to fit)
     const versionPart = `    v${version}`;
     const maxDescLen = TERM_WIDTH - versionPart.length - 4; // 4 for padding/ellipsis
-    const truncatedDesc = desc.length > maxDescLen
-      ? desc.slice(0, maxDescLen - 1) + '…'
-      : desc;
+    const truncatedDesc =
+      desc.length > maxDescLen ? desc.slice(0, maxDescLen - 1) + '…' : desc;
     console.log(`${versionPart}  ${truncatedDesc}`);
     console.log(); // blank line between entries
   }
@@ -111,7 +157,11 @@ function formatSearchResults(servers: ServerInfo[]): void {
  * Find similar servers for did-you-mean suggestions
  * Uses already-fetched server list to avoid extra network calls
  */
-function findSimilarServers(query: string, servers: ServerInfo[], maxResults = 5): ServerInfo[] {
+function findSimilarServers(
+  query: string,
+  servers: ServerInfo[],
+  maxResults = 5
+): ServerInfo[] {
   const lowerQuery = query.toLowerCase();
 
   // Score servers by similarity
@@ -233,21 +283,23 @@ function handleRegistryError(error: unknown): never {
   process.exit(1);
 }
 
-export function createCatalogCommand(_getConfigPath: () => string): Command {
-  const cmd = new Command('catalog')
-    .description('Search and view MCP servers from registry');
+export function createCatalogCommand(getConfigPath: () => string): Command {
+  const cmd = new Command('catalog').description(
+    'Search and view MCP servers from registry'
+  );
 
   // catalog search <query>
   cmd
     .command('search')
     .description('Search for MCP servers by name or description')
     .argument('<query>', 'Search query')
-    .action(async (query: string) => {
+    .option('--source <name>', 'Use specific catalog source')
+    .action(async (query: string, options: { source?: string }) => {
       const opts = getOutputOptions();
-      const client = new RegistryClient();
       const spinner = createSpinner(`Searching for "${query}"...`);
 
       try {
+        const client = await createClientForSource(getConfigPath, options.source);
         spinner?.start();
         const servers = await client.searchServers(query);
         stopSpinner(spinner);
@@ -280,12 +332,13 @@ export function createCatalogCommand(_getConfigPath: () => string): Command {
     .description('View server details or a specific field')
     .argument('<server>', 'Server name')
     .argument('[field]', 'Specific field to display')
-    .action(async (serverName: string, field?: string) => {
+    .option('--source <name>', 'Use specific catalog source')
+    .action(async (serverName: string, field: string | undefined, options: { source?: string }) => {
       const opts = getOutputOptions();
-      const client = new RegistryClient();
       const spinner = createSpinner(`Fetching "${serverName}"...`);
 
       try {
+        const client = await createClientForSource(getConfigPath, options.source);
         spinner?.start();
         let server = await client.getServer(serverName);
 
@@ -354,6 +407,94 @@ export function createCatalogCommand(_getConfigPath: () => string): Command {
       } catch (error) {
         stopSpinner(spinner);
         handleRegistryError(error);
+      }
+    });
+
+  // catalog sources - show available sources
+  const sourcesCmd = cmd
+    .command('sources')
+    .description('Show available catalog sources');
+
+  sourcesCmd.action(async () => {
+    const opts = getOutputOptions();
+    const defaultSource = await getEffectiveSource(getConfigPath);
+
+    if (opts.json) {
+      output({
+        defaultSource,
+        sources: CATALOG_SOURCES.map((s) => ({
+          name: s.name,
+          baseUrl: s.baseUrl,
+          authRequired: s.authRequired,
+          authEnvVar: s.authEnvVar,
+          ready: isSourceReady(s),
+        })),
+      });
+      return;
+    }
+
+    console.log(`Default catalog source: ${defaultSource}`);
+    console.log();
+    console.log('Sources:');
+    for (const source of CATALOG_SOURCES) {
+      const isDefault = source.name === defaultSource;
+      console.log(formatSourceLine(source, isDefault));
+    }
+    console.log();
+    console.log('Tip: pfscan cat sources set <name>');
+  });
+
+  // catalog sources set <name> - set default source
+  sourcesCmd
+    .command('set')
+    .description('Set default catalog source')
+    .argument('<name>', 'Source name')
+    .action(async (name: string) => {
+      const opts = getOutputOptions();
+
+      // Validate source name
+      if (!isValidSource(name)) {
+        if (opts.json) {
+          output({ success: false, error: `Unknown catalog source: ${name}` });
+        } else {
+          outputError(`Unknown catalog source: ${name}`);
+          console.error();
+          console.error('Available sources:');
+          for (const sourceName of getSourceNames()) {
+            console.error(`  ${sourceName}`);
+          }
+        }
+        process.exit(1);
+      }
+
+      try {
+        const manager = new ConfigManager(getConfigPath());
+        const config = await manager.loadOrDefault();
+
+        // Update catalog config
+        config.catalog = config.catalog || {};
+        config.catalog.defaultSource = name;
+
+        await manager.save(config);
+
+        if (opts.json) {
+          output({ success: true, defaultSource: name });
+        } else {
+          outputSuccess(`Default catalog source set to: ${name}`);
+        }
+      } catch (error) {
+        if (opts.json) {
+          output({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        } else {
+          outputError(
+            'Failed to save config',
+            error instanceof Error ? error : undefined
+          );
+        }
+        process.exit(1);
       }
     });
 

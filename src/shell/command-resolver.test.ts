@@ -142,6 +142,20 @@ describe('command-resolver', () => {
         expect(result.resolved).toEqual(['catalog', 'view', 'server', 'version']);
       });
 
+      it('should resolve "cat so" to "cat sources" (sources prefix)', () => {
+        const context: ShellContext = {};
+        const result = resolveCommand(['cat', 'so'], context);
+        expect(result.success).toBe(true);
+        expect(result.resolved).toEqual(['cat', 'sources']);
+      });
+
+      it('should resolve "catalog sources" exactly', () => {
+        const context: ShellContext = {};
+        const result = resolveCommand(['catalog', 'sources'], context);
+        expect(result.success).toBe(true);
+        expect(result.resolved).toEqual(['catalog', 'sources']);
+      });
+
       it('should pass through unknown commands', () => {
         const context: ShellContext = {};
         const result = resolveCommand(['unknown', 'arg'], context);

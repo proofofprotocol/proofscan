@@ -56,12 +56,22 @@ export interface InscriberConfig {
   type?: string;
 }
 
+/**
+ * Catalog configuration for registry source (Phase 7.0)
+ */
+export interface CatalogConfig {
+  /** Default catalog source name (default: 'official') */
+  defaultSource?: string;
+}
+
 export interface Config {
   version: 1;
   connectors: Connector[];
   retention?: RetentionConfig;
   /** Inscriber configuration for inscribe command */
   inscriber?: InscriberConfig;
+  /** Catalog configuration for registry source */
+  catalog?: CatalogConfig;
 }
 
 export const DEFAULT_CONFIG: Config = {

@@ -14,3 +14,16 @@ export {
   getFieldValue,
   formatFieldValue,
 } from './client.js';
+
+export {
+  type CatalogSource,
+  CATALOG_SOURCES,
+  DEFAULT_CATALOG_SOURCE,
+  getSourceNames,
+  getSource,
+  isValidSource,
+  getSourceApiKey,
+  isSourceReady,
+  getAuthErrorMessage,
+  formatSourceLine,
+} from './sources.js';

@@ -78,8 +78,8 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   tool: ['ls', 'list', 'show'],
   ref: ['add', 'ls', 'list', 'delete'],
   popl: ['init', 'session', 'ls', 'list', 'show'],
-  catalog: ['search', 'view'],
-  cat: ['search', 'view'],
+  catalog: ['search', 'view', 'sources'],
+  cat: ['search', 'view', 'sources'],
 };
 
 /**
@@ -130,6 +130,12 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'popl ls': ['-s', '--oneline'],
   'popl list': ['-s', '--oneline'],
   'popl session': ['--title', '--unsafe-include-raw'],
+  catalog: ['--source'],
+  cat: ['--source'],
+  'catalog search': ['--source'],
+  'catalog view': ['--source'],
+  'cat search': ['--source'],
+  'cat view': ['--source'],
 };
 
 /**
