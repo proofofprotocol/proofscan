@@ -114,6 +114,34 @@ describe('command-resolver', () => {
         expect(result.resolved).toEqual(['tree']);
       });
 
+      it('should resolve "catal" prefix to catalog', () => {
+        const context: ShellContext = {};
+        const result = resolveCommand(['catal', 'search', 'time'], context);
+        expect(result.success).toBe(true);
+        expect(result.resolved).toEqual(['catalog', 'search', 'time']);
+      });
+
+      it('should resolve "cat" exactly to cat alias', () => {
+        const context: ShellContext = {};
+        const result = resolveCommand(['cat', 'view', 'mcp-server-time'], context);
+        expect(result.success).toBe(true);
+        expect(result.resolved).toEqual(['cat', 'view', 'mcp-server-time']);
+      });
+
+      it('should resolve "cat se" to "cat search" (subcommand prefix)', () => {
+        const context: ShellContext = {};
+        const result = resolveCommand(['cat', 'se', 'time'], context);
+        expect(result.success).toBe(true);
+        expect(result.resolved).toEqual(['cat', 'search', 'time']);
+      });
+
+      it('should resolve "catalog v" to "catalog view" (subcommand prefix)', () => {
+        const context: ShellContext = {};
+        const result = resolveCommand(['catalog', 'v', 'server', 'version'], context);
+        expect(result.success).toBe(true);
+        expect(result.resolved).toEqual(['catalog', 'view', 'server', 'version']);
+      });
+
       it('should pass through unknown commands', () => {
         const context: ShellContext = {};
         const result = resolveCommand(['unknown', 'arg'], context);

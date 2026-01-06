@@ -58,6 +58,7 @@ export const TOP_LEVEL_COMMANDS = [
   'record',
   'doctor',
   'secrets', 'secret',
+  'catalog', 'cat',
 ];
 
 /**
@@ -77,6 +78,8 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   tool: ['ls', 'list', 'show'],
   ref: ['add', 'ls', 'list', 'delete'],
   popl: ['init', 'session', 'ls', 'list', 'show'],
+  catalog: ['search', 'view'],
+  cat: ['search', 'view'],
 };
 
 /**
