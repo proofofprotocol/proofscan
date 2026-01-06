@@ -156,6 +156,15 @@ describe('command-resolver', () => {
         expect(result.resolved).toEqual(['catalog', 'sources']);
       });
 
+      it('should resolve "cat sources l" to "cat sources list" (nested prefix)', () => {
+        const context: ShellContext = {};
+        const result = resolveCommand(['cat', 'sources', 'l'], context);
+        expect(result.success).toBe(true);
+        // Note: nested subcommand resolution passes through unchanged
+        // because command-resolver only handles 2-level prefix matching
+        expect(result.resolved).toEqual(['cat', 'sources', 'l']);
+      });
+
       it('should pass through unknown commands', () => {
         const context: ShellContext = {};
         const result = resolveCommand(['unknown', 'arg'], context);

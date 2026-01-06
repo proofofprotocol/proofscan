@@ -2,8 +2,10 @@
  * Catalog command - MCP Registry operations
  *
  * pfscan catalog search <query>        # Search servers by name/description
+ * pfscan catalog search <query> --all  # Cross-source search
  * pfscan catalog view <server> [field] # View server details or specific field
  * pfscan catalog sources               # Show available catalog sources
+ * pfscan catalog sources list          # Same as sources
  * pfscan catalog sources set <name>    # Set default catalog source
  *
  * Provides access to the MCP server registry for discovering and inspecting
@@ -37,6 +39,13 @@ const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', 
 
 /** Terminal width for formatting (fallback to 80) */
 const TERM_WIDTH = process.stdout.columns || 80;
+
+/**
+ * Extended ServerInfo with source information for cross-source search
+ */
+interface ServerInfoWithSource extends ServerInfo {
+  _source?: string;
+}
 
 /**
  * Check if we should show spinner
@@ -128,11 +137,59 @@ async function createClientForSource(
 }
 
 /**
+ * Cross-source search: search all available sources and merge results
+ */
+async function searchAllSources(
+  query: string,
+  spinner: Ora | null
+): Promise<{ servers: ServerInfoWithSource[]; skipped: string[]; warnings: string[] }> {
+  const allServers: ServerInfoWithSource[] = [];
+  const skipped: string[] = [];
+  const warnings: string[] = [];
+  const seenNames = new Set<string>();
+
+  for (const source of CATALOG_SOURCES) {
+    // Check if source is ready
+    if (!isSourceReady(source)) {
+      skipped.push(source.name);
+      warnings.push(`(${source.name} skipped: ${source.authEnvVar} not set)`);
+      continue;
+    }
+
+    // Update spinner text
+    if (spinner) {
+      spinner.text = `Searching ${source.name}...`;
+    }
+
+    try {
+      const client = new RegistryClient({ baseUrl: source.baseUrl });
+      const servers = await client.searchServers(query);
+
+      // Add source info and deduplicate by name
+      for (const server of servers) {
+        const key = server.name || server.repository || JSON.stringify(server);
+        if (!seenNames.has(key)) {
+          seenNames.add(key);
+          allServers.push({ ...server, _source: source.name });
+        }
+      }
+    } catch (error) {
+      // Log warning but continue with other sources
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      warnings.push(`(${source.name} error: ${msg})`);
+    }
+  }
+
+  return { servers: allServers, skipped, warnings };
+}
+
+/**
  * Format search results with two-line format
  * Line 1: NAME (full)
  * Line 2: VERSION + truncated DESC
+ * Optional: source info for cross-source search
  */
-function formatSearchResults(servers: ServerInfo[]): void {
+function formatSearchResults(servers: ServerInfoWithSource[], showSource = false): void {
   console.log();
 
   for (const server of servers) {
@@ -145,10 +202,11 @@ function formatSearchResults(servers: ServerInfo[]): void {
 
     // Line 2: version + description (truncated to fit)
     const versionPart = `    v${version}`;
-    const maxDescLen = TERM_WIDTH - versionPart.length - 4; // 4 for padding/ellipsis
+    const sourceInfo = showSource && server._source ? `  [${server._source}]` : '';
+    const maxDescLen = TERM_WIDTH - versionPart.length - sourceInfo.length - 4;
     const truncatedDesc =
       desc.length > maxDescLen ? desc.slice(0, maxDescLen - 1) + '…' : desc;
-    console.log(`${versionPart}  ${truncatedDesc}`);
+    console.log(`${versionPart}  ${truncatedDesc}${sourceInfo}`);
     console.log(); // blank line between entries
   }
 }
@@ -251,6 +309,38 @@ function formatServerDetails(server: ServerInfo): string {
 }
 
 /**
+ * Show not-found guidance with source info
+ */
+function showNotFoundGuidance(
+  query: string,
+  currentSource: string,
+  useAll: boolean,
+  sourceOverride?: string
+): void {
+  const effectiveSource = sourceOverride || currentSource;
+  console.error(`Server not found: ${query} (source: ${effectiveSource})`);
+  console.error();
+  console.error('Try one of the following:');
+
+  // Show --all first if not already using it
+  if (!useAll) {
+    console.error(`  pfscan cat search ${query} --all`);
+  }
+
+  // Show alternative sources
+  for (const source of CATALOG_SOURCES) {
+    if (source.name !== effectiveSource) {
+      console.error(`  pfscan cat search ${query} --source ${source.name}`);
+    }
+  }
+
+  // Show source switch command
+  if (!sourceOverride && currentSource !== 'smithery') {
+    console.error(`  pfscan cat sources set smithery`);
+  }
+}
+
+/**
  * Handle registry errors with user-friendly messages
  */
 function handleRegistryError(error: unknown): never {
@@ -283,6 +373,38 @@ function handleRegistryError(error: unknown): never {
   process.exit(1);
 }
 
+/**
+ * Show sources list (shared by 'sources' and 'sources list')
+ */
+async function showSourcesList(getConfigPath: () => string): Promise<void> {
+  const opts = getOutputOptions();
+  const defaultSource = await getEffectiveSource(getConfigPath);
+
+  if (opts.json) {
+    output({
+      defaultSource,
+      sources: CATALOG_SOURCES.map((s) => ({
+        name: s.name,
+        baseUrl: s.baseUrl,
+        authRequired: s.authRequired,
+        authEnvVar: s.authEnvVar,
+        ready: isSourceReady(s),
+      })),
+    });
+    return;
+  }
+
+  console.log(`Default catalog source: ${defaultSource}`);
+  console.log();
+  console.log('Sources:');
+  for (const source of CATALOG_SOURCES) {
+    const isDefault = source.name === defaultSource;
+    console.log(formatSourceLine(source, isDefault));
+  }
+  console.log();
+  console.log('Tip: pfscan cat sources set <name>');
+}
+
 export function createCatalogCommand(getConfigPath: () => string): Command {
   const cmd = new Command('catalog').description(
     'Search and view MCP servers from registry'
@@ -294,8 +416,55 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .description('Search for MCP servers by name or description')
     .argument('<query>', 'Search query')
     .option('--source <name>', 'Use specific catalog source')
-    .action(async (query: string, options: { source?: string }) => {
+    .option('--all', 'Search all available catalog sources')
+    .action(async (query: string, options: { source?: string; all?: boolean }) => {
       const opts = getOutputOptions();
+      const currentSource = await getEffectiveSource(getConfigPath);
+
+      // Cross-source search with --all
+      if (options.all) {
+        const spinner = createSpinner(`Searching all sources for "${query}"...`);
+
+        try {
+          spinner?.start();
+          const { servers, warnings } = await searchAllSources(query, spinner);
+          stopSpinner(spinner);
+
+          if (opts.json) {
+            output(servers.map((s) => ({ ...s, source: s._source })));
+            return;
+          }
+
+          // Show warnings for skipped sources
+          for (const warning of warnings) {
+            console.log(warning);
+          }
+
+          if (servers.length === 0) {
+            console.log(`No servers found matching "${query}" across all sources.`);
+            return;
+          }
+
+          // Two-line format with source info
+          formatSearchResults(servers, true);
+
+          console.log(`${servers.length} server(s) found across sources.`);
+          console.log();
+
+          // Improved Tip: embed full ID if single result
+          if (servers.length === 1 && servers[0].name) {
+            console.log(`Tip: pfscan cat view "${servers[0].name}"`);
+          } else {
+            console.log('Tip: pfscan cat view <name>');
+          }
+        } catch (error) {
+          stopSpinner(spinner);
+          handleRegistryError(error);
+        }
+        return;
+      }
+
+      // Single source search
       const spinner = createSpinner(`Searching for "${query}"...`);
 
       try {
@@ -310,7 +479,10 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         }
 
         if (servers.length === 0) {
-          console.log(`No servers found matching "${query}".`);
+          console.log(`No servers found matching "${query}" (source: ${options.source || currentSource}).`);
+          console.log();
+          console.log('Try searching all sources:');
+          console.log(`  pfscan cat search ${query} --all`);
           return;
         }
 
@@ -319,7 +491,13 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
 
         console.log(`${servers.length} server(s) found.`);
         console.log();
-        console.log('Tip: pfscan catalog view <name>');
+
+        // Improved Tip: embed full ID if single result
+        if (servers.length === 1 && servers[0].name) {
+          console.log(`Tip: pfscan cat view "${servers[0].name}"`);
+        } else {
+          console.log('Tip: pfscan cat view <name>');
+        }
       } catch (error) {
         stopSpinner(spinner);
         handleRegistryError(error);
@@ -335,6 +513,7 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .option('--source <name>', 'Use specific catalog source')
     .action(async (serverName: string, field: string | undefined, options: { source?: string }) => {
       const opts = getOutputOptions();
+      const currentSource = await getEffectiveSource(getConfigPath);
       const spinner = createSpinner(`Fetching "${serverName}"...`);
 
       try {
@@ -351,9 +530,16 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           stopSpinner(spinner);
 
           if (similar.length === 0) {
-            // No suggestions available
-            console.error(`Server not found: ${serverName}`);
-            console.error('Use "pfscan catalog search <query>" to find available servers.');
+            // No suggestions available - show enhanced guidance
+            if (opts.json) {
+              output({
+                error: 'Server not found',
+                query: serverName,
+                source: options.source || currentSource,
+              });
+            } else {
+              showNotFoundGuidance(serverName, currentSource, false, options.source);
+            }
             process.exit(1);
           }
 
@@ -364,12 +550,12 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
             console.log();
           } else {
             // Multiple candidates - show did-you-mean
-            console.error(`Server not found: ${serverName}`);
+            console.error(`Server not found: ${serverName} (source: ${options.source || currentSource})`);
             console.error();
             console.error('Did you mean:');
             console.error(formatCandidates(similar));
             console.error();
-            console.error('Tip: pfscan catalog view <full-name>');
+            console.error('Tip: pfscan cat view <full-name>');
             process.exit(1);
           }
         } else {
@@ -413,36 +599,20 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
   // catalog sources - show available sources
   const sourcesCmd = cmd
     .command('sources')
-    .description('Show available catalog sources');
+    .description('Manage catalog sources');
 
+  // Default action for 'sources' (no subcommand)
   sourcesCmd.action(async () => {
-    const opts = getOutputOptions();
-    const defaultSource = await getEffectiveSource(getConfigPath);
-
-    if (opts.json) {
-      output({
-        defaultSource,
-        sources: CATALOG_SOURCES.map((s) => ({
-          name: s.name,
-          baseUrl: s.baseUrl,
-          authRequired: s.authRequired,
-          authEnvVar: s.authEnvVar,
-          ready: isSourceReady(s),
-        })),
-      });
-      return;
-    }
-
-    console.log(`Default catalog source: ${defaultSource}`);
-    console.log();
-    console.log('Sources:');
-    for (const source of CATALOG_SOURCES) {
-      const isDefault = source.name === defaultSource;
-      console.log(formatSourceLine(source, isDefault));
-    }
-    console.log();
-    console.log('Tip: pfscan cat sources set <name>');
+    await showSourcesList(getConfigPath);
   });
+
+  // catalog sources list - explicit list subcommand
+  sourcesCmd
+    .command('list')
+    .description('List available catalog sources')
+    .action(async () => {
+      await showSourcesList(getConfigPath);
+    });
 
   // catalog sources set <name> - set default source
   sourcesCmd
