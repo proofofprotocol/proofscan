@@ -62,6 +62,8 @@ export interface InscriberConfig {
 export interface CatalogConfig {
   /** Default catalog source name (default: 'official') */
   defaultSource?: string;
+  /** Secret references for authenticated sources (key: secretKey, value: secretRef) */
+  secrets?: Record<string, string>;
 }
 
 export interface Config {

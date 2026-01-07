@@ -14,6 +14,7 @@
 
 import { Command } from 'commander';
 import ora, { type Ora } from 'ora';
+import { dirname } from 'path';
 import {
   RegistryClient,
   RegistryError,
@@ -30,9 +31,13 @@ import {
   isSourceReady,
   getAuthErrorMessage,
   formatSourceLine,
+  setSecretResolver,
+  getSourceApiKey,
+  type CatalogSource,
 } from '../registry/index.js';
 import { ConfigManager } from '../config/index.js';
 import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
+import { SqliteSecretStore } from '../secrets/index.js';
 
 /** Braille spinner frames */
 const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -115,6 +120,43 @@ async function getEffectiveSource(getConfigPath: () => string): Promise<string> 
 }
 
 /**
+ * Initialize secret resolver for catalog sources
+ * This connects sources.ts to the pfscan secret store
+ */
+function initSecretResolver(getConfigPath: () => string): void {
+  setSecretResolver(async (secretKey: string) => {
+    try {
+      const configPath = getConfigPath();
+      const configDir = dirname(configPath);
+      const manager = new ConfigManager(configPath);
+      const config = await manager.loadOrDefault();
+
+      // Look up the secret reference from config.catalog.secrets
+      const secretRef = config.catalog?.secrets?.[secretKey];
+      if (!secretRef) {
+        return undefined;
+      }
+
+      // Resolve the secret from the store
+      const store = new SqliteSecretStore(configDir);
+      try {
+        // Parse the reference to get the ID (e.g., "dpapi:abc123" -> "abc123")
+        const match = secretRef.match(/^[^:]+:(.+)$/);
+        if (!match) {
+          return undefined;
+        }
+        const secretId = match[1];
+        return await store.retrieve(secretId) ?? undefined;
+      } finally {
+        store.close();
+      }
+    } catch {
+      return undefined;
+    }
+  });
+}
+
+/**
  * Create a RegistryClient for the effective source
  * Validates source and checks authentication
  */
@@ -122,6 +164,9 @@ async function createClientForSource(
   getConfigPath: () => string,
   sourceOverride?: string
 ): Promise<RegistryClient> {
+  // Initialize secret resolver on first use
+  initSecretResolver(getConfigPath);
+
   const sourceName = sourceOverride || (await getEffectiveSource(getConfigPath));
   const source = getSource(sourceName);
 
@@ -133,7 +178,15 @@ async function createClientForSource(
     throw new Error(getAuthErrorMessage(source));
   }
 
-  return new RegistryClient({ baseUrl: source.baseUrl });
+  // Get API key for authenticated sources
+  const apiKey = await getSourceApiKey(source);
+
+  // For auth-required sources, verify we have the API key
+  if (source.authRequired && !apiKey) {
+    throw new Error(getAuthErrorMessage(source));
+  }
+
+  return new RegistryClient({ baseUrl: source.baseUrl, apiKey });
 }
 
 /**
@@ -141,22 +194,47 @@ async function createClientForSource(
  */
 async function searchAllSources(
   query: string,
-  spinner: Ora | null
+  spinner: Ora | null,
+  getConfigPath: () => string
 ): Promise<{ servers: ServerInfoWithSource[]; skipped: string[]; warnings: string[] }> {
   const allServers: ServerInfoWithSource[] = [];
   const skipped: string[] = [];
   const warnings: string[] = [];
   const seenNames = new Set<string>();
 
+  // Initialize secret resolver for authenticated sources
+  initSecretResolver(getConfigPath);
+
+  // Prepare sources with async API key resolution
+  const sourcePrep = await Promise.all(
+    CATALOG_SOURCES.map(async (source) => {
+      if (!isSourceReady(source)) {
+        return { source, ready: false, apiKey: undefined, skipReason: 'not configured' };
+      }
+
+      // For auth-required sources, try to get the API key
+      if (source.authRequired) {
+        const apiKey = await getSourceApiKey(source);
+        if (!apiKey) {
+          return { source, ready: false, apiKey: undefined, skipReason: `API key not set (use: pfscan secret set ${source.secretKey})` };
+        }
+        return { source, ready: true, apiKey };
+      }
+
+      return { source, ready: true, apiKey: undefined };
+    })
+  );
+
   // Separate ready and not-ready sources
-  const readySources = CATALOG_SOURCES.filter((source) => {
-    if (!isSourceReady(source)) {
-      skipped.push(source.name);
-      warnings.push(`(${source.name} skipped: ${source.authEnvVar} not set)`);
-      return false;
+  const readySources: Array<{ source: CatalogSource; apiKey?: string }> = [];
+  for (const prep of sourcePrep) {
+    if (!prep.ready) {
+      skipped.push(prep.source.name);
+      warnings.push(`(${prep.source.name} skipped: ${prep.skipReason})`);
+    } else {
+      readySources.push({ source: prep.source, apiKey: prep.apiKey });
     }
-    return true;
-  });
+  }
 
   // Update spinner text for parallel search
   if (spinner) {
@@ -164,9 +242,9 @@ async function searchAllSources(
   }
 
   // Search all ready sources in parallel
-  const searchPromises = readySources.map(async (source) => {
+  const searchPromises = readySources.map(async ({ source, apiKey }) => {
     try {
-      const client = new RegistryClient({ baseUrl: source.baseUrl });
+      const client = new RegistryClient({ baseUrl: source.baseUrl, apiKey });
       const servers = await client.searchServers(query);
       return { source: source.name, servers, error: null };
     } catch (error) {
@@ -401,7 +479,7 @@ async function showSourcesList(getConfigPath: () => string): Promise<void> {
         name: s.name,
         baseUrl: s.baseUrl,
         authRequired: s.authRequired,
-        authEnvVar: s.authEnvVar,
+        secretKey: s.secretKey,
         ready: isSourceReady(s),
       })),
     });
@@ -441,7 +519,7 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
 
         try {
           spinner?.start();
-          const { servers, warnings } = await searchAllSources(query, spinner);
+          const { servers, warnings } = await searchAllSources(query, spinner, getConfigPath);
           stopSpinner(spinner);
 
           if (opts.json) {
@@ -675,6 +753,119 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         } else {
           outputError(
             'Failed to save config',
+            error instanceof Error ? error : undefined
+          );
+        }
+        process.exit(1);
+      }
+    });
+
+  // catalog sources secret <source> - set API key for authenticated source
+  sourcesCmd
+    .command('secret')
+    .description('Set API key for an authenticated catalog source')
+    .argument('<source>', 'Source name (e.g., smithery)')
+    .option('--clip', 'Read API key from clipboard instead of prompting')
+    .action(async (sourceName: string, options: { clip?: boolean }) => {
+      const opts = getOutputOptions();
+      const { readSecretHidden, readSecretFromClipboard } = await import('../utils/secret-input.js');
+
+      // Validate source
+      const source = getSource(sourceName);
+      if (!source) {
+        if (opts.json) {
+          output({ success: false, error: `Unknown catalog source: ${sourceName}` });
+        } else {
+          outputError(`Unknown catalog source: ${sourceName}`);
+          console.error();
+          console.error('Available sources:');
+          for (const name of getSourceNames()) {
+            console.error(`  ${name}`);
+          }
+        }
+        process.exit(1);
+      }
+
+      // Check if source requires auth
+      if (!source.authRequired) {
+        if (opts.json) {
+          output({ success: false, error: `${sourceName} does not require authentication` });
+        } else {
+          outputError(`${sourceName} does not require authentication`);
+        }
+        process.exit(1);
+      }
+
+      // Read API key
+      let apiKey: string;
+      try {
+        if (options.clip) {
+          console.log(`Reading API key for ${sourceName} from clipboard...`);
+          apiKey = await readSecretFromClipboard();
+        } else {
+          console.log(`Enter API key for ${sourceName}:`);
+          apiKey = await readSecretHidden();
+        }
+      } catch (err) {
+        if (opts.json) {
+          output({ success: false, error: 'Failed to read API key' });
+        } else {
+          outputError('Failed to read API key');
+        }
+        process.exit(1);
+      }
+
+      if (!apiKey || apiKey.trim().length === 0) {
+        if (opts.json) {
+          output({ success: false, error: 'API key cannot be empty' });
+        } else {
+          outputError('API key cannot be empty');
+        }
+        process.exit(1);
+      }
+
+      try {
+        const configPath = getConfigPath();
+        const configDir = dirname(configPath);
+
+        // Store the secret
+        const store = new SqliteSecretStore(configDir);
+        let secretRef: string;
+        try {
+          const result = await store.store(apiKey, {
+            keyName: source.secretKey,
+            source: `catalog.${sourceName}`,
+          });
+          secretRef = result.reference;
+        } finally {
+          store.close();
+        }
+
+        // Update config with secret reference
+        const manager = new ConfigManager(configPath);
+        const config = await manager.loadOrDefault();
+
+        config.catalog = config.catalog || {};
+        config.catalog.secrets = config.catalog.secrets || {};
+        config.catalog.secrets[source.secretKey!] = secretRef;
+
+        await manager.save(config);
+
+        if (opts.json) {
+          output({ success: true, source: sourceName, secretKey: source.secretKey });
+        } else {
+          outputSuccess(`API key for ${sourceName} stored successfully`);
+          console.log(`Secret key: ${source.secretKey}`);
+        }
+      } catch (error) {
+        if (opts.json) {
+          output({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        } else {
+          outputError(
+            'Failed to store API key',
             error instanceof Error ? error : undefined
           );
         }

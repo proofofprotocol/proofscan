@@ -49,6 +49,8 @@ export interface ServerInfo {
 export interface RegistryClientOptions {
   baseUrl?: string;
   timeout?: number;
+  /** API key for authenticated registries (sent as Bearer token) */
+  apiKey?: string;
 }
 
 /**
@@ -102,6 +104,7 @@ export class RegistryError extends Error {
 export class RegistryClient {
   private readonly baseUrl: string;
   private readonly timeout: number;
+  private readonly apiKey?: string;
 
   /** In-memory cache for server list */
   private cache: { servers: ServerInfo[]; timestamp: number } | null = null;
@@ -109,6 +112,7 @@ export class RegistryClient {
   constructor(options: RegistryClientOptions = {}) {
     this.baseUrl = options.baseUrl || DEFAULT_REGISTRY_URL;
     this.timeout = options.timeout || REQUEST_TIMEOUT_MS;
+    this.apiKey = options.apiKey;
   }
 
   /**
@@ -245,12 +249,19 @@ export class RegistryClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'User-Agent': `proofscan-cli/${PKG_VERSION}`,
+      };
+
+      // Add Bearer token for authenticated registries
+      if (this.apiKey) {
+        headers['Authorization'] = `Bearer ${this.apiKey}`;
+      }
+
       const response = await fetch(url, {
         signal: controller.signal,
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': `proofscan-cli/${PKG_VERSION}`,
-        },
+        headers,
       });
 
       if (!response.ok) {
