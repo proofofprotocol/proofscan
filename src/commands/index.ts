@@ -39,3 +39,6 @@ export * from './log.js';
 
 // Phase 6.0: POPL (Public Observable Proof Ledger)
 export * from './popl.js';
+
+// Phase 7.0: Catalog (MCP Registry)
+export * from './catalog.js';

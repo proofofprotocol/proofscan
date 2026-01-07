@@ -58,6 +58,7 @@ export const TOP_LEVEL_COMMANDS = [
   'record',
   'doctor',
   'secrets', 'secret',
+  'catalog', 'cat',
 ];
 
 /**
@@ -77,6 +78,11 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   tool: ['ls', 'list', 'show'],
   ref: ['add', 'ls', 'list', 'delete'],
   popl: ['init', 'session', 'ls', 'list', 'show'],
+  catalog: ['search', 'view', 'sources'],
+  cat: ['search', 'view', 'sources'],
+  // Nested subcommands for sources
+  'catalog sources': ['list', 'set'],
+  'cat sources': ['list', 'set'],
 };
 
 /**
@@ -127,6 +133,12 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'popl ls': ['-s', '--oneline'],
   'popl list': ['-s', '--oneline'],
   'popl session': ['--title', '--unsafe-include-raw'],
+  catalog: ['--source', '--all'],
+  cat: ['--source', '--all'],
+  'catalog search': ['--source', '--all'],
+  'catalog view': ['--source'],
+  'cat search': ['--source', '--all'],
+  'cat view': ['--source'],
 };
 
 /**

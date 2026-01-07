@@ -50,6 +50,7 @@ import {
   createProxyCommand,
   createLogCommand,
   createPoplCommand,
+  createCatalogCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -242,6 +243,14 @@ program.addCommand(createLogCommand(getConfigPath));
 // popl (Phase 6.0: Public Observable Proof Ledger)
 program.addCommand(createPoplCommand(getConfigPath));
 
+// catalog (Phase 7.0: MCP Registry)
+program.addCommand(createCatalogCommand(getConfigPath));
+
+// Alias: cat = catalog
+const catCmd = createCatalogCommand(getConfigPath);
+catCmd.name('cat').description('Alias for catalog');
+program.addCommand(catCmd);
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -255,7 +264,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'help'
+  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'help'
 ]);
 
 // Shell-only commands (not available as CLI commands)
