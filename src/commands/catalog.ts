@@ -79,7 +79,7 @@ function createSpinner(text: string): Ora | null {
     spinner.stop();
     process.exit(130);
   };
-  process.on('SIGINT', sigintHandler);
+  process.once('SIGINT', sigintHandler);
 
   // Store handler for cleanup
   (spinner as Ora & { _sigintHandler?: () => void })._sigintHandler = sigintHandler;
@@ -137,7 +137,7 @@ async function createClientForSource(
 }
 
 /**
- * Cross-source search: search all available sources and merge results
+ * Cross-source search: search all available sources in parallel and merge results
  */
 async function searchAllSources(
   query: string,
@@ -148,35 +148,49 @@ async function searchAllSources(
   const warnings: string[] = [];
   const seenNames = new Set<string>();
 
-  for (const source of CATALOG_SOURCES) {
-    // Check if source is ready
+  // Separate ready and not-ready sources
+  const readySources = CATALOG_SOURCES.filter((source) => {
     if (!isSourceReady(source)) {
       skipped.push(source.name);
       warnings.push(`(${source.name} skipped: ${source.authEnvVar} not set)`);
-      continue;
+      return false;
     }
+    return true;
+  });
 
-    // Update spinner text
-    if (spinner) {
-      spinner.text = `Searching ${source.name}...`;
-    }
+  // Update spinner text for parallel search
+  if (spinner) {
+    spinner.text = `Searching ${readySources.length} source(s)...`;
+  }
 
+  // Search all ready sources in parallel
+  const searchPromises = readySources.map(async (source) => {
     try {
       const client = new RegistryClient({ baseUrl: source.baseUrl });
       const servers = await client.searchServers(query);
-
-      // Add source info and deduplicate by name
-      for (const server of servers) {
-        const key = server.name || server.repository || JSON.stringify(server);
-        if (!seenNames.has(key)) {
-          seenNames.add(key);
-          allServers.push({ ...server, _source: source.name });
-        }
-      }
+      return { source: source.name, servers, error: null };
     } catch (error) {
-      // Log warning but continue with other sources
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      warnings.push(`(${source.name} error: ${msg})`);
+      return { source: source.name, servers: [] as ServerInfo[], error: msg };
+    }
+  });
+
+  const results = await Promise.all(searchPromises);
+
+  // Merge results and collect warnings
+  for (const result of results) {
+    if (result.error) {
+      warnings.push(`(${result.source} error: ${result.error})`);
+      continue;
+    }
+
+    // Add source info and deduplicate by name
+    for (const server of result.servers) {
+      const key = server.name || server.repository || JSON.stringify(server);
+      if (!seenNames.has(key)) {
+        seenNames.add(key);
+        allServers.push({ ...server, _source: result.source });
+      }
     }
   }
 

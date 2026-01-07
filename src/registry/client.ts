@@ -5,11 +5,18 @@
  * Designed to be easily replaceable if the registry API changes.
  */
 
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { version: PKG_VERSION } = require('../../package.json') as { version: string };
+
 /** Default registry base URL (v0 API) */
 const DEFAULT_REGISTRY_URL = 'https://registry.modelcontextprotocol.io/v0';
 
 /** Request timeout in milliseconds */
 const REQUEST_TIMEOUT_MS = 10000;
+
+/** Cache TTL in milliseconds (5 minutes) */
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 /**
  * Server transport configuration
@@ -96,15 +103,32 @@ export class RegistryClient {
   private readonly baseUrl: string;
   private readonly timeout: number;
 
+  /** In-memory cache for server list */
+  private cache: { servers: ServerInfo[]; timestamp: number } | null = null;
+
   constructor(options: RegistryClientOptions = {}) {
     this.baseUrl = options.baseUrl || DEFAULT_REGISTRY_URL;
     this.timeout = options.timeout || REQUEST_TIMEOUT_MS;
   }
 
   /**
+   * Clear the server cache
+   */
+  clearCache(): void {
+    this.cache = null;
+  }
+
+  /**
    * List all servers from registry (latest versions only)
+   * Results are cached for CACHE_TTL_MS to avoid repeated fetches
    */
   async listServers(): Promise<ServerInfo[]> {
+    // Return cached data if still valid
+    const now = Date.now();
+    if (this.cache && now - this.cache.timestamp < CACHE_TTL_MS) {
+      return this.cache.servers;
+    }
+
     const allServers: ServerInfo[] = [];
     let cursor: string | undefined;
 
@@ -132,6 +156,9 @@ export class RegistryClient {
         throw new RegistryError('Failed to parse registry response', 'PARSE');
       }
     } while (cursor);
+
+    // Update cache
+    this.cache = { servers: allServers, timestamp: Date.now() };
 
     return allServers;
   }
@@ -222,7 +249,7 @@ export class RegistryClient {
         signal: controller.signal,
         headers: {
           Accept: 'application/json',
-          'User-Agent': 'proofscan-cli',
+          'User-Agent': `proofscan-cli/${PKG_VERSION}`,
         },
       });
 
