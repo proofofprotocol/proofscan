@@ -21,15 +21,20 @@ import type { Config, Connector, StdioTransport } from '../types/index.js';
 // Types
 // ============================================================
 
+/** Secret kind - connector env or namespace */
+export type SecretKind = 'connector' | 'namespace';
+
 /** Information about a secret and its binding */
 export interface SecretBindingInfo {
   /** Secret reference (dpapi:xxx, plain:xxx) */
   secret_ref: string;
   /** Secret ID */
   secret_id: string;
-  /** Connector ID (if bound) */
+  /** Kind of secret: connector env or namespace */
+  kind: SecretKind;
+  /** Connector ID (for connector kind) */
   connector_id?: string;
-  /** Environment key (if bound) */
+  /** Environment key (for connector kind) or namespace key (for namespace kind) */
   env_key?: string;
   /** Provider type */
   provider: ProviderType;
@@ -254,10 +259,26 @@ async function withConfigLock<T>(
 // Helper functions
 // ============================================================
 
-/** Extract all secret refs from config */
-function collectConfigSecretRefs(config: Config): Map<string, { connectorId: string; envKey: string }> {
-  const refs = new Map<string, { connectorId: string; envKey: string }>();
+/** Binding info for connector secrets */
+interface ConnectorBinding {
+  kind: 'connector';
+  connectorId: string;
+  envKey: string;
+}
 
+/** Binding info for namespace secrets */
+interface NamespaceBinding {
+  kind: 'namespace';
+  namespaceKey: string;
+}
+
+type SecretBinding = ConnectorBinding | NamespaceBinding;
+
+/** Extract all secret refs from config (both connector and namespace) */
+function collectConfigSecretRefs(config: Config): Map<string, SecretBinding> {
+  const refs = new Map<string, SecretBinding>();
+
+  // Collect connector secrets
   for (const connector of config.connectors || []) {
     const env = (connector.transport as StdioTransport)?.env;
     if (!env) continue;
@@ -265,7 +286,17 @@ function collectConfigSecretRefs(config: Config): Map<string, { connectorId: str
     for (const [key, value] of Object.entries(env)) {
       const parsed = parseSecretRef(value);
       if (parsed) {
-        refs.set(parsed.id, { connectorId: connector.id, envKey: key });
+        refs.set(parsed.id, { kind: 'connector', connectorId: connector.id, envKey: key });
+      }
+    }
+  }
+
+  // Collect namespace secrets (e.g., catalog.smithery)
+  if (config.catalog?.secrets) {
+    for (const [namespaceKey, secretRef] of Object.entries(config.catalog.secrets)) {
+      const parsed = parseSecretRef(secretRef);
+      if (parsed) {
+        refs.set(parsed.id, { kind: 'namespace', namespaceKey });
       }
     }
   }
@@ -310,15 +341,41 @@ export async function listSecretBindings(
       // For now, use the store's provider type
       provider = store.getProviderType();
 
-      results.push({
-        secret_ref: makeSecretRef(provider, id),
-        secret_id: id,
-        connector_id: binding?.connectorId,
-        env_key: binding?.envKey,
-        provider,
-        created_at: createdAt?.toISOString() ?? new Date().toISOString(),
-        status: binding ? 'OK' : 'ORPHAN',
-      });
+      if (binding) {
+        if (binding.kind === 'connector') {
+          results.push({
+            secret_ref: makeSecretRef(provider, id),
+            secret_id: id,
+            kind: 'connector',
+            connector_id: binding.connectorId,
+            env_key: binding.envKey,
+            provider,
+            created_at: createdAt?.toISOString() ?? new Date().toISOString(),
+            status: 'OK',
+          });
+        } else {
+          // namespace binding
+          results.push({
+            secret_ref: makeSecretRef(provider, id),
+            secret_id: id,
+            kind: 'namespace',
+            env_key: binding.namespaceKey,
+            provider,
+            created_at: createdAt?.toISOString() ?? new Date().toISOString(),
+            status: 'OK',
+          });
+        }
+      } else {
+        // Orphan - no binding found
+        results.push({
+          secret_ref: makeSecretRef(provider, id),
+          secret_id: id,
+          kind: 'connector', // default to connector for orphans
+          provider,
+          created_at: createdAt?.toISOString() ?? new Date().toISOString(),
+          status: 'ORPHAN',
+        });
+      }
 
       // Remove from configRefs to track what we've seen
       configRefs.delete(id);
@@ -326,15 +383,28 @@ export async function listSecretBindings(
 
     // Any remaining configRefs are MISSING (in config but not in store)
     for (const [id, binding] of configRefs) {
-      results.push({
-        secret_ref: `unknown:${id}`,
-        secret_id: id,
-        connector_id: binding.connectorId,
-        env_key: binding.envKey,
-        provider: 'plain',
-        created_at: '',
-        status: 'MISSING',
-      });
+      if (binding.kind === 'connector') {
+        results.push({
+          secret_ref: `unknown:${id}`,
+          secret_id: id,
+          kind: 'connector',
+          connector_id: binding.connectorId,
+          env_key: binding.envKey,
+          provider: 'plain',
+          created_at: '',
+          status: 'MISSING',
+        });
+      } else {
+        results.push({
+          secret_ref: `unknown:${id}`,
+          secret_id: id,
+          kind: 'namespace',
+          env_key: binding.namespaceKey,
+          provider: 'plain',
+          created_at: '',
+          status: 'MISSING',
+        });
+      }
     }
 
     return results;
@@ -484,11 +554,12 @@ export async function exportSecrets(options: ExportOptions): Promise<ExportResul
 
     const configRefs = collectConfigSecretRefs(config);
 
-    // Build entries
+    // Build entries (only connector secrets for now, namespace secrets not supported in export)
     const entries: ExportEntry[] = [];
     for (const id of secretIds) {
       const binding = configRefs.get(id);
       if (!binding) continue; // Skip orphans
+      if (binding.kind !== 'connector') continue; // Skip namespace secrets
 
       // Retrieve plaintext (in-memory only)
       const plaintext = await store.retrieve(id);

@@ -64,6 +64,7 @@ export {
   pruneOrphanSecrets,
   exportSecrets,
   importSecrets,
+  type SecretKind,
   type SecretBindingInfo,
   type SetSecretOptions,
   type SetSecretResult,

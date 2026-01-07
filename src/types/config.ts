@@ -62,6 +62,8 @@ export interface InscriberConfig {
 export interface CatalogConfig {
   /** Default catalog source name (default: 'official') */
   defaultSource?: string;
+  /** Namespace secrets for catalog sources (e.g., 'catalog.smithery.apiKey' -> encrypted value) */
+  secrets?: Record<string, string>;
 }
 
 export interface Config {

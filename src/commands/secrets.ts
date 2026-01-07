@@ -79,19 +79,30 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
             output('No secrets stored.');
             output('\nTo add secrets, use:');
             output('  pfscan secrets set <connector> <ENV_KEY>');
+            output('  pfscan secrets set <namespace>  (e.g., catalog.smithery)');
             return;
           }
 
           output(`Found ${bindings.length} secret(s):\n`);
-          output('  CONNECTOR          ENV_KEY                    STATUS    PROVIDER  CREATED');
-          output('  ─────────────────  ─────────────────────────  ────────  ────────  ───────────────────');
+          output('  KIND       CONNECTOR/NAMESPACE   KEY                        STATUS    PROVIDER  CREATED');
+          output('  ─────────  ────────────────────  ─────────────────────────  ────────  ────────  ───────────────────');
           for (const b of bindings) {
-            const connector = (b.connector_id || '-').padEnd(17);
-            const key = (b.env_key || '-').padEnd(25);
+            const kind = b.kind.padEnd(9);
+            let identifier: string;
+            let key: string;
+            if (b.kind === 'namespace') {
+              // For namespace, show the namespace key in identifier column, key is '-'
+              identifier = (b.env_key || '-').padEnd(20);
+              key = '-'.padEnd(25);
+            } else {
+              // For connector, show connector_id and env_key
+              identifier = (b.connector_id || '-').padEnd(20);
+              key = (b.env_key || '-').padEnd(25);
+            }
             const status = b.status.padEnd(8);
             const provider = b.provider.padEnd(8);
             const created = b.created_at.slice(0, 19);
-            output(`  ${connector}  ${key}  ${status}  ${provider}  ${created}`);
+            output(`  ${kind}  ${identifier}  ${key}  ${status}  ${provider}  ${created}`);
           }
         }
       } catch (err) {
@@ -104,63 +115,291 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
   // ============================================================
   // secrets set
   // ============================================================
+  // Supports two modes:
+  // 1. Connector mode: pfscan secrets set <connector> <envKey>
+  // 2. Namespace mode: pfscan secrets set <namespace>
+  //    e.g., pfscan secrets set catalog.smithery
   secrets
-    .command('set <connector> <envKey>')
-    .description('Set a secret value for a connector environment variable')
+    .command('set <namespaceOrConnector> [key]')
+    .description('Set a secret value (connector env or namespace)\n\nExamples:\n  pfscan secrets set my-connector OPENAI_API_KEY\n  pfscan secrets set catalog.smithery')
     .option('--clip', 'Read secret from clipboard instead of prompting')
-    .action(async (connectorId: string, envKey: string, options) => {
+    .action(async (namespaceOrConnector: string, key: string | undefined, options) => {
       try {
         const configPath = getConfigPath();
+        const configDir = dirname(configPath);
 
-        // Validate connector exists
-        if (!existsSync(configPath)) {
-          outputError(`Config file not found: ${configPath}`);
-          process.exit(1);
-        }
+        // Determine mode: namespace (contains dot) vs connector
+        const isNamespaceMode = namespaceOrConnector.includes('.');
 
-        let config: Config;
-        try {
-          config = JSON.parse(readFileSync(configPath, 'utf-8'));
-        } catch (parseErr) {
-          outputError(`Invalid config file format: ${parseErr instanceof SyntaxError ? 'JSON parse error' : 'Read error'}`);
-          process.exit(1);
-        }
-        const connector = config.connectors?.find(c => c.id === connectorId);
+        if (isNamespaceMode) {
+          // Namespace mode: e.g., "catalog.smithery"
+          // key is ignored in namespace mode - the full namespace IS the key
+          const fullKey = namespaceOrConnector;
 
-        if (!connector) {
-          outputError(`Connector not found: ${connectorId}`);
-          outputError(`Available connectors: ${config.connectors?.map(c => c.id).join(', ') || 'none'}`);
-          process.exit(1);
-        }
+          // Read secret value
+          let secretValue: string;
+          if (options.clip) {
+            output(`Reading secret for ${fullKey} from clipboard...`);
+            secretValue = await readSecretFromClipboard();
+          } else {
+            process.stdout.write(`Enter secret for ${fullKey}: `);
+            secretValue = await readSecretHidden();
+          }
 
-        // Read secret value
-        let secretValue: string;
-        if (options.clip) {
-          output(`Reading secret for ${connectorId}.${envKey} from clipboard...`);
-          secretValue = await readSecretFromClipboard();
+          if (!secretValue || secretValue.trim().length === 0) {
+            outputError('Secret value cannot be empty');
+            process.exit(1);
+          }
+
+          // Store the secret
+          const store = new SqliteSecretStore(configDir);
+          let secretRef: string;
+          try {
+            const result = await store.store(secretValue.trim(), {
+              keyName: fullKey,
+              source: fullKey,
+            });
+            secretRef = result.reference;
+          } finally {
+            store.close();
+          }
+
+          // Update config with secret reference
+          const { ConfigManager } = await import('../config/index.js');
+          const manager = new ConfigManager(configPath);
+          const config = await manager.loadOrDefault();
+
+          // Parse namespace path (e.g., "catalog.smithery" -> config.catalog.secrets["catalog.smithery"])
+          const parts = fullKey.split('.');
+          if (parts[0] === 'catalog') {
+            config.catalog = config.catalog || {};
+            config.catalog.secrets = config.catalog.secrets || {};
+            config.catalog.secrets[fullKey] = secretRef;
+          } else {
+            // Generic namespace support for future use
+            // Store in config under the namespace path
+            outputError(`Unknown namespace: ${parts[0]}. Supported: catalog`);
+            process.exit(1);
+          }
+
+          await manager.save(config);
+
+          output(`\n  Secret stored: ${secretRef}`);
+          output(`  Config updated: ${fullKey}`);
         } else {
-          output(`Enter secret for ${connectorId}.${envKey}:`);
-          secretValue = await readSecretHidden();
+          // Connector mode (existing behavior)
+          const connectorId = namespaceOrConnector;
+          const envKey = key;
+
+          // key is required in connector mode
+          if (!envKey) {
+            outputError('Usage: pfscan secrets set <connector> <envKey>');
+            outputError('       pfscan secrets set <namespace>  (e.g., catalog.smithery)');
+            process.exit(1);
+          }
+
+          // Validate connector exists
+          if (!existsSync(configPath)) {
+            outputError(`Config file not found: ${configPath}`);
+            process.exit(1);
+          }
+
+          let config: Config;
+          try {
+            config = JSON.parse(readFileSync(configPath, 'utf-8'));
+          } catch (parseErr) {
+            outputError(`Invalid config file format: ${parseErr instanceof SyntaxError ? 'JSON parse error' : 'Read error'}`);
+            process.exit(1);
+          }
+          const connector = config.connectors?.find(c => c.id === connectorId);
+
+          if (!connector) {
+            outputError(`Connector not found: ${connectorId}`);
+            outputError(`Available connectors: ${config.connectors?.map(c => c.id).join(', ') || 'none'}`);
+            process.exit(1);
+          }
+
+          // Read secret value
+          let secretValue: string;
+          if (options.clip) {
+            output(`Reading secret for ${connectorId}.${envKey} from clipboard...`);
+            secretValue = await readSecretFromClipboard();
+          } else {
+            output(`Enter secret for ${connectorId}.${envKey}:`);
+            secretValue = await readSecretHidden();
+          }
+
+          if (!secretValue || secretValue.trim().length === 0) {
+            outputError('Secret value cannot be empty');
+            process.exit(1);
+          }
+
+          // Store secret and update config
+          const result = await setSecret({
+            configPath,
+            connectorId,
+            envKey,
+            secretValue: secretValue.trim(),
+          });
+
+          output(`\n  Secret stored: ${result.secretRef}`);
+          output(`  Config updated: ${connectorId}.transport.env.${envKey}`);
         }
-
-        if (!secretValue || secretValue.trim().length === 0) {
-          outputError('Secret value cannot be empty');
-          process.exit(1);
-        }
-
-        // Store secret and update config
-        const result = await setSecret({
-          configPath,
-          connectorId,
-          envKey,
-          secretValue: secretValue.trim(),
-        });
-
-        output(`\n  Secret stored: ${result.secretRef}`);
-        output(`  Config updated: ${connectorId}.transport.env.${envKey}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         outputError(`Failed to set secret: ${msg}`);
+        process.exit(1);
+      }
+    });
+
+  // ============================================================
+  // secrets get (new command for namespace secrets)
+  // ============================================================
+  secrets
+    .command('get <namespace>')
+    .description('Check if a namespace secret exists (does not show value)\n\nExamples:\n  pfscan secrets get catalog.smithery')
+    .action(async (namespace: string) => {
+      try {
+        const configPath = getConfigPath();
+        const configDir = dirname(configPath);
+
+        if (!namespace.includes('.')) {
+          outputError('Argument must be a namespace (e.g., catalog.smithery)');
+          outputError('For connector secrets, use: pfscan secrets list');
+          process.exit(1);
+        }
+
+        const fullKey = namespace;
+        const parts = namespace.split('.');
+
+        // Read config
+        const { ConfigManager } = await import('../config/index.js');
+        const manager = new ConfigManager(configPath);
+        const config = await manager.loadOrDefault();
+
+        let secretRef: string | undefined;
+        if (parts[0] === 'catalog') {
+          secretRef = config.catalog?.secrets?.[fullKey];
+        } else {
+          outputError(`Unknown namespace: ${parts[0]}. Supported: catalog`);
+          process.exit(1);
+        }
+
+        if (!secretRef) {
+          if (getOutputOptions().json) {
+            output({ exists: false, key: fullKey });
+          } else {
+            output(`Secret not found: ${fullKey}`);
+            output(`\nTo set it: pfscan secrets set ${fullKey}`);
+          }
+          process.exit(1);
+        }
+
+        // Verify secret exists in store
+        const store = new SqliteSecretStore(configDir);
+        try {
+          const match = secretRef.match(/^[^:]+:(.+)$/);
+          if (!match) {
+            if (getOutputOptions().json) {
+              output({ exists: false, key: fullKey, error: 'Invalid reference' });
+            } else {
+              outputError(`Invalid secret reference: ${secretRef}`);
+            }
+            process.exit(1);
+          }
+          const secretId = match[1];
+          const exists = await store.exists(secretId);
+
+          if (getOutputOptions().json) {
+            output({ exists, key: fullKey, reference: secretRef });
+          } else {
+            if (exists) {
+              output(`Secret exists: ${fullKey}`);
+              output(`  Reference: ${secretRef}`);
+            } else {
+              output(`Secret reference found but value missing: ${fullKey}`);
+              output(`  Stored reference: ${secretRef}`);
+              output(`\nRe-set it: pfscan secrets set ${fullKey}`);
+            }
+          }
+        } finally {
+          store.close();
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        outputError(`Failed to get secret: ${msg}`);
+        process.exit(1);
+      }
+    });
+
+  // ============================================================
+  // secrets unset (new command for namespace secrets)
+  // ============================================================
+  secrets
+    .command('unset <namespace>')
+    .description('Remove a namespace secret\n\nExamples:\n  pfscan secrets unset catalog.smithery')
+    .action(async (namespace: string) => {
+      try {
+        const configPath = getConfigPath();
+        const configDir = dirname(configPath);
+
+        if (!namespace.includes('.')) {
+          outputError('Argument must be a namespace (e.g., catalog.smithery)');
+          outputError('For connector secrets, use: pfscan secrets prune');
+          process.exit(1);
+        }
+
+        const fullKey = namespace;
+        const parts = namespace.split('.');
+
+        // Read config
+        const { ConfigManager } = await import('../config/index.js');
+        const manager = new ConfigManager(configPath);
+        const config = await manager.loadOrDefault();
+
+        let secretRef: string | undefined;
+        if (parts[0] === 'catalog') {
+          secretRef = config.catalog?.secrets?.[fullKey];
+          if (secretRef && config.catalog?.secrets) {
+            delete config.catalog.secrets[fullKey];
+          }
+        } else {
+          outputError(`Unknown namespace: ${parts[0]}. Supported: catalog`);
+          process.exit(1);
+        }
+
+        if (!secretRef) {
+          if (getOutputOptions().json) {
+            output({ removed: false, key: fullKey, reason: 'not found' });
+          } else {
+            output(`Secret not found: ${fullKey}`);
+          }
+          return;
+        }
+
+        // Remove from store
+        const store = new SqliteSecretStore(configDir);
+        try {
+          const match = secretRef.match(/^[^:]+:(.+)$/);
+          if (match) {
+            const secretId = match[1];
+            await store.delete(secretId);
+          }
+        } finally {
+          store.close();
+        }
+
+        // Save updated config
+        await manager.save(config);
+
+        if (getOutputOptions().json) {
+          output({ removed: true, key: fullKey });
+        } else {
+          output(`Secret removed: ${fullKey}`);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        outputError(`Failed to unset secret: ${msg}`);
         process.exit(1);
       }
     });

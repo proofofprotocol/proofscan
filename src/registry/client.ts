@@ -12,6 +12,9 @@ const { version: PKG_VERSION } = require('../../package.json') as { version: str
 /** Default registry base URL (v0 API) */
 const DEFAULT_REGISTRY_URL = 'https://registry.modelcontextprotocol.io/v0';
 
+/** Smithery registry base URL */
+const SMITHERY_REGISTRY_URL = 'https://registry.smithery.ai';
+
 /** Request timeout in milliseconds */
 const REQUEST_TIMEOUT_MS = 10000;
 
@@ -49,6 +52,8 @@ export interface ServerInfo {
 export interface RegistryClientOptions {
   baseUrl?: string;
   timeout?: number;
+  /** API key for authenticated registries (sent as Bearer token) */
+  apiKey?: string;
 }
 
 /**
@@ -84,6 +89,59 @@ interface RegistryListResponse {
 }
 
 /**
+ * Smithery server entry from their API
+ */
+interface SmitheryServerEntry {
+  qualifiedName: string;
+  displayName?: string | null;
+  description?: string | null;
+  iconUrl?: string | null;
+  verified: boolean;
+  useCount: number;
+  remote: boolean;
+  createdAt: string;
+  homepage?: string;
+}
+
+/**
+ * Smithery API response for server list
+ */
+interface SmitheryListResponse {
+  servers: SmitheryServerEntry[];
+  pagination: {
+    currentPage: number;
+    pageSize: number;
+    totalPages: number;
+    totalCount: number;
+  };
+}
+
+/**
+ * Smithery server detail response (GET /servers/{id})
+ */
+interface SmitheryServerDetail {
+  qualifiedName: string;
+  displayName?: string | null;
+  description?: string | null;
+  iconUrl?: string | null;
+  remote: boolean;
+  deploymentUrl?: string | null;
+  connections?: Array<{
+    type: string;
+    url?: string;
+    configSchema?: unknown;
+  }>;
+  security?: {
+    scanPassed?: boolean;
+  };
+  tools?: Array<{
+    name: string;
+    description?: string;
+    inputSchema?: unknown;
+  }> | null;
+}
+
+/**
  * Error types for registry operations
  */
 export class RegistryError extends Error {
@@ -102,6 +160,8 @@ export class RegistryError extends Error {
 export class RegistryClient {
   private readonly baseUrl: string;
   private readonly timeout: number;
+  private readonly apiKey?: string;
+  private readonly isSmithery: boolean;
 
   /** In-memory cache for server list */
   private cache: { servers: ServerInfo[]; timestamp: number } | null = null;
@@ -109,6 +169,9 @@ export class RegistryClient {
   constructor(options: RegistryClientOptions = {}) {
     this.baseUrl = options.baseUrl || DEFAULT_REGISTRY_URL;
     this.timeout = options.timeout || REQUEST_TIMEOUT_MS;
+    this.apiKey = options.apiKey;
+    // Detect Smithery registry by URL
+    this.isSmithery = this.baseUrl.includes('smithery.ai');
   }
 
   /**
@@ -198,10 +261,16 @@ export class RegistryClient {
   }
 
   /**
-   * Search servers by query (client-side filter)
-   * Matches against name and description
+   * Search servers by query
+   * - Smithery: Uses server-side semantic search via API
+   * - Official: Uses client-side filter on cached list
    */
   async searchServers(query: string): Promise<ServerInfo[]> {
+    if (this.isSmithery) {
+      return this.searchSmitheryServers(query);
+    }
+
+    // Official registry: client-side filter
     const servers = await this.listServers();
     const lowerQuery = query.toLowerCase();
 
@@ -213,10 +282,62 @@ export class RegistryClient {
   }
 
   /**
+   * Search Smithery servers using their API (server-side semantic search)
+   */
+  private async searchSmitheryServers(query: string): Promise<ServerInfo[]> {
+    const allServers: ServerInfo[] = [];
+    let page = 1;
+    const pageSize = 50; // Fetch more per page for efficiency
+    let totalPages = 1;
+
+    do {
+      const url = `${this.baseUrl}/servers?q=${encodeURIComponent(query)}&page=${page}&pageSize=${pageSize}`;
+      const response = await this.fetch(url);
+
+      try {
+        const data = (await response.json()) as SmitheryListResponse;
+
+        // Map Smithery entries to ServerInfo
+        for (const entry of data.servers) {
+          allServers.push(this.mapSmitheryToServerInfo(entry));
+        }
+
+        totalPages = data.pagination.totalPages;
+        page++;
+      } catch {
+        throw new RegistryError('Failed to parse Smithery response', 'PARSE');
+      }
+    } while (page <= totalPages && page <= 5); // Limit to 5 pages (250 results max)
+
+    return allServers;
+  }
+
+  /**
+   * Map Smithery server entry to ServerInfo
+   */
+  private mapSmitheryToServerInfo(entry: SmitheryServerEntry): ServerInfo {
+    return {
+      name: entry.qualifiedName,
+      description: entry.description ?? undefined,
+      homepage: entry.homepage,
+      // Smithery-specific fields stored as additional properties
+      verified: entry.verified,
+      useCount: entry.useCount,
+      remote: entry.remote,
+    };
+  }
+
+  /**
    * Get server details by name (exact match or suffix match)
-   * Supports both full name (ai.exa/exa) and short name (exa)
+   * - Smithery: Uses direct API call GET /servers/{id}
+   * - Official: Uses cached list with client-side matching
    */
   async getServer(name: string): Promise<ServerInfo | null> {
+    if (this.isSmithery) {
+      return this.getSmitheryServer(name);
+    }
+
+    // Official registry: client-side matching from cached list
     const servers = await this.listServers();
     const lowerName = name.toLowerCase();
 
@@ -238,6 +359,74 @@ export class RegistryClient {
   }
 
   /**
+   * Get Smithery server by qualified name using their API
+   */
+  private async getSmitheryServer(name: string): Promise<ServerInfo | null> {
+    // Smithery uses qualifiedName format like "smithery/hello-world" or "@user/repo"
+    // Try direct lookup first
+    const url = `${this.baseUrl}/servers/${encodeURIComponent(name)}`;
+
+    try {
+      const response = await this.fetch(url);
+      const data = (await response.json()) as SmitheryServerDetail;
+
+      return this.mapSmitheryDetailToServerInfo(data);
+    } catch (e) {
+      if (e instanceof RegistryError && e.code === 'NOT_FOUND') {
+        // If not found with direct name, try searching and matching
+        const searchResults = await this.searchSmitheryServers(name);
+        if (searchResults.length > 0) {
+          // Return first match that ends with the name
+          const lowerName = name.toLowerCase();
+          const match = searchResults.find((s) => {
+            const serverName = s.name?.toLowerCase() || '';
+            return (
+              serverName === lowerName ||
+              serverName.endsWith('/' + lowerName) ||
+              serverName.endsWith('-' + lowerName)
+            );
+          });
+          return match || searchResults[0];
+        }
+        return null;
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Map Smithery server detail to ServerInfo
+   */
+  private mapSmitheryDetailToServerInfo(detail: SmitheryServerDetail): ServerInfo {
+    const info: ServerInfo = {
+      name: detail.qualifiedName,
+      description: detail.description ?? undefined,
+      remote: detail.remote,
+    };
+
+    // Map deployment URL as homepage
+    if (detail.deploymentUrl) {
+      info.homepage = detail.deploymentUrl;
+    }
+
+    // Map connections to transport
+    if (detail.connections && detail.connections.length > 0) {
+      const conn = detail.connections[0];
+      info.transport = {
+        type: conn.type,
+        url: conn.url,
+      };
+    }
+
+    // Store tools info if available
+    if (detail.tools) {
+      info.tools = detail.tools;
+    }
+
+    return info;
+  }
+
+  /**
    * Fetch with timeout and error handling
    */
   private async fetch(url: string): Promise<Response> {
@@ -245,12 +434,19 @@ export class RegistryClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'User-Agent': `proofscan-cli/${PKG_VERSION}`,
+      };
+
+      // Add Authorization header if API key is set
+      if (this.apiKey) {
+        headers['Authorization'] = `Bearer ${this.apiKey}`;
+      }
+
       const response = await fetch(url, {
         signal: controller.signal,
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': `proofscan-cli/${PKG_VERSION}`,
-        },
+        headers,
       });
 
       if (!response.ok) {

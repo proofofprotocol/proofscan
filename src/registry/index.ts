@@ -17,11 +17,13 @@ export {
 
 export {
   type CatalogSource,
+  type SecretResolver,
   CATALOG_SOURCES,
   DEFAULT_CATALOG_SOURCE,
   getSourceNames,
   getSource,
   isValidSource,
+  setSecretResolver,
   getSourceApiKey,
   isSourceReady,
   getAuthErrorMessage,
