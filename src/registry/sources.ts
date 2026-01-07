@@ -25,7 +25,8 @@ export interface CatalogSource {
  * Built-in catalog sources
  *
  * Note: These are the initial sources. Future versions may support
- * user-defined sources via config.
+ * user-defined sources via config and additional registries with
+ * authentication via pfscan secret integration.
  */
 export const CATALOG_SOURCES: CatalogSource[] = [
   {
@@ -34,13 +35,8 @@ export const CATALOG_SOURCES: CatalogSource[] = [
     authRequired: false,
     description: 'Official MCP Registry',
   },
-  {
-    name: 'smithery',
-    baseUrl: 'https://registry.smithery.ai',
-    authRequired: true,
-    authEnvVar: 'SMITHERY_API_KEY',
-    description: 'Smithery MCP Registry',
-  },
+  // TODO: Add Smithery support with pfscan secret integration
+  // See: https://github.com/proofofprotocol/proofscan/issues/XX
 ];
 
 /** Default source name */
