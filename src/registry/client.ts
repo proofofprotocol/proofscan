@@ -12,9 +12,6 @@ const { version: PKG_VERSION } = require('../../package.json') as { version: str
 /** Default registry base URL (v0 API) */
 const DEFAULT_REGISTRY_URL = 'https://registry.modelcontextprotocol.io/v0';
 
-/** Smithery registry base URL */
-const SMITHERY_REGISTRY_URL = 'https://registry.smithery.ai';
-
 /** Request timeout in milliseconds */
 const REQUEST_TIMEOUT_MS = 10000;
 
