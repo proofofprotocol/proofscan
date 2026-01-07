@@ -36,6 +36,7 @@ import {
 import { ConfigManager } from '../config/index.js';
 import { SqliteSecretStore } from '../secrets/store.js';
 import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
+import { isWindows, isPowerShellHost, isInteractiveTTY, shouldDisableSpinnerByDefault } from '../utils/platform.js';
 import { dirname } from 'path';
 
 /** Braille spinner frames */
@@ -52,18 +53,73 @@ interface ServerInfoWithSource extends ServerInfo {
 }
 
 /**
+ * Spinner options passed from command flags
+ */
+interface SpinnerFlags {
+  spinner?: boolean;
+  noSpinner?: boolean;
+}
+
+/** Current spinner flags (set by command before createSpinner is called) */
+let currentSpinnerFlags: SpinnerFlags = {};
+
+/**
+ * Set spinner flags from command options
+ * Call this before createSpinner()
+ */
+function setSpinnerFlags(flags: SpinnerFlags): void {
+  currentSpinnerFlags = flags;
+}
+
+/**
  * Check if we should show spinner
- * - Only when stderr is TTY (human watching terminal)
- * - Not in --json mode
- * - Not in --verbose mode
- * - Not when stdin is piped (automated use)
+ * Priority (checked in order, first match wins):
+ * 1. --json mode → always false
+ * 2. Not interactive TTY → false
+ * 3. --spinner flag → true (explicit enable, overrides platform detection)
+ * 4. --no-spinner flag → false (explicit disable)
+ * 5. Windows platform → false (CLIXML issues)
+ * 6. PowerShell host → false (CLIXML issues)
+ * 7. Otherwise → true
+ *
+ * Note: If both --spinner and --no-spinner are provided, --spinner takes precedence
+ * because it is checked first (step 3 before step 4).
  */
 function shouldShowSpinner(): boolean {
   const opts = getOutputOptions();
-  // Spinner goes to stderr, so check stderr TTY
-  // Also skip if stdin is piped (non-interactive use)
-  const isInteractive = process.stderr.isTTY === true && process.stdin.isTTY !== false;
-  return isInteractive && !opts.json && !opts.verbose;
+
+  // --json always disables spinner
+  if (opts.json) {
+    return false;
+  }
+
+  // Must be interactive TTY
+  if (!isInteractiveTTY()) {
+    return false;
+  }
+
+  // --spinner explicitly enables (overrides platform detection)
+  if (currentSpinnerFlags.spinner === true) {
+    return true;
+  }
+
+  // --no-spinner explicitly disables
+  if (currentSpinnerFlags.noSpinner === true) {
+    return false;
+  }
+
+  // Windows/PowerShell: disable by default due to CLIXML progress issues
+  if (shouldDisableSpinnerByDefault()) {
+    // In verbose mode, show why spinner is disabled
+    if (opts.verbose) {
+      const reason = isWindows() ? 'Windows' : 'PowerShell';
+      console.error(`[verbose] Spinner disabled by default on ${reason}. Use --spinner to enable.`);
+    }
+    return false;
+  }
+
+  // Default: enable spinner
+  return true;
 }
 
 /**
@@ -511,7 +567,11 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .argument('<query>', 'Search query')
     .option('--source <name>', 'Use specific catalog source')
     .option('--all', 'Search all available catalog sources')
-    .action(async (query: string, options: { source?: string; all?: boolean }) => {
+    .option('--spinner', 'Show spinner (experimental on Windows/PowerShell)')
+    .option('--no-spinner', 'Disable spinner')
+    .action(async (query: string, options: { source?: string; all?: boolean; spinner?: boolean; noSpinner?: boolean }) => {
+      // Set spinner flags before any spinner operations
+      setSpinnerFlags({ spinner: options.spinner, noSpinner: options.noSpinner });
       const opts = getOutputOptions();
       const currentSource = await getEffectiveSource(getConfigPath);
 
@@ -605,7 +665,11 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .argument('<server>', 'Server name')
     .argument('[field]', 'Specific field to display')
     .option('--source <name>', 'Use specific catalog source')
-    .action(async (serverName: string, field: string | undefined, options: { source?: string }) => {
+    .option('--spinner', 'Show spinner (experimental on Windows/PowerShell)')
+    .option('--no-spinner', 'Disable spinner')
+    .action(async (serverName: string, field: string | undefined, options: { source?: string; spinner?: boolean; noSpinner?: boolean }) => {
+      // Set spinner flags before any spinner operations
+      setSpinnerFlags({ spinner: options.spinner, noSpinner: options.noSpinner });
       const opts = getOutputOptions();
       const currentSource = await getEffectiveSource(getConfigPath);
       const spinner = createSpinner(`Fetching "${serverName}"...`);
