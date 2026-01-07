@@ -30,9 +30,13 @@ import {
   isSourceReady,
   getAuthErrorMessage,
   formatSourceLine,
+  setSecretResolver,
+  getSourceApiKey,
 } from '../registry/index.js';
 import { ConfigManager } from '../config/index.js';
+import { SqliteSecretStore } from '../secrets/store.js';
 import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
+import { dirname } from 'path';
 
 /** Braille spinner frames */
 const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -115,6 +119,47 @@ async function getEffectiveSource(getConfigPath: () => string): Promise<string> 
 }
 
 /**
+ * Initialize the secret resolver for catalog sources
+ * This connects the registry module to the pfscan secrets system
+ */
+async function initSecretResolver(getConfigPath: () => string): Promise<void> {
+  const configPath = getConfigPath();
+  const configDir = dirname(configPath);
+
+  setSecretResolver(async (secretKey: string): Promise<string | undefined> => {
+    try {
+      // Load config to get the secret reference
+      const manager = new ConfigManager(configPath);
+      const config = await manager.loadOrDefault();
+
+      // Look up the secret reference in config.catalog.secrets
+      const secretRef = config.catalog?.secrets?.[secretKey];
+      if (!secretRef) {
+        return undefined;
+      }
+
+      // Parse secretRef (e.g., "dpapi:uuid" or "plain:uuid")
+      const match = secretRef.match(/^[^:]+:(.+)$/);
+      if (!match) {
+        return undefined;
+      }
+
+      const secretId = match[1];
+
+      // Retrieve from secret store
+      const store = new SqliteSecretStore(configDir);
+      try {
+        return await store.retrieve(secretId) ?? undefined;
+      } finally {
+        store.close();
+      }
+    } catch {
+      return undefined;
+    }
+  });
+}
+
+/**
  * Create a RegistryClient for the effective source
  * Validates source and checks authentication
  */
@@ -133,7 +178,15 @@ async function createClientForSource(
     throw new Error(getAuthErrorMessage(source));
   }
 
-  return new RegistryClient({ baseUrl: source.baseUrl });
+  // Get API key if source requires auth
+  const apiKey = await getSourceApiKey(source);
+
+  // For auth-required sources, check if we actually have the API key
+  if (source.authRequired && !apiKey) {
+    throw new Error(getAuthErrorMessage(source));
+  }
+
+  return new RegistryClient({ baseUrl: source.baseUrl, apiKey });
 }
 
 /**
@@ -148,15 +201,31 @@ async function searchAllSources(
   const warnings: string[] = [];
   const seenNames = new Set<string>();
 
-  // Separate ready and not-ready sources
-  const readySources = CATALOG_SOURCES.filter((source) => {
+  // Check each source and get API keys for auth-required sources
+  const sourcePromises = CATALOG_SOURCES.map(async (source) => {
     if (!isSourceReady(source)) {
-      skipped.push(source.name);
-      warnings.push(`(${source.name} skipped: ${source.authEnvVar} not set)`);
-      return false;
+      return { source, ready: false, apiKey: undefined };
     }
-    return true;
+    // Get API key for auth-required sources
+    const apiKey = await getSourceApiKey(source);
+    if (source.authRequired && !apiKey) {
+      return { source, ready: false, apiKey: undefined };
+    }
+    return { source, ready: true, apiKey };
   });
+
+  const sourceResults = await Promise.all(sourcePromises);
+
+  // Separate ready and not-ready sources
+  const readySources: { source: typeof CATALOG_SOURCES[0]; apiKey?: string }[] = [];
+  for (const result of sourceResults) {
+    if (!result.ready) {
+      skipped.push(result.source.name);
+      warnings.push(`(${result.source.name} skipped: API key not set)`);
+    } else {
+      readySources.push({ source: result.source, apiKey: result.apiKey });
+    }
+  }
 
   // Update spinner text for parallel search
   if (spinner) {
@@ -164,9 +233,9 @@ async function searchAllSources(
   }
 
   // Search all ready sources in parallel
-  const searchPromises = readySources.map(async (source) => {
+  const searchPromises = readySources.map(async ({ source, apiKey }) => {
     try {
-      const client = new RegistryClient({ baseUrl: source.baseUrl });
+      const client = new RegistryClient({ baseUrl: source.baseUrl, apiKey });
       const servers = await client.searchServers(query);
       return { source: source.name, servers, error: null };
     } catch (error) {
@@ -401,7 +470,7 @@ async function showSourcesList(getConfigPath: () => string): Promise<void> {
         name: s.name,
         baseUrl: s.baseUrl,
         authRequired: s.authRequired,
-        authEnvVar: s.authEnvVar,
+        secretKey: s.secretKey,
         ready: isSourceReady(s),
       })),
     });
@@ -423,6 +492,11 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
   const cmd = new Command('catalog').description(
     'Search and view MCP servers from registry'
   );
+
+  // Initialize secret resolver before any command action
+  cmd.hook('preAction', async () => {
+    await initSecretResolver(getConfigPath);
+  });
 
   // catalog search <query>
   cmd

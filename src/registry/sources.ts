@@ -15,18 +15,14 @@ export interface CatalogSource {
   baseUrl: string;
   /** Whether authentication is required */
   authRequired: boolean;
-  /** Environment variable name for API key (if auth required) */
-  authEnvVar?: string;
+  /** pfscan secret key for API key (if auth required), e.g., "catalog.smithery.apiKey" */
+  secretKey?: string;
   /** Human-readable description */
   description?: string;
 }
 
 /**
  * Built-in catalog sources
- *
- * Note: These are the initial sources. Future versions may support
- * user-defined sources via config and additional registries with
- * authentication via pfscan secret integration.
  */
 export const CATALOG_SOURCES: CatalogSource[] = [
   {
@@ -35,8 +31,13 @@ export const CATALOG_SOURCES: CatalogSource[] = [
     authRequired: false,
     description: 'Official MCP Registry',
   },
-  // TODO: Add Smithery support with pfscan secret integration
-  // See: https://github.com/proofofprotocol/proofscan/issues/XX
+  {
+    name: 'smithery',
+    baseUrl: 'https://registry.smithery.ai',
+    authRequired: true,
+    secretKey: 'catalog.smithery',
+    description: 'Smithery MCP Registry',
+  },
 ];
 
 /** Default source name */
@@ -64,33 +65,56 @@ export function isValidSource(name: string): boolean {
 }
 
 /**
- * Get the API key for a source from environment
+ * Secret resolver function type
+ * This will be set by catalog.ts to integrate with pfscan secrets
  */
-export function getSourceApiKey(source: CatalogSource): string | undefined {
-  if (!source.authRequired || !source.authEnvVar) {
+export type SecretResolver = (secretKey: string) => Promise<string | undefined>;
+
+/** Global secret resolver (set by catalog command) */
+let secretResolver: SecretResolver | null = null;
+
+/**
+ * Set the secret resolver function
+ */
+export function setSecretResolver(resolver: SecretResolver): void {
+  secretResolver = resolver;
+}
+
+/**
+ * Get the API key for a source using pfscan secrets
+ */
+export async function getSourceApiKey(source: CatalogSource): Promise<string | undefined> {
+  if (!source.authRequired || !source.secretKey) {
     return undefined;
   }
-  return process.env[source.authEnvVar];
+  if (!secretResolver) {
+    return undefined;
+  }
+  return secretResolver(source.secretKey);
 }
 
 /**
  * Check if a source has required authentication configured
+ * Note: This is a sync check that only verifies secretKey is defined.
+ * Actual secret resolution happens asynchronously via getSourceApiKey.
  */
 export function isSourceReady(source: CatalogSource): boolean {
   if (!source.authRequired) {
     return true;
   }
-  return !!getSourceApiKey(source);
+  // For auth-required sources, we check if secretKey is defined
+  // The actual secret will be resolved asynchronously when needed
+  return !!source.secretKey;
 }
 
 /**
  * Get error message for missing authentication
  */
 export function getAuthErrorMessage(source: CatalogSource): string {
-  if (!source.authRequired) {
+  if (!source.authRequired || !source.secretKey) {
     return '';
   }
-  return `${source.name} catalog source requires ${source.authEnvVar} to be set.`;
+  return `${source.name} requires API key. Set it with: pfscan secrets set ${source.secretKey}`;
 }
 
 /**
@@ -99,7 +123,7 @@ export function getAuthErrorMessage(source: CatalogSource): string {
 export function formatSourceLine(source: CatalogSource, isDefault: boolean): string {
   const marker = isDefault ? '*' : ' ';
   const authInfo = source.authRequired
-    ? `(API key: ${source.authEnvVar})`
+    ? `(secret: ${source.secretKey})`
     : '(no auth)';
   return `${marker} ${source.name.padEnd(12)} ${source.baseUrl} ${authInfo}`;
 }

@@ -263,6 +263,46 @@ describe('RegistryClient', () => {
       );
     });
   });
+
+  describe('API key authentication', () => {
+    it('should send Authorization header when apiKey is set', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ servers: [] }),
+      });
+
+      const client = new RegistryClient({
+        baseUrl: 'https://registry.smithery.ai',
+        apiKey: 'test-api-key-123',
+      });
+      await client.listServers();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'https://registry.smithery.ai/servers',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-api-key-123',
+          }),
+        })
+      );
+    });
+
+    it('should not send Authorization header when apiKey is not set', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ servers: [] }),
+      });
+
+      const client = new RegistryClient({
+        baseUrl: 'https://registry.modelcontextprotocol.io/v0',
+      });
+      await client.listServers();
+
+      const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+      const headers = fetchCall[1].headers as Record<string, string>;
+      expect(headers.Authorization).toBeUndefined();
+    });
+  });
 });
 
 describe('field utilities', () => {

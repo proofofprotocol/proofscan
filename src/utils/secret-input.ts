@@ -10,71 +10,55 @@ import { getClipboardContent } from './clipboard.js';
 
 /**
  * Read a secret from stdin without echoing to the terminal.
- * Uses raw mode to prevent any character display.
+ * Uses readline with output muted to hide input.
  *
  * @returns The entered secret (trimmed)
  */
 export async function readSecretHidden(): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      terminal: true,
+      terminal: !!process.stdin.isTTY,
     });
 
-    // Disable echo if possible
+    // Mute output to hide the typed characters
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    let muted = false;
+
     if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
+      muted = true;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (process.stdout as any).write = (chunk: any, ...args: any[]) => {
+        // Allow newlines through, mute everything else during input
+        if (chunk === '\n' || chunk === '\r\n') {
+          return originalWrite(chunk, ...args);
+        }
+        return true;
+      };
     }
 
-    let input = '';
-
-    const onData = (key: Buffer): void => {
-      const char = key.toString();
-
-      // Handle Enter (CR or LF)
-      if (char === '\r' || char === '\n') {
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
-        }
-        process.stdin.removeListener('data', onData);
-        rl.close();
+    rl.question('', (answer) => {
+      // Restore stdout
+      if (muted) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (process.stdout as any).write = originalWrite;
         process.stdout.write('\n');
-        resolve(input);
-        return;
       }
+      rl.close();
+      resolve(answer?.trim() || '');
+    });
 
-      // Handle Ctrl+C - clean up and let the process handle termination
-      if (char === '\x03') {
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
-        }
-        process.stdin.removeListener('data', onData);
-        rl.close();
+    // Handle Ctrl+C
+    rl.on('SIGINT', () => {
+      if (muted) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (process.stdout as any).write = originalWrite;
         process.stdout.write('\n');
-        // Send SIGINT to allow cleanup handlers to run
-        process.kill(process.pid, 'SIGINT');
-        return;
       }
-
-      // Handle Backspace
-      if (char === '\x7f' || char === '\x08') {
-        if (input.length > 0) {
-          input = input.slice(0, -1);
-          // Don't echo anything
-        }
-        return;
-      }
-
-      // Regular character
-      if (char.length === 1 && char.charCodeAt(0) >= 32) {
-        input += char;
-        // Don't echo anything
-      }
-    };
-
-    process.stdin.on('data', onData);
-    process.stdin.resume();
+      rl.close();
+      process.kill(process.pid, 'SIGINT');
+    });
   });
 }
 
