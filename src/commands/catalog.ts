@@ -53,17 +53,22 @@ interface ServerInfoWithSource extends ServerInfo {
 
 /**
  * Check if we should show spinner
- * - Only in TTY
+ * - Only when stderr is TTY (human watching terminal)
  * - Not in --json mode
  * - Not in --verbose mode
+ * - Not when stdin is piped (automated use)
  */
 function shouldShowSpinner(): boolean {
   const opts = getOutputOptions();
-  return process.stdout.isTTY === true && !opts.json && !opts.verbose;
+  // Spinner goes to stderr, so check stderr TTY
+  // Also skip if stdin is piped (non-interactive use)
+  const isInteractive = process.stderr.isTTY === true && process.stdin.isTTY !== false;
+  return isInteractive && !opts.json && !opts.verbose;
 }
 
 /**
  * Create a braille spinner with SIGINT handling
+ * Output goes to stderr to keep stdout clean for data
  */
 function createSpinner(text: string): Ora | null {
   if (!shouldShowSpinner()) {
@@ -72,6 +77,7 @@ function createSpinner(text: string): Ora | null {
 
   const spinner = ora({
     text,
+    stream: process.stderr, // Output to stderr, not stdout
     spinner: {
       frames: BRAILLE_FRAMES,
       interval: 80,
@@ -516,16 +522,15 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         try {
           spinner?.start();
           const { servers, warnings } = await searchAllSources(query, spinner);
-          stopSpinner(spinner);
 
           if (opts.json) {
             output(servers.map((s) => ({ ...s, source: s._source })));
             return;
           }
 
-          // Show warnings for skipped sources
+          // Show warnings for skipped sources (to stderr)
           for (const warning of warnings) {
-            console.log(warning);
+            console.error(warning);
           }
 
           if (servers.length === 0) {
@@ -546,8 +551,9 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
             console.log('Tip: pfscan cat view <name>');
           }
         } catch (error) {
-          stopSpinner(spinner);
           handleRegistryError(error);
+        } finally {
+          stopSpinner(spinner);
         }
         return;
       }
@@ -559,7 +565,6 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         const client = await createClientForSource(getConfigPath, options.source);
         spinner?.start();
         const servers = await client.searchServers(query);
-        stopSpinner(spinner);
 
         if (opts.json) {
           output(servers);
@@ -587,8 +592,9 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           console.log('Tip: pfscan cat view <name>');
         }
       } catch (error) {
-        stopSpinner(spinner);
         handleRegistryError(error);
+      } finally {
+        stopSpinner(spinner);
       }
     });
 
@@ -614,8 +620,6 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           // Get all servers for similarity search
           const allServers = await client.listServers();
           const similar = findSimilarServers(serverName, allServers);
-
-          stopSpinner(spinner);
 
           if (similar.length === 0) {
             // No suggestions available - show enhanced guidance
@@ -646,8 +650,6 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
             console.error('Tip: pfscan cat view <full-name>');
             process.exit(1);
           }
-        } else {
-          stopSpinner(spinner);
         }
 
         // If field specified, show only that field
@@ -679,8 +681,9 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         console.log(formatServerDetails(server));
         console.log();
       } catch (error) {
-        stopSpinner(spinner);
         handleRegistryError(error);
+      } finally {
+        stopSpinner(spinner);
       }
     });
 
