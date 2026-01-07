@@ -17,9 +17,9 @@ export function isWindows(): boolean {
  * Check if running in a PowerShell host environment
  *
  * Detects PowerShell by checking for common environment variables:
- * - PSModulePath: Set by PowerShell for module resolution
- * - PSExecutionPolicyPreference: Set when execution policy is configured
+ * - PSModulePath: Set by PowerShell for module resolution (most reliable)
  * - POWERSHELL_DISTRIBUTION_CHANNEL: Set by PowerShell Core
+ * - ComSpec: Fallback check for Windows (if contains 'powershell')
  *
  * This is a heuristic - we prefer false positives (disabling spinner when not needed)
  * over false negatives (showing spinner when it causes CLIXML issues).

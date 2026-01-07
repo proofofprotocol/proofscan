@@ -73,14 +73,17 @@ function setSpinnerFlags(flags: SpinnerFlags): void {
 
 /**
  * Check if we should show spinner
- * Priority:
+ * Priority (checked in order, first match wins):
  * 1. --json mode → always false
  * 2. Not interactive TTY → false
- * 3. --spinner flag → true (explicit enable)
+ * 3. --spinner flag → true (explicit enable, overrides platform detection)
  * 4. --no-spinner flag → false (explicit disable)
  * 5. Windows platform → false (CLIXML issues)
  * 6. PowerShell host → false (CLIXML issues)
  * 7. Otherwise → true
+ *
+ * Note: If both --spinner and --no-spinner are provided, --spinner takes precedence
+ * because it is checked first (step 3 before step 4).
  */
 function shouldShowSpinner(): boolean {
   const opts = getOutputOptions();
