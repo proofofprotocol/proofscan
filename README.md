@@ -4,7 +4,7 @@
 
 MCP Server scanner - eliminate black boxes by capturing JSON-RPC from connection to tools/list.
 
-**Version:** 0.10.3
+**Version:** 0.10.14
 
 ## Overview
 
@@ -37,8 +37,6 @@ npx proofscan --help
 ```
 
 **Requirements:** Node.js v18+ (v20+ recommended)
-
-> ⚠️ **Windows/PowerShell Users**: You may see `#< CLIXML` output when running commands. This is a PowerShell XML serialization artifact (not a proofscan error). See [Troubleshooting](#windows-powershell-clixml-output) for workarounds.
 
 ## Quick Start
 
@@ -330,43 +328,6 @@ node dist/cli.js --help
 - **[Model Context Protocol](https://modelcontextprotocol.io)** - Official MCP specification
 - **[MCP Servers](https://github.com/modelcontextprotocol/servers)** - Official server implementations
 - **[@proofofprotocol/inscribe-mcp-server](https://github.com/proofofprotocol/inscribe-mcp-server)** - Blockchain-backed proof storage
-
-## Troubleshooting
-
-### Windows PowerShell CLIXML Output
-
-When running proofscan in PowerShell, you may see output like:
-
-```
-#< CLIXML
-<Objs Version="1.1.0.1" ...>
-```
-
-**This is not an error.** It's PowerShell's internal XML serialization format that appears when:
-- Running Node.js child processes from PowerShell
-- Output is captured/redirected in non-interactive sessions
-- Using PowerShell remoting or background jobs
-
-**Workarounds:**
-
-1. **Use Command Prompt (cmd.exe)** instead of PowerShell:
-   ```cmd
-   cmd /c proofscan catalog search youtube
-   ```
-
-2. **Redirect output** to suppress CLIXML:
-   ```powershell
-   proofscan catalog search youtube 2>$null
-   ```
-
-3. **Pipe through Out-String**:
-   ```powershell
-   proofscan catalog search youtube | Out-String
-   ```
-
-4. **Use Windows Terminal with Git Bash** or WSL2 for best experience
-
-Note: proofscan automatically disables spinners on Windows/PowerShell to minimize this issue. The remaining CLIXML artifacts are from PowerShell's process handling, not proofscan itself.
 
 ## License
 

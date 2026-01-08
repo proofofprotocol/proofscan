@@ -2,7 +2,7 @@
  * Tests for platform detection utilities
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   isWindows,
   isPowerShellHost,
@@ -119,30 +119,20 @@ describe('platform detection', () => {
   });
 
   describe('shouldDisableSpinnerByDefault', () => {
-    beforeEach(() => {
-      // Start with non-Windows, non-PowerShell environment
-      Object.defineProperty(process, 'platform', { value: 'linux' });
-      delete process.env.PSModulePath;
-      delete process.env.POWERSHELL_DISTRIBUTION_CHANNEL;
-      delete process.env.ComSpec;
-    });
-
-    it('should return true on Windows', () => {
+    // Since v0.10.14, spinner is enabled on all platforms (CLIXML issue fixed in DPAPI)
+    it('should return false on all platforms', () => {
       Object.defineProperty(process, 'platform', { value: 'win32' });
-      expect(shouldDisableSpinnerByDefault()).toBe(true);
-    });
+      expect(shouldDisableSpinnerByDefault()).toBe(false);
 
-    it('should return true in PowerShell host', () => {
-      process.env.PSModulePath = '/home/user/.local/share/powershell/Modules';
-      expect(shouldDisableSpinnerByDefault()).toBe(true);
-    });
+      Object.defineProperty(process, 'platform', { value: 'linux' });
+      expect(shouldDisableSpinnerByDefault()).toBe(false);
 
-    it('should return false on Linux without PowerShell', () => {
+      Object.defineProperty(process, 'platform', { value: 'darwin' });
       expect(shouldDisableSpinnerByDefault()).toBe(false);
     });
 
-    it('should return false on macOS without PowerShell', () => {
-      Object.defineProperty(process, 'platform', { value: 'darwin' });
+    it('should return false even in PowerShell host', () => {
+      process.env.PSModulePath = '/home/user/.local/share/powershell/Modules';
       expect(shouldDisableSpinnerByDefault()).toBe(false);
     });
   });

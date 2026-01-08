@@ -4,7 +4,7 @@
 
 MCP サーバースキャナー - JSON-RPC 通信を可視化してブラックボックスを排除
 
-**バージョン:** 0.10.3
+**バージョン:** 0.10.14
 
 ## 概要
 
@@ -37,8 +37,6 @@ npx proofscan --help
 ```
 
 **要件:** Node.js v18+ (v20+ 推奨)
-
-> ⚠️ **Windows/PowerShell ユーザー**: コマンド実行時に `#< CLIXML` 出力が表示される場合があります。これは PowerShell の XML シリアライズ形式であり、proofscan のエラーではありません。[トラブルシューティング](#windows-powershell-clixml-出力)を参照してください。
 
 ## クイックスタート
 
@@ -330,43 +328,6 @@ node dist/cli.js --help
 - **[Model Context Protocol](https://modelcontextprotocol.io)** - 公式 MCP 仕様
 - **[MCP Servers](https://github.com/modelcontextprotocol/servers)** - 公式サーバー実装
 - **[@proofofprotocol/inscribe-mcp-server](https://github.com/proofofprotocol/inscribe-mcp-server)** - ブロックチェーンベースの証明ストレージ
-
-## トラブルシューティング
-
-### Windows PowerShell CLIXML 出力
-
-PowerShell で proofscan を実行すると、以下のような出力が表示される場合があります：
-
-```
-#< CLIXML
-<Objs Version="1.1.0.1" ...>
-```
-
-**これはエラーではありません。** PowerShell の内部 XML シリアライズ形式で、以下の場合に表示されます：
-- PowerShell から Node.js 子プロセスを実行している場合
-- 非対話型セッションで出力がキャプチャ/リダイレクトされている場合
-- PowerShell リモーティングやバックグラウンドジョブを使用している場合
-
-**回避策:**
-
-1. **コマンドプロンプト（cmd.exe）を使用**：
-   ```cmd
-   cmd /c proofscan catalog search youtube
-   ```
-
-2. **出力をリダイレクト**して CLIXML を抑制：
-   ```powershell
-   proofscan catalog search youtube 2>$null
-   ```
-
-3. **Out-String でパイプ**：
-   ```powershell
-   proofscan catalog search youtube | Out-String
-   ```
-
-4. **Windows Terminal で Git Bash** または WSL2 を使用するのが最適
-
-注意: proofscan は Windows/PowerShell でスピナーを自動的に無効化してこの問題を最小限に抑えています。残りの CLIXML 表示は PowerShell のプロセス処理によるもので、proofscan 自体からのものではありません。
 
 ## ライセンス
 

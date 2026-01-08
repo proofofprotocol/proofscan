@@ -2,8 +2,6 @@
  * Platform detection utilities
  *
  * Provides functions to detect the current platform and shell environment.
- * Used primarily to disable spinner on Windows/PowerShell where CLIXML
- * progress output causes issues.
  */
 
 /**
@@ -20,9 +18,6 @@ export function isWindows(): boolean {
  * - PSModulePath: Set by PowerShell for module resolution (most reliable)
  * - POWERSHELL_DISTRIBUTION_CHANNEL: Set by PowerShell Core
  * - ComSpec: Fallback check for Windows (if contains 'powershell')
- *
- * This is a heuristic - we prefer false positives (disabling spinner when not needed)
- * over false negatives (showing spinner when it causes CLIXML issues).
  */
 export function isPowerShellHost(): boolean {
   // PSModulePath is the most reliable indicator
@@ -61,10 +56,12 @@ export function isInteractiveTTY(): boolean {
 /**
  * Check if spinner should be disabled by default due to platform
  *
- * Returns true if we should NOT show spinner by default:
- * - Windows platform (CLIXML progress issues)
- * - PowerShell host (even on non-Windows, PSCore may have issues)
+ * Previously disabled on Windows/PowerShell due to CLIXML issues,
+ * but this was fixed in v0.10.14 by suppressing PowerShell progress
+ * output in DPAPI calls.
+ *
+ * Now returns false (spinner enabled) on all platforms.
  */
 export function shouldDisableSpinnerByDefault(): boolean {
-  return isWindows() || isPowerShellHost();
+  return false;
 }

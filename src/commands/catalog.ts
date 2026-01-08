@@ -36,7 +36,7 @@ import {
 import { ConfigManager } from '../config/index.js';
 import { SqliteSecretStore } from '../secrets/store.js';
 import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
-import { isWindows, isPowerShellHost, isInteractiveTTY, shouldDisableSpinnerByDefault } from '../utils/platform.js';
+import { isInteractiveTTY } from '../utils/platform.js';
 import { dirname } from 'path';
 
 /** Braille spinner frames */
@@ -76,11 +76,9 @@ function setSpinnerFlags(flags: SpinnerFlags): void {
  * Priority (checked in order, first match wins):
  * 1. --json mode → always false
  * 2. Not interactive TTY → false
- * 3. --spinner flag → true (explicit enable, overrides platform detection)
+ * 3. --spinner flag → true (explicit enable)
  * 4. --no-spinner flag → false (explicit disable)
- * 5. Windows platform → false (CLIXML issues)
- * 6. PowerShell host → false (CLIXML issues)
- * 7. Otherwise → true
+ * 5. Otherwise → true
  *
  * Note: If both --spinner and --no-spinner are provided, --spinner takes precedence
  * because it is checked first (step 3 before step 4).
@@ -98,7 +96,7 @@ function shouldShowSpinner(): boolean {
     return false;
   }
 
-  // --spinner explicitly enables (overrides platform detection)
+  // --spinner explicitly enables
   if (currentSpinnerFlags.spinner === true) {
     return true;
   }
@@ -108,17 +106,7 @@ function shouldShowSpinner(): boolean {
     return false;
   }
 
-  // Windows/PowerShell: disable by default due to CLIXML progress issues
-  if (shouldDisableSpinnerByDefault()) {
-    // In verbose mode, show why spinner is disabled
-    if (opts.verbose) {
-      const reason = isWindows() ? 'Windows' : 'PowerShell';
-      console.error(`[verbose] Spinner disabled by default on ${reason}. Use --spinner to enable.`);
-    }
-    return false;
-  }
-
-  // Default: enable spinner
+  // Default: enable spinner (CLIXML issue fixed in v0.10.14)
   return true;
 }
 
