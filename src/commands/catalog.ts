@@ -34,6 +34,7 @@ import {
   getSourceApiKey,
 } from '../registry/index.js';
 import { ConfigManager } from '../config/index.js';
+import type { Connector, HttpTransport } from '../types/index.js';
 import { SqliteSecretStore } from '../secrets/store.js';
 import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
 import { isInteractiveTTY } from '../utils/platform.js';
@@ -398,6 +399,26 @@ function findSimilarServers(
 }
 
 /**
+ * Derive a connector ID from server name
+ * Examples:
+ *   "@anthropic/claude" -> "claude"
+ *   "smithery/hello-world" -> "hello-world"
+ *   "my-server" -> "my-server"
+ */
+function deriveConnectorId(serverName: string): string {
+  // Take the last segment after / or @
+  const parts = serverName.split(/[/@]/);
+  const lastPart = parts[parts.length - 1] || serverName;
+
+  // Sanitize: lowercase, replace non-alphanumeric with hyphen
+  return lastPart
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
  * Format candidate servers for selection prompt
  */
 function formatCandidates(servers: ServerInfo[]): string {
@@ -736,6 +757,176 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         handleRegistryError(error);
       } finally {
         stopSpinner(spinner);
+      }
+    });
+
+  // catalog install <server>
+  cmd
+    .command('install')
+    .description('Install MCP server from catalog to connectors')
+    .argument('<server>', 'Server name from catalog')
+    .option('--source <name>', 'Use specific catalog source')
+    .option('--dry-run', 'Show what would be added without modifying config')
+    .option('--name <id>', 'Override connector ID')
+    .option('--yes', 'Skip confirmation prompt')
+    .option('--spinner', 'Show spinner')
+    .option('--no-spinner', 'Disable spinner')
+    .action(async (serverName: string, options: {
+      source?: string;
+      dryRun?: boolean;
+      name?: string;
+      yes?: boolean;
+      spinner?: boolean;
+      noSpinner?: boolean;
+    }) => {
+      setSpinnerFlags({ spinner: options.spinner, noSpinner: options.noSpinner });
+      const opts = getOutputOptions();
+      const currentSource = await getEffectiveSource(getConfigPath);
+      const spinner = createSpinner(`Fetching "${serverName}"...`);
+
+      try {
+        const client = await createClientForSource(getConfigPath, options.source);
+        spinner?.start();
+        let server = await client.getServer(serverName);
+
+        // Fallback: if not found, search and try to resolve (same as view)
+        if (!server) {
+          const searchResults = await client.searchServers(serverName);
+          const similar = findSimilarServers(serverName, searchResults.length > 0 ? searchResults : await client.listServers());
+
+          if (similar.length === 0) {
+            stopSpinner(spinner);
+            if (opts.json) {
+              output({ error: 'Server not found', query: serverName, source: options.source || currentSource });
+            } else {
+              showNotFoundGuidance(serverName, currentSource, false, options.source);
+            }
+            process.exit(1);
+          }
+
+          if (similar.length === 1) {
+            server = similar[0];
+            stopSpinner(spinner);
+            console.error(`Resolved "${serverName}" → ${server.name}`);
+          } else {
+            stopSpinner(spinner);
+            console.error(`Server not found: ${serverName} (source: ${options.source || currentSource})`);
+            console.error();
+            console.error('Did you mean:');
+            console.error(formatCandidates(similar));
+            console.error();
+            console.error('Tip: pfscan cat install <full-name>');
+            process.exit(1);
+          }
+        }
+
+        stopSpinner(spinner);
+
+        // Validate transport
+        const transport = server.transport;
+        if (!transport) {
+          if (opts.json) {
+            output({ error: 'No transport configuration found', server: server.name });
+          } else {
+            outputError(`Server "${server.name}" has no transport configuration.`);
+            console.error('This server may require manual configuration.');
+          }
+          process.exit(1);
+        }
+
+        const transportType = transport.type?.toLowerCase();
+
+        // Check for stdio (not supported in Phase 1)
+        if (transportType === 'stdio') {
+          if (opts.json) {
+            output({ error: 'stdio transport not supported', server: server.name });
+          } else {
+            outputError('stdio install is not supported yet (planned: runner-based install).');
+            console.error();
+            console.error('For stdio servers, use:');
+            console.error(`  pfscan connectors add ${server.name} --stdio "npx -y <package>"`);
+          }
+          process.exit(1);
+        }
+
+        // Check for supported HTTP transports
+        const isHttpTransport = transportType === 'http' || transportType === 'streamable-http';
+        if (!isHttpTransport) {
+          if (opts.json) {
+            output({ error: `Unsupported transport type: ${transportType}`, server: server.name });
+          } else {
+            outputError(`Unsupported transport type: ${transportType}`);
+            console.error('Supported types: http, streamable-http');
+          }
+          process.exit(1);
+        }
+
+        // Validate URL exists
+        if (!transport.url) {
+          if (opts.json) {
+            output({ error: 'Transport missing URL', server: server.name });
+          } else {
+            outputError(`Server "${server.name}" has ${transportType} transport but no URL.`);
+          }
+          process.exit(1);
+        }
+
+        // Generate connector ID
+        const connectorId = options.name || deriveConnectorId(server.name);
+
+        // Build connector config
+        const connector: Connector = {
+          id: connectorId,
+          enabled: true,
+          transport: {
+            type: 'rpc-http',
+            url: transport.url,
+          } as HttpTransport,
+        };
+
+        // Check for ID collision
+        const manager = new ConfigManager(getConfigPath());
+        const existing = await manager.getConnector(connectorId).catch(() => null);
+
+        if (existing) {
+          if (opts.json) {
+            output({ error: `Connector ID already exists: ${connectorId}`, suggestion: 'Use --name to specify different ID' });
+          } else {
+            outputError(`Connector ID already exists: ${connectorId}`);
+            console.error();
+            console.error('Use --name to specify a different ID:');
+            console.error(`  pfscan cat install "${server.name}" --name ${connectorId}-2`);
+          }
+          process.exit(1);
+        }
+
+        // Dry run: show what would be added
+        if (options.dryRun) {
+          if (opts.json) {
+            output({ dryRun: true, connector });
+          } else {
+            console.log('Would add connector:');
+            console.log(JSON.stringify(connector, null, 2));
+            console.log();
+            console.error('(dry-run mode, no changes made)');
+          }
+          return;
+        }
+
+        // Add connector
+        await manager.addConnector(connector);
+
+        if (opts.json) {
+          output({ success: true, connector });
+        } else {
+          outputSuccess(`Connector '${connectorId}' added from ${server.name}`);
+          console.log();
+          console.log('Next steps:');
+          console.log(`  pfscan scan start --id ${connectorId}`);
+        }
+      } catch (error) {
+        stopSpinner(spinner);
+        handleRegistryError(error);
       }
     });
 
