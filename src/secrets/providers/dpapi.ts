@@ -80,7 +80,9 @@ export class DpapiProvider implements IEncryptionProvider {
     // PowerShell script to encrypt using DPAPI
     // Note: Variable interpolation happens at script creation time,
     // so the base64 string is embedded directly in the script
+    // $ProgressPreference suppresses CLIXML progress output that can leak through
     const script = `
+$ProgressPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Security
 $bytes = [System.Convert]::FromBase64String("${base64Input}")
 $encrypted = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
@@ -115,7 +117,9 @@ $encrypted = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null
 
     // PowerShell script to decrypt using DPAPI
     // Note: Variable interpolation happens at script creation time
+    // $ProgressPreference suppresses CLIXML progress output that can leak through
     const script = `
+$ProgressPreference = 'SilentlyContinue'
 Add-Type -AssemblyName System.Security
 $encrypted = [System.Convert]::FromBase64String("${ciphertext}")
 $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect($encrypted, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
