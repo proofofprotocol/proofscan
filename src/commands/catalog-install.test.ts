@@ -2,7 +2,7 @@
  * Tests for catalog install command
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -81,6 +81,16 @@ describe('catalog install', () => {
       const transportType = transport.type?.toLowerCase();
       const isHttpTransport = transportType === 'http' || transportType === 'streamable-http';
       expect(isHttpTransport).toBe(false);
+    });
+
+    it('should validate URL format', () => {
+      // Valid URLs
+      expect(() => new URL('https://example.com/mcp')).not.toThrow();
+      expect(() => new URL('http://localhost:3000')).not.toThrow();
+
+      // Invalid URLs
+      expect(() => new URL('not-a-url')).toThrow();
+      expect(() => new URL('')).toThrow();
     });
   });
 

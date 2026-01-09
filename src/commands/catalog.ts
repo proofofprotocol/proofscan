@@ -768,7 +768,8 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .option('--source <name>', 'Use specific catalog source')
     .option('--dry-run', 'Show what would be added without modifying config')
     .option('--name <id>', 'Override connector ID')
-    .option('--yes', 'Skip confirmation prompt')
+    // Note: --yes is reserved for Phase 2 interactive confirmation
+    .option('--yes', 'Skip confirmation prompt (reserved for Phase 2)')
     .option('--spinner', 'Show spinner')
     .option('--no-spinner', 'Disable spinner')
     .action(async (serverName: string, options: {
@@ -861,12 +862,24 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
-        // Validate URL exists
+        // Validate URL exists and is well-formed
         if (!transport.url) {
           if (opts.json) {
             output({ error: 'Transport missing URL', server: server.name });
           } else {
             outputError(`Server "${server.name}" has ${transportType} transport but no URL.`);
+          }
+          process.exit(1);
+        }
+
+        // Validate URL format
+        try {
+          new URL(transport.url);
+        } catch {
+          if (opts.json) {
+            output({ error: 'Invalid URL format', url: transport.url, server: server.name });
+          } else {
+            outputError(`Invalid URL format: ${transport.url}`);
           }
           process.exit(1);
         }
