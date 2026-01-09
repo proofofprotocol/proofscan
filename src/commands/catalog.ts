@@ -319,7 +319,7 @@ async function searchAllSources(
 
 /**
  * Format search results with two-line format
- * Line 1: NAME (full)
+ * Line 1: NAME (full) + transport badge
  * Line 2: VERSION + truncated DESC
  * Optional: source info for cross-source search
  */
@@ -330,9 +330,11 @@ function formatSearchResults(servers: ServerInfoWithSource[], showSource = false
     const name = server.name || '(unknown)';
     const version = server.version || '-';
     const desc = server.description || '';
+    const transportBadge = getTransportBadge(server);
 
-    // Line 1: Full name
-    console.log(`  ${name}`);
+    // Line 1: Full name + transport badge
+    const line1 = transportBadge ? `  ${name}  ${transportBadge}` : `  ${name}`;
+    console.log(line1);
 
     // Line 2: version + description (truncated to fit)
     const versionPart = `    v${version}`;
@@ -463,6 +465,41 @@ function formatServerDetails(server: ServerInfo): string {
 }
 
 /**
+ * Filter servers by transport type
+ * Returns only servers that match the specified transport type.
+ * Servers with no transport or unknown type are excluded (safe side).
+ */
+function filterByTransport<T extends ServerInfo>(
+  servers: T[],
+  transportType: string
+): T[] {
+  const normalizedType = transportType.toLowerCase();
+  return servers.filter((server) => {
+    const serverTransport = server.transport?.type?.toLowerCase();
+    if (!serverTransport) {
+      return false;
+    }
+    return serverTransport === normalizedType;
+  });
+}
+
+/**
+ * Get transport badge for display
+ * Returns a short tag like "[http]" or "[stdio]"
+ */
+function getTransportBadge(server: ServerInfo): string {
+  const type = server.transport?.type?.toLowerCase();
+  if (!type) {
+    return '';
+  }
+  // Abbreviate long types for display
+  if (type === 'streamable-http') {
+    return '[s-http]';
+  }
+  return `[${type}]`;
+}
+
+/**
  * Show not-found guidance with source info
  */
 function showNotFoundGuidance(
@@ -576,9 +613,10 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .argument('<query>', 'Search query')
     .option('--source <name>', 'Use specific catalog source')
     .option('--all', 'Search all available catalog sources')
+    .option('--transport <type>', 'Filter by transport type (http, streamable-http, sse, stdio)')
     .option('--spinner', 'Show spinner (experimental on Windows/PowerShell)')
     .option('--no-spinner', 'Disable spinner')
-    .action(async (query: string, options: { source?: string; all?: boolean; spinner?: boolean; noSpinner?: boolean }) => {
+    .action(async (query: string, options: { source?: string; all?: boolean; transport?: string; spinner?: boolean; noSpinner?: boolean }) => {
       // Set spinner flags before any spinner operations
       setSpinnerFlags({ spinner: options.spinner, noSpinner: options.noSpinner });
       const opts = getOutputOptions();
@@ -590,7 +628,12 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
 
         try {
           spinner?.start();
-          const { servers, warnings } = await searchAllSources(query, spinner);
+          let { servers, warnings } = await searchAllSources(query, spinner);
+
+          // Apply transport filter if specified
+          if (options.transport) {
+            servers = filterByTransport(servers, options.transport);
+          }
 
           if (opts.json) {
             output(servers.map((s) => ({ ...s, source: s._source })));
@@ -633,7 +676,12 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
       try {
         const client = await createClientForSource(getConfigPath, options.source);
         spinner?.start();
-        const servers = await client.searchServers(query);
+        let servers = await client.searchServers(query);
+
+        // Apply transport filter if specified
+        if (options.transport) {
+          servers = filterByTransport(servers, options.transport);
+        }
 
         if (opts.json) {
           output(servers);
