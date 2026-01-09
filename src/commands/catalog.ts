@@ -768,15 +768,12 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .option('--source <name>', 'Use specific catalog source')
     .option('--dry-run', 'Show what would be added without modifying config')
     .option('--name <id>', 'Override connector ID')
-    // Note: --yes is reserved for Phase 2 interactive confirmation
-    .option('--yes', 'Skip confirmation prompt (reserved for Phase 2)')
     .option('--spinner', 'Show spinner')
     .option('--no-spinner', 'Disable spinner')
     .action(async (serverName: string, options: {
       source?: string;
       dryRun?: boolean;
       name?: string;
-      yes?: boolean;
       spinner?: boolean;
       noSpinner?: boolean;
     }) => {
@@ -835,7 +832,17 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
-        const transportType = transport.type?.toLowerCase();
+        // Validate transport type exists
+        if (!transport.type) {
+          if (opts.json) {
+            output({ error: 'Transport type not specified', server: server.name });
+          } else {
+            outputError(`Server "${server.name}" has transport but no type specified.`);
+          }
+          process.exit(1);
+        }
+
+        const transportType = transport.type.toLowerCase();
 
         // Check for stdio (not supported in Phase 1)
         if (transportType === 'stdio') {
@@ -897,7 +904,9 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           } as HttpTransport,
         };
 
-        // Check for ID collision
+        // Check for ID collision before attempting to add
+        // Note: ConfigManager.addConnector also checks for duplicates, but we pre-check
+        // to provide a more user-friendly error message with actionable suggestions
         const manager = new ConfigManager(getConfigPath());
         const existing = await manager.getConnector(connectorId).catch(() => null);
 
