@@ -464,6 +464,16 @@ function formatServerDetails(server: ServerInfo): string {
   return lines.join('\n');
 }
 
+/** Valid transport types for --transport filter */
+const VALID_TRANSPORT_TYPES = ['http', 'streamable-http', 'sse', 'stdio'] as const;
+
+/**
+ * Check if a transport type is valid
+ */
+function isValidTransportType(type: string): boolean {
+  return (VALID_TRANSPORT_TYPES as readonly string[]).includes(type.toLowerCase());
+}
+
 /**
  * Filter servers by transport type
  * Returns only servers that match the specified transport type.
@@ -621,6 +631,17 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
       setSpinnerFlags({ spinner: options.spinner, noSpinner: options.noSpinner });
       const opts = getOutputOptions();
       const currentSource = await getEffectiveSource(getConfigPath);
+
+      // Validate transport type if specified
+      if (options.transport && !isValidTransportType(options.transport)) {
+        if (opts.json) {
+          output({ error: `Invalid transport type: ${options.transport}`, validTypes: [...VALID_TRANSPORT_TYPES] });
+        } else {
+          outputError(`Invalid transport type: ${options.transport}`);
+          console.error(`Valid types: ${VALID_TRANSPORT_TYPES.join(', ')}`);
+        }
+        process.exit(1);
+      }
 
       // Cross-source search with --all
       if (options.all) {

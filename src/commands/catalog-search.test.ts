@@ -6,6 +6,9 @@ import { describe, it, expect } from 'vitest';
 
 // Test the filter logic that's used in catalog search
 
+/** Valid transport types (replicating from catalog.ts) */
+const VALID_TRANSPORT_TYPES = ['http', 'streamable-http', 'sse', 'stdio'] as const;
+
 describe('catalog search transport filter', () => {
   // Mock ServerInfo type
   interface MockServer {
@@ -15,6 +18,13 @@ describe('catalog search transport filter', () => {
       type?: string;
       url?: string;
     };
+  }
+
+  /**
+   * Check if transport type is valid (replicating from catalog.ts)
+   */
+  function isValidTransportType(type: string): boolean {
+    return (VALID_TRANSPORT_TYPES as readonly string[]).includes(type.toLowerCase());
   }
 
   /**
@@ -150,6 +160,29 @@ describe('catalog search transport filter', () => {
 
       const server2: MockServer = { name: 'test', transport: { type: 'STREAMABLE-HTTP' } };
       expect(getTransportBadge(server2)).toBe('[s-http]');
+    });
+  });
+
+  describe('isValidTransportType', () => {
+    it('should accept valid transport types', () => {
+      expect(isValidTransportType('http')).toBe(true);
+      expect(isValidTransportType('streamable-http')).toBe(true);
+      expect(isValidTransportType('sse')).toBe(true);
+      expect(isValidTransportType('stdio')).toBe(true);
+    });
+
+    it('should be case-insensitive', () => {
+      expect(isValidTransportType('HTTP')).toBe(true);
+      expect(isValidTransportType('Streamable-HTTP')).toBe(true);
+      expect(isValidTransportType('SSE')).toBe(true);
+      expect(isValidTransportType('STDIO')).toBe(true);
+    });
+
+    it('should reject invalid transport types', () => {
+      expect(isValidTransportType('invalid')).toBe(false);
+      expect(isValidTransportType('websocket')).toBe(false);
+      expect(isValidTransportType('grpc')).toBe(false);
+      expect(isValidTransportType('')).toBe(false);
     });
   });
 });
