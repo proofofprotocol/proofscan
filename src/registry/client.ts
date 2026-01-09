@@ -280,6 +280,8 @@ export class RegistryClient {
 
   /**
    * Search Smithery servers using their API (server-side semantic search)
+   * Note: Smithery uses semantic search which may return loosely related results.
+   * We apply client-side filtering to ensure results contain the query term.
    */
   private async searchSmitheryServers(query: string): Promise<ServerInfo[]> {
     const allServers: ServerInfo[] = [];
@@ -306,7 +308,28 @@ export class RegistryClient {
       }
     } while (page <= totalPages && page <= 5); // Limit to 5 pages (250 results max)
 
-    return allServers;
+    // Client-side filter: Smithery's semantic search may return unrelated results
+    // Filter to only include servers where name or description contains the query
+    return this.filterByQueryRelevance(allServers, query);
+  }
+
+  /**
+   * Filter servers by query relevance
+   * Keeps only servers where name or description contains the query (case-insensitive)
+   */
+  private filterByQueryRelevance(servers: ServerInfo[], query: string): ServerInfo[] {
+    const lowerQuery = query.toLowerCase();
+    // Split query into words for multi-word matching
+    const queryWords = lowerQuery.split(/\s+/).filter((w) => w.length >= 2);
+
+    return servers.filter((server) => {
+      const name = server.name?.toLowerCase() || '';
+      const desc = server.description?.toLowerCase() || '';
+      const combined = `${name} ${desc}`;
+
+      // Match if any query word appears in name or description
+      return queryWords.some((word) => combined.includes(word));
+    });
   }
 
   /**
