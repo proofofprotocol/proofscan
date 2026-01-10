@@ -19,6 +19,7 @@ export {
 export {
   type CatalogSource,
   type SecretResolver,
+  type SourceType,
   CATALOG_SOURCES,
   DEFAULT_CATALOG_SOURCE,
   getSourceNames,
@@ -30,3 +31,29 @@ export {
   getAuthErrorMessage,
   formatSourceLine,
 } from './sources.js';
+
+export {
+  type TrustLevel,
+  type TrustRoot,
+  type TrustInfo,
+  type CatalogSecurityConfig,
+  DEFAULT_TRUSTED_NPM_SCOPES,
+  determineTrust,
+  shouldAllowInstall,
+  getInstallWarning,
+  formatTrustBadge,
+  formatTrustBadgeColor,
+} from './trust.js';
+
+export {
+  GitHubRegistryClient,
+  githubClient,
+  REFERENCE_SERVER_DIRS,
+  FALLBACK_SERVERS,
+} from './github-client.js';
+
+export {
+  NpmRegistryClient,
+  npmClient,
+  type NpmSearchOptions,
+} from './npm-client.js';

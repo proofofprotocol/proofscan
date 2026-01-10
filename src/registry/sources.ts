@@ -5,6 +5,13 @@
  * Sources can be switched via `catalog sources set <name>`.
  */
 
+import type { TrustLevel } from './trust.js';
+
+/**
+ * Source type for client routing
+ */
+export type SourceType = 'registry' | 'npm' | 'github';
+
 /**
  * Catalog source definition
  */
@@ -19,24 +26,54 @@ export interface CatalogSource {
   secretKey?: string;
   /** Human-readable description */
   description?: string;
+  /** Source type for client routing (default: 'registry') */
+  sourceType: SourceType;
+  /** Default trust level for servers from this source */
+  defaultTrust: TrustLevel;
 }
 
 /**
  * Built-in catalog sources
+ *
+ * Order determines priority in multi-source search:
+ * 1. github - Official reference servers (trusted)
+ * 2. official - MCP registry (unknown provenance)
+ * 3. npm - npm packages in trusted scopes (trust determined by scope)
+ * 4. smithery - Community servers (untrusted, excluded by default)
  */
 export const CATALOG_SOURCES: CatalogSource[] = [
+  {
+    name: 'github',
+    baseUrl: 'https://raw.githubusercontent.com/modelcontextprotocol/servers/main',
+    authRequired: false,
+    description: 'Official MCP Reference Servers',
+    sourceType: 'github',
+    defaultTrust: 'trusted',
+  },
   {
     name: 'official',
     baseUrl: 'https://registry.modelcontextprotocol.io/v0',
     authRequired: false,
     description: 'Official MCP Registry',
+    sourceType: 'registry',
+    defaultTrust: 'unknown',
+  },
+  {
+    name: 'npm',
+    baseUrl: 'https://registry.npmjs.org',
+    authRequired: false,
+    description: 'npm Registry',
+    sourceType: 'npm',
+    defaultTrust: 'unknown', // Trust determined by scope check in determineTrust()
   },
   {
     name: 'smithery',
     baseUrl: 'https://registry.smithery.ai',
     authRequired: true,
     secretKey: 'catalog.smithery',
-    description: 'Smithery MCP Registry',
+    description: 'Smithery MCP Registry (community)',
+    sourceType: 'registry',
+    defaultTrust: 'untrusted',
   },
 ];
 
