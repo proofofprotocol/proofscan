@@ -117,17 +117,17 @@ export class NpmRegistryClient {
 
     // 2. Search unscoped packages by maintainer for non-default scopes
     // Extract maintainer names from scopes (e.g., @nulab -> nulab)
+    // Only search if query is provided (maintainer search without query returns all packages)
     const nonDefaultScopes = scopes.filter(
       (s) => !DEFAULT_TRUSTED_NPM_SCOPES.includes(s)
     );
-    for (const scope of nonDefaultScopes) {
-      const maintainer = scope.replace(/^@/, '');
-      const maintainerTerms: string[] = [`maintainer:${maintainer}`, 'mcp'];
-      if (query) {
-        maintainerTerms.push(query);
+    if (query) {
+      for (const scope of nonDefaultScopes) {
+        const maintainer = scope.replace(/^@/, '');
+        const maintainerTerms: string[] = [`maintainer:${maintainer}`, query];
+        const maintainerUrl = `${NPM_SEARCH_URL}?text=${encodeURIComponent(maintainerTerms.join(' '))}&size=${effectiveSize}`;
+        searchPromises.push(this.fetchSearch(maintainerUrl));
       }
-      const maintainerUrl = `${NPM_SEARCH_URL}?text=${encodeURIComponent(maintainerTerms.join(' '))}&size=${effectiveSize}`;
-      searchPromises.push(this.fetchSearch(maintainerUrl));
     }
 
     try {
