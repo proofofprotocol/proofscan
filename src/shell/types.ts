@@ -59,6 +59,7 @@ export const TOP_LEVEL_COMMANDS = [
   'doctor',
   'secrets', 'secret',
   'catalog', 'cat',
+  'runners',
 ];
 
 /**
@@ -78,11 +79,12 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   tool: ['ls', 'list', 'show'],
   ref: ['add', 'ls', 'list', 'delete'],
   popl: ['init', 'session', 'ls', 'list', 'show'],
-  catalog: ['search', 'view', 'sources'],
-  cat: ['search', 'view', 'sources'],
+  catalog: ['search', 'view', 'sources', 'install'],
+  cat: ['search', 'view', 'sources', 'install'],
   // Nested subcommands for sources
   'catalog sources': ['list', 'set'],
   'cat sources': ['list', 'set'],
+  runners: ['list', 'ls', 'doctor'],
 };
 
 /**
@@ -135,10 +137,15 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'popl session': ['--title', '--unsafe-include-raw'],
   catalog: ['--source', '--all'],
   cat: ['--source', '--all'],
-  'catalog search': ['--source', '--all'],
+  'catalog search': ['--source', '--all', '--transport'],
   'catalog view': ['--source'],
-  'cat search': ['--source', '--all'],
+  'catalog install': ['--source', '--dry-run', '--name', '--runner'],
+  'cat search': ['--source', '--all', '--transport'],
   'cat view': ['--source'],
+  'cat install': ['--source', '--dry-run', '--name', '--runner'],
+  runners: [],
+  'runners list': [],
+  'runners doctor': [],
 };
 
 /**

@@ -42,3 +42,6 @@ export * from './popl.js';
 
 // Phase 7.0: Catalog (MCP Registry)
 export * from './catalog.js';
+
+// Phase 7.x: Package Runners
+export * from './runners.js';

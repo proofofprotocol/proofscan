@@ -51,6 +51,7 @@ import {
   createLogCommand,
   createPoplCommand,
   createCatalogCommand,
+  createRunnersCommand,
 } from './commands/index.js';
 
 const program = new Command();
@@ -251,6 +252,9 @@ const catCmd = createCatalogCommand(getConfigPath);
 catCmd.name('cat').description('Alias for catalog');
 program.addCommand(catCmd);
 
+// runners (Phase 7.x: Package runners)
+program.addCommand(createRunnersCommand(getConfigPath));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -264,7 +268,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'help'
+  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'help'
 ]);
 
 // Shell-only commands (not available as CLI commands)
