@@ -92,38 +92,72 @@ export class NpmRegistryClient {
    * Search for MCP servers in npm registry
    *
    * By default, searches within trusted scopes (DEFAULT_TRUSTED_NPM_SCOPES).
+   * Also searches for unscoped packages by maintainer name derived from scopes.
    * Results include package info for stdio installation.
    */
   async searchServers(options: NpmSearchOptions): Promise<ServerInfo[]> {
     const { query, scopes = DEFAULT_TRUSTED_NPM_SCOPES, size = DEFAULT_SEARCH_SIZE } = options;
     const effectiveSize = Math.min(size, MAX_SEARCH_SIZE);
 
-    // Build search query with scope filter
-    // npm search API: text=scope:@modelcontextprotocol+query
-    const searchTerms: string[] = [];
+    // Search both scoped packages and unscoped packages by maintainer
+    // This allows finding packages like 'backlog-mcp-server' by maintainer 'nulab'
+    const searchPromises: Promise<ServerInfo[]>[] = [];
 
-    // Add scope filters
+    // 1. Search scoped packages: scope:@modelcontextprotocol scope:@anthropic query mcp
+    const scopedTerms: string[] = [];
     for (const scope of scopes) {
-      searchTerms.push(`scope:${scope}`);
+      scopedTerms.push(`scope:${scope}`);
     }
-
-    // Add user query and MCP keyword
     if (query) {
-      searchTerms.push(query);
+      scopedTerms.push(query);
     }
-    searchTerms.push('mcp');
+    scopedTerms.push('mcp');
+    const scopedUrl = `${NPM_SEARCH_URL}?text=${encodeURIComponent(scopedTerms.join(' '))}&size=${effectiveSize}`;
+    searchPromises.push(this.fetchSearch(scopedUrl));
 
-    const textQuery = searchTerms.join(' ');
-    const url = `${NPM_SEARCH_URL}?text=${encodeURIComponent(textQuery)}&size=${effectiveSize}`;
+    // 2. Search unscoped packages by maintainer for non-default scopes
+    // Extract maintainer names from scopes (e.g., @nulab -> nulab)
+    const nonDefaultScopes = scopes.filter(
+      (s) => !DEFAULT_TRUSTED_NPM_SCOPES.includes(s)
+    );
+    for (const scope of nonDefaultScopes) {
+      const maintainer = scope.replace(/^@/, '');
+      const maintainerTerms: string[] = [`maintainer:${maintainer}`, 'mcp'];
+      if (query) {
+        maintainerTerms.push(query);
+      }
+      const maintainerUrl = `${NPM_SEARCH_URL}?text=${encodeURIComponent(maintainerTerms.join(' '))}&size=${effectiveSize}`;
+      searchPromises.push(this.fetchSearch(maintainerUrl));
+    }
 
+    try {
+      const results = await Promise.all(searchPromises);
+      // Merge and dedupe results by package name
+      const seen = new Set<string>();
+      const merged: ServerInfo[] = [];
+      for (const serverList of results) {
+        for (const server of serverList) {
+          if (!seen.has(server.name)) {
+            seen.add(server.name);
+            merged.push(server);
+          }
+        }
+      }
+      return merged;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Helper to fetch and parse search results
+   */
+  private async fetchSearch(url: string): Promise<ServerInfo[]> {
     try {
       const response = await this.fetch(url);
       const data = (await response.json()) as NpmSearchResponse;
-
-      // Map results to ServerInfo
       return data.objects.map((obj) => this.mapToServerInfo(obj.package));
     } catch {
-      // Return empty on error (network, parse, timeout)
       return [];
     }
   }
