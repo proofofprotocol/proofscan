@@ -231,13 +231,21 @@ async function initSecretResolver(getConfigPath: () => string): Promise<void> {
 }
 
 /**
- * Create a RegistryClient for the effective source
- * Validates source and checks authentication
+ * Common interface for all catalog clients (registry, npm, github)
+ */
+interface CatalogClient {
+  searchServers(query: string): Promise<ServerInfo[]>;
+  getServer(name: string): Promise<ServerInfo | null>;
+  listServers(): Promise<ServerInfo[]>;
+}
+
+/**
+ * Create appropriate client based on source type
  */
 async function createClientForSource(
   getConfigPath: () => string,
   sourceOverride?: string
-): Promise<RegistryClient> {
+): Promise<CatalogClient> {
   const sourceName = sourceOverride || (await getEffectiveSource(getConfigPath));
   const source = getSource(sourceName);
 
@@ -249,15 +257,31 @@ async function createClientForSource(
     throw new Error(getAuthErrorMessage(source));
   }
 
-  // Get API key if source requires auth
-  const apiKey = await getSourceApiKey(source);
+  // Route to appropriate client based on sourceType
+  switch (source.sourceType) {
+    case 'github':
+      return githubClient;
 
-  // For auth-required sources, check if we actually have the API key
-  if (source.authRequired && !apiKey) {
-    throw new Error(getAuthErrorMessage(source));
+    case 'npm':
+      return {
+        searchServers: (query: string) => npmClient.searchServers({ query }),
+        getServer: (name: string) => npmClient.getPackage(name),
+        listServers: () => npmClient.searchServers({ query: '' }),
+      };
+
+    case 'registry':
+    default: {
+      // Get API key if source requires auth
+      const apiKey = await getSourceApiKey(source);
+
+      // For auth-required sources, check if we actually have the API key
+      if (source.authRequired && !apiKey) {
+        throw new Error(getAuthErrorMessage(source));
+      }
+
+      return new RegistryClient({ baseUrl: source.baseUrl, apiKey });
+    }
   }
-
-  return new RegistryClient({ baseUrl: source.baseUrl, apiKey });
 }
 
 /**
@@ -826,7 +850,7 @@ function handleRegistryError(error: unknown): never {
  * @returns Resolved server, or exits with error if not found
  */
 async function resolveServerWithFallback(
-  client: RegistryClient,
+  client: CatalogClient,
   serverName: string,
   currentSource: string,
   sourceOverride: string | undefined,
