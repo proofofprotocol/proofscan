@@ -26,6 +26,7 @@ export interface ServerTransport {
   command?: string;
   args?: string[];
   url?: string;
+  env?: Record<string, string>;
 }
 
 /**

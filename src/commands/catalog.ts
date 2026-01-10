@@ -34,7 +34,14 @@ import {
   getSourceApiKey,
 } from '../registry/index.js';
 import { ConfigManager } from '../config/index.js';
-import type { Connector, HttpTransport } from '../types/index.js';
+import type { Connector, HttpTransport, StdioTransport } from '../types/index.js';
+import {
+  getRunner,
+  findAvailableRunner,
+  parsePackageRef,
+  sanitizeEnv,
+  type RunnerName,
+} from '../runners/index.js';
 import { SqliteSecretStore } from '../secrets/store.js';
 import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
 import { isInteractiveTTY } from '../utils/platform.js';
@@ -408,16 +415,39 @@ function findSimilarServers(
  *   "my-server" -> "my-server"
  */
 function deriveConnectorId(serverName: string): string {
+  // Input validation
+  if (!serverName || typeof serverName !== 'string') {
+    return 'server';
+  }
+
+  // Limit input length to prevent DoS
+  const truncated = serverName.slice(0, 256);
+
   // Take the last segment after / or @
-  const parts = serverName.split(/[/@]/);
-  const lastPart = parts[parts.length - 1] || serverName;
+  const parts = truncated.split(/[/@]/);
+  const lastPart = parts[parts.length - 1] || truncated;
 
   // Sanitize: lowercase, replace non-alphanumeric with hyphen
-  return lastPart
+  const sanitized = lastPart
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
+
+  // Ensure non-empty result
+  return sanitized || 'server';
+}
+
+/**
+ * Valid runner names for --runner option
+ */
+const VALID_RUNNER_NAMES = ['npx', 'uvx'] as const;
+
+/**
+ * Check if a runner name is valid
+ */
+function isValidRunnerName(name: string): name is RunnerName {
+  return (VALID_RUNNER_NAMES as readonly string[]).includes(name.toLowerCase());
 }
 
 /**
@@ -570,6 +600,73 @@ function handleRegistryError(error: unknown): never {
     console.error(`Error: ${error.message}`);
   } else {
     console.error('An unknown error occurred.');
+  }
+  process.exit(1);
+}
+
+/**
+ * Resolve server name with fallback to similarity search.
+ * Shared logic between view and install commands.
+ *
+ * @returns Resolved server, or exits with error if not found
+ */
+async function resolveServerWithFallback(
+  client: RegistryClient,
+  serverName: string,
+  currentSource: string,
+  sourceOverride: string | undefined,
+  opts: { json?: boolean },
+  commandTip: string
+): Promise<ServerInfo> {
+  // First try exact match
+  let server = await client.getServer(serverName);
+
+  if (server) {
+    return server;
+  }
+
+  // Fallback: search and try to resolve
+  const searchResults = await client.searchServers(serverName);
+  const candidatePool = searchResults.length > 0 ? searchResults : await client.listServers();
+  const similar = findSimilarServers(serverName, candidatePool);
+
+  if (similar.length === 0) {
+    // No suggestions available
+    if (opts.json) {
+      output({
+        error: 'Server not found',
+        query: serverName,
+        source: sourceOverride || currentSource,
+      });
+    } else {
+      showNotFoundGuidance(serverName, currentSource, false, sourceOverride);
+    }
+    process.exit(1);
+  }
+
+  if (similar.length === 1) {
+    // Single match - auto-resolve
+    server = similar[0];
+    if (!opts.json) {
+      console.error(`Resolved "${serverName}" \u2192 ${server.name}`);
+    }
+    return server;
+  }
+
+  // Multiple candidates - show did-you-mean
+  if (opts.json) {
+    output({
+      error: 'Multiple matches found',
+      query: serverName,
+      candidates: similar.map((s) => s.name),
+    });
+  } else {
+    console.error(`Server not found: ${serverName} (source: ${sourceOverride || currentSource})`);
+    console.error();
+    console.error('Did you mean:');
+    console.error(formatCandidates(similar));
+    console.error();
+    console.error(`Tip: ${commandTip}`);
   }
   process.exit(1);
 }
@@ -755,44 +852,16 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
       try {
         const client = await createClientForSource(getConfigPath, options.source);
         spinner?.start();
-        let server = await client.getServer(serverName);
 
-        // Fallback: if not found, search and try to resolve
-        if (!server) {
-          // Get all servers for similarity search
-          const allServers = await client.listServers();
-          const similar = findSimilarServers(serverName, allServers);
-
-          if (similar.length === 0) {
-            // No suggestions available - show enhanced guidance
-            if (opts.json) {
-              output({
-                error: 'Server not found',
-                query: serverName,
-                source: options.source || currentSource,
-              });
-            } else {
-              showNotFoundGuidance(serverName, currentSource, false, options.source);
-            }
-            process.exit(1);
-          }
-
-          if (similar.length === 1) {
-            // Single match - auto-resolve
-            server = similar[0];
-            console.log(`Resolved "${serverName}" → ${server.name}`);
-            console.log();
-          } else {
-            // Multiple candidates - show did-you-mean
-            console.error(`Server not found: ${serverName} (source: ${options.source || currentSource})`);
-            console.error();
-            console.error('Did you mean:');
-            console.error(formatCandidates(similar));
-            console.error();
-            console.error('Tip: pfscan cat view <full-name>');
-            process.exit(1);
-          }
-        }
+        // Resolve server with fallback to similarity search
+        const server = await resolveServerWithFallback(
+          client,
+          serverName,
+          currentSource,
+          options.source,
+          opts,
+          'pfscan cat view <full-name>'
+        );
 
         // If field specified, show only that field
         if (field) {
@@ -837,12 +906,14 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .option('--source <name>', 'Use specific catalog source')
     .option('--dry-run', 'Show what would be added without modifying config')
     .option('--name <id>', 'Override connector ID')
+    .option('--runner <name>', 'Package runner to use for stdio servers (npx, uvx)')
     .option('--spinner', 'Show spinner')
     .option('--no-spinner', 'Disable spinner')
     .action(async (serverName: string, options: {
       source?: string;
       dryRun?: boolean;
       name?: string;
+      runner?: string;
       spinner?: boolean;
       noSpinner?: boolean;
     }) => {
@@ -854,38 +925,16 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
       try {
         const client = await createClientForSource(getConfigPath, options.source);
         spinner?.start();
-        let server = await client.getServer(serverName);
 
-        // Fallback: if not found, search and try to resolve (same as view)
-        if (!server) {
-          const searchResults = await client.searchServers(serverName);
-          const similar = findSimilarServers(serverName, searchResults.length > 0 ? searchResults : await client.listServers());
-
-          if (similar.length === 0) {
-            stopSpinner(spinner);
-            if (opts.json) {
-              output({ error: 'Server not found', query: serverName, source: options.source || currentSource });
-            } else {
-              showNotFoundGuidance(serverName, currentSource, false, options.source);
-            }
-            process.exit(1);
-          }
-
-          if (similar.length === 1) {
-            server = similar[0];
-            stopSpinner(spinner);
-            console.error(`Resolved "${serverName}" → ${server.name}`);
-          } else {
-            stopSpinner(spinner);
-            console.error(`Server not found: ${serverName} (source: ${options.source || currentSource})`);
-            console.error();
-            console.error('Did you mean:');
-            console.error(formatCandidates(similar));
-            console.error();
-            console.error('Tip: pfscan cat install <full-name>');
-            process.exit(1);
-          }
-        }
+        // Resolve server with fallback to similarity search
+        const server = await resolveServerWithFallback(
+          client,
+          serverName,
+          currentSource,
+          options.source,
+          opts,
+          'pfscan cat install <full-name>'
+        );
 
         stopSpinner(spinner);
 
@@ -913,72 +962,14 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
 
         const transportType = transport.type.toLowerCase();
 
-        // Check for stdio (not supported in Phase 1)
-        if (transportType === 'stdio') {
-          if (opts.json) {
-            output({ error: 'stdio transport not supported', server: server.name });
-          } else {
-            outputError('stdio install is not supported yet (planned: runner-based install).');
-            console.error();
-            console.error('For stdio servers, use:');
-            console.error(`  pfscan connectors add ${server.name} --stdio "npx -y <package>"`);
-          }
-          process.exit(1);
-        }
-
-        // Check for supported HTTP transports
-        const isHttpTransport = transportType === 'http' || transportType === 'streamable-http';
-        if (!isHttpTransport) {
-          if (opts.json) {
-            output({ error: `Unsupported transport type: ${transportType}`, server: server.name });
-          } else {
-            outputError(`Unsupported transport type: ${transportType}`);
-            console.error('Supported types: http, streamable-http');
-          }
-          process.exit(1);
-        }
-
-        // Validate URL exists and is well-formed
-        if (!transport.url) {
-          if (opts.json) {
-            output({ error: 'Transport missing URL', server: server.name });
-          } else {
-            outputError(`Server "${server.name}" has ${transportType} transport but no URL.`);
-          }
-          process.exit(1);
-        }
-
-        // Validate URL format
-        try {
-          new URL(transport.url);
-        } catch {
-          if (opts.json) {
-            output({ error: 'Invalid URL format', url: transport.url, server: server.name });
-          } else {
-            outputError(`Invalid URL format: ${transport.url}`);
-          }
-          process.exit(1);
-        }
-
         // Generate connector ID
         const connectorId = options.name || deriveConnectorId(server.name);
 
-        // Build connector config
-        const connector: Connector = {
-          id: connectorId,
-          enabled: true,
-          transport: {
-            type: 'rpc-http',
-            url: transport.url,
-          } as HttpTransport,
-        };
+        // ConfigManager for all paths
+        const manager = new ConfigManager(getConfigPath());
 
         // Check for ID collision before attempting to add
-        // Note: ConfigManager.addConnector also checks for duplicates, but we pre-check
-        // to provide a more user-friendly error message with actionable suggestions
-        const manager = new ConfigManager(getConfigPath());
         const existing = await manager.getConnector(connectorId).catch(() => null);
-
         if (existing) {
           if (opts.json) {
             output({ error: `Connector ID already exists: ${connectorId}`, suggestion: 'Use --name to specify different ID' });
@@ -991,12 +982,168 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
+        let connector: Connector;
+        let runnerUsed: string | undefined;
+
+        // Handle stdio transport with runner
+        if (transportType === 'stdio') {
+          // Parse package reference from catalog transport
+          const pkgRef = parsePackageRef(transport);
+
+          if (!pkgRef) {
+            if (opts.json) {
+              output({
+                error: 'Cannot parse package reference from transport',
+                server: server.name,
+                transport,
+              });
+            } else {
+              outputError('Cannot parse package reference from transport config.');
+              console.error();
+              console.error('This server may require manual configuration:');
+              console.error(`  pfscan connectors add ${deriveConnectorId(server.name)} --stdio "<command>"`);
+            }
+            process.exit(1);
+          }
+
+          // Determine runner to use
+          let runner;
+
+          if (options.runner) {
+            // --runner specified: validate and use that runner
+            if (!isValidRunnerName(options.runner)) {
+              if (opts.json) {
+                output({
+                  error: `Invalid runner: ${options.runner}`,
+                  validRunners: [...VALID_RUNNER_NAMES],
+                });
+              } else {
+                outputError(`Invalid runner: ${options.runner}`);
+                console.error(`Valid runners: ${VALID_RUNNER_NAMES.join(', ')}`);
+              }
+              process.exit(1);
+            }
+
+            runner = getRunner(options.runner as RunnerName);
+            const status = await runner.detect();
+
+            if (!status.available) {
+              if (opts.json) {
+                output({
+                  error: `Runner not available: ${options.runner}`,
+                  status,
+                });
+              } else {
+                outputError(`Runner '${options.runner}' is not available.`);
+                if (status.error) {
+                  console.error(`  Error: ${status.error}`);
+                }
+                console.error();
+                console.error('Run diagnostics:');
+                console.error('  pfscan runners doctor');
+              }
+              process.exit(1);
+            }
+          } else {
+            // No --runner specified: auto-select (npx > uvx)
+            runner = await findAvailableRunner();
+
+            if (!runner) {
+              if (opts.json) {
+                output({
+                  error: 'No package runner available',
+                  suggestion: 'Install npm (for npx) or uv (for uvx)',
+                });
+              } else {
+                outputError('No package runner available.');
+                console.error();
+                console.error('Install one of the following:');
+                console.error('  - npm (provides npx): https://nodejs.org');
+                console.error('  - uv (provides uvx): https://github.com/astral-sh/uv');
+                console.error();
+                console.error('Then run diagnostics:');
+                console.error('  pfscan runners doctor');
+              }
+              process.exit(1);
+            }
+          }
+
+          // Materialize transport with sanitized env
+          const sanitizedEnv = sanitizeEnv(transport.env);
+          const materialized = runner.materialize(pkgRef, sanitizedEnv);
+          runnerUsed = runner.name;
+
+          // Build stdio connector config
+          connector = {
+            id: connectorId,
+            enabled: true,
+            transport: {
+              type: 'stdio',
+              command: materialized.command,
+              args: materialized.args,
+              ...(materialized.env && { env: materialized.env }),
+            } as StdioTransport,
+          };
+        } else {
+          // Handle HTTP transports
+          const isHttpTransport = transportType === 'http' || transportType === 'streamable-http';
+          if (!isHttpTransport) {
+            if (opts.json) {
+              output({ error: `Unsupported transport type: ${transportType}`, server: server.name });
+            } else {
+              outputError(`Unsupported transport type: ${transportType}`);
+              console.error('Supported types: http, streamable-http, stdio');
+            }
+            process.exit(1);
+          }
+
+          // Validate URL exists and is well-formed
+          if (!transport.url) {
+            if (opts.json) {
+              output({ error: 'Transport missing URL', server: server.name });
+            } else {
+              outputError(`Server "${server.name}" has ${transportType} transport but no URL.`);
+            }
+            process.exit(1);
+          }
+
+          // Validate URL format
+          try {
+            new URL(transport.url);
+          } catch {
+            if (opts.json) {
+              output({ error: 'Invalid URL format', url: transport.url, server: server.name });
+            } else {
+              outputError(`Invalid URL format: ${transport.url}`);
+            }
+            process.exit(1);
+          }
+
+          // Build HTTP connector config
+          connector = {
+            id: connectorId,
+            enabled: true,
+            transport: {
+              type: 'rpc-http',
+              url: transport.url,
+            } as HttpTransport,
+          };
+        }
+
         // Dry run: show what would be added
         if (options.dryRun) {
           if (opts.json) {
-            output({ dryRun: true, connector });
+            output({
+              dryRun: true,
+              connector,
+              ...(runnerUsed && { runner: runnerUsed }),
+            });
           } else {
-            console.log('Would add connector:');
+            if (runnerUsed) {
+              console.log(`Would add connector (using ${runnerUsed}):`);
+            } else {
+              console.log('Would add connector:');
+            }
             console.log(JSON.stringify(connector, null, 2));
             console.log();
             console.error('(dry-run mode, no changes made)');
@@ -1008,9 +1155,17 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         await manager.addConnector(connector);
 
         if (opts.json) {
-          output({ success: true, connector });
+          output({
+            success: true,
+            connector,
+            ...(runnerUsed && { runner: runnerUsed }),
+          });
         } else {
-          outputSuccess(`Connector '${connectorId}' added from ${server.name}`);
+          if (runnerUsed) {
+            outputSuccess(`Connector '${connectorId}' added from ${server.name} (via ${runnerUsed})`);
+          } else {
+            outputSuccess(`Connector '${connectorId}' added from ${server.name}`);
+          }
           console.log();
           console.log('Next steps:');
           console.log(`  pfscan scan start --id ${connectorId}`);
