@@ -22,6 +22,7 @@ import {
   getFieldValue,
   formatFieldValue,
   type ServerInfo,
+  type PackageInfo,
   CATALOG_SOURCES,
   DEFAULT_CATALOG_SOURCE,
   getSource,
@@ -41,6 +42,7 @@ import {
   parsePackageRef,
   sanitizeEnv,
   type RunnerName,
+  type PackageRef,
 } from '../runners/index.js';
 import { SqliteSecretStore } from '../secrets/store.js';
 import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
@@ -451,6 +453,41 @@ function isValidRunnerName(name: string): name is RunnerName {
 }
 
 /**
+ * Extract PackageRef from server's packages[] array
+ * Priority: npm > pypi (npx is more common)
+ * @returns PackageRef and the source package info, or null if not found
+ */
+function extractPackageRefFromPackages(
+  packages: PackageInfo[] | undefined
+): { ref: PackageRef; pkg: PackageInfo; runnerHint: RunnerName } | null {
+  if (!packages || packages.length === 0) {
+    return null;
+  }
+
+  // Priority: npm first (npx), then pypi (uvx)
+  const npm = packages.find(p => p.registryType === 'npm');
+  if (npm) {
+    return {
+      ref: { package: npm.identifier, version: npm.version },
+      pkg: npm,
+      runnerHint: 'npx',
+    };
+  }
+
+  const pypi = packages.find(p => p.registryType === 'pypi');
+  if (pypi) {
+    return {
+      ref: { package: pypi.identifier, version: pypi.version },
+      pkg: pypi,
+      runnerHint: 'uvx',
+    };
+  }
+
+  // No supported package type found
+  return null;
+}
+
+/**
  * Format candidate servers for selection prompt
  */
 function formatCandidates(servers: ServerInfo[]): string {
@@ -466,9 +503,78 @@ function formatCandidates(servers: ServerInfo[]): string {
 }
 
 /**
- * Format server info for detailed view
+ * Format package info for display
  */
-function formatServerDetails(server: ServerInfo): string {
+function formatPackageInfo(pkg: { registryType: string; identifier: string; version?: string }): string {
+  if (pkg.version) {
+    if (pkg.registryType === 'npm') {
+      return `${pkg.registryType} ${pkg.identifier}@${pkg.version}`;
+    } else if (pkg.registryType === 'pypi') {
+      return `${pkg.registryType} ${pkg.identifier}==${pkg.version}`;
+    }
+    return `${pkg.registryType} ${pkg.identifier}:${pkg.version}`;
+  }
+  return `${pkg.registryType} ${pkg.identifier}`;
+}
+
+/**
+ * Generate install hint command for a server
+ */
+function generateInstallHint(server: ServerInfo, currentSource: string): string | null {
+  const serverName = server.name;
+  if (!serverName) {
+    return null;
+  }
+
+  // Always include --source to make command reliable
+  const escaped = serverName.includes(' ') ? `"${serverName}"` : serverName;
+  return `pfscan cat install ${escaped} --source ${currentSource}`;
+}
+
+/**
+ * Check if server can be installed (has sufficient transport/package info)
+ */
+function getInstallabilityStatus(server: ServerInfo): {
+  installable: boolean;
+  reason?: string;
+  hasPackages: boolean;
+} {
+  const hasPackages = !!(server.packages && server.packages.length > 0);
+  const transport = server.transport;
+
+  if (!transport) {
+    if (hasPackages) {
+      return { installable: true, hasPackages, reason: 'packages available' };
+    }
+    return { installable: false, hasPackages, reason: 'no transport configuration' };
+  }
+
+  const transportType = transport.type?.toLowerCase();
+
+  if (transportType === 'stdio') {
+    // stdio needs either command/args or packages
+    if (transport.command && transport.args) {
+      return { installable: true, hasPackages };
+    }
+    if (hasPackages) {
+      return { installable: true, hasPackages, reason: 'packages available' };
+    }
+    return { installable: false, hasPackages, reason: 'stdio transport lacks command/args and no packages' };
+  }
+
+  // HTTP-based transports need URL
+  if (transportType === 'sse' || transportType === 'http' || transportType === 'streamable-http') {
+    if (transport.url) {
+      return { installable: true, hasPackages };
+    }
+    return { installable: false, hasPackages, reason: `${transportType} transport lacks URL` };
+  }
+
+  // Unknown transport type
+  return { installable: false, hasPackages, reason: `unsupported transport type: ${transportType}` };
+}
+
+function formatServerDetails(server: ServerInfo, currentSource?: string): string {
   const lines: string[] = [];
 
   lines.push(`Name:        ${server.name || '(unknown)'}`);
@@ -489,6 +595,39 @@ function formatServerDetails(server: ServerInfo): string {
 
   if (server.transport) {
     lines.push(`Transport:   ${JSON.stringify(server.transport)}`);
+  }
+
+  // Show packages info
+  if (server.packages && server.packages.length > 0) {
+    lines.push('');
+    lines.push('Packages:');
+    for (const pkg of server.packages) {
+      lines.push(`  - ${formatPackageInfo(pkg)}`);
+      // Show required env vars if any
+      const required = pkg.environmentVariables?.filter(v => v.isRequired);
+      if (required && required.length > 0) {
+        lines.push(`    Required: ${required.map(v => v.name).join(', ')}`);
+      }
+    }
+  }
+
+  // Show install hint if source is known
+  if (currentSource && server.name) {
+    const status = getInstallabilityStatus(server);
+    lines.push('');
+
+    if (status.installable) {
+      const hint = generateInstallHint(server, currentSource);
+      if (hint) {
+        lines.push('Install:');
+        lines.push(`  ${hint}`);
+      }
+    } else {
+      lines.push(`Install:     (not available - ${status.reason})`);
+      if (!status.hasPackages) {
+        lines.push('             Manual setup may be required.');
+      }
+    }
   }
 
   return lines.join('\n');
@@ -888,8 +1027,11 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           return;
         }
 
+        // Determine effective source for install hint
+        const effectiveSource = options.source || currentSource;
+
         console.log();
-        console.log(formatServerDetails(server));
+        console.log(formatServerDetails(server, effectiveSource));
         console.log();
       } catch (error) {
         handleRegistryError(error);
@@ -938,29 +1080,42 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
 
         stopSpinner(spinner);
 
-        // Validate transport
+        // Check for packages[] as fallback for missing transport
+        const hasPackages = server.packages && server.packages.length > 0;
+
+        // Validate transport (or check for packages as stdio fallback)
         const transport = server.transport;
+        let transportType: string;
+
         if (!transport) {
-          if (opts.json) {
-            output({ error: 'No transport configuration found', server: server.name });
+          // No transport - check if we can use packages[]
+          if (hasPackages) {
+            // Treat as stdio when packages[] is available
+            transportType = 'stdio';
           } else {
-            outputError(`Server "${server.name}" has no transport configuration.`);
-            console.error('This server may require manual configuration.');
+            if (opts.json) {
+              output({ error: 'No transport configuration found', server: server.name });
+            } else {
+              outputError(`Server "${server.name}" has no transport configuration.`);
+              console.error('This server may require manual configuration.');
+            }
+            process.exit(1);
           }
-          process.exit(1);
-        }
-
-        // Validate transport type exists
-        if (!transport.type) {
-          if (opts.json) {
-            output({ error: 'Transport type not specified', server: server.name });
+        } else if (!transport.type) {
+          // Transport exists but no type - check packages[]
+          if (hasPackages) {
+            transportType = 'stdio';
           } else {
-            outputError(`Server "${server.name}" has transport but no type specified.`);
+            if (opts.json) {
+              output({ error: 'Transport type not specified', server: server.name });
+            } else {
+              outputError(`Server "${server.name}" has transport but no type specified.`);
+            }
+            process.exit(1);
           }
-          process.exit(1);
+        } else {
+          transportType = transport.type.toLowerCase();
         }
-
-        const transportType = transport.type.toLowerCase();
 
         // Generate connector ID
         const connectorId = options.name || deriveConnectorId(server.name);
@@ -987,19 +1142,40 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
 
         // Handle stdio transport with runner
         if (transportType === 'stdio') {
-          // Parse package reference from catalog transport
-          const pkgRef = parsePackageRef(transport);
+          // Try to get package reference from multiple sources:
+          // 1. packages[] array (preferred - has registryType info)
+          // 2. transport.command/args (fallback - parsePackageRef)
+          let pkgRef: PackageRef | null = null;
+          let runnerHint: RunnerName | undefined;
+          let packageEnv: Record<string, string> | undefined;
+
+          // First, try packages[] array (official registry provides this)
+          const packageInfo = extractPackageRefFromPackages(server.packages);
+          if (packageInfo) {
+            pkgRef = packageInfo.ref;
+            runnerHint = packageInfo.runnerHint;
+            // Extract environment variables from package info (for later use)
+            // Note: packages[].environmentVariables is schema info, not actual values
+            // We'll use transport.env if available, packages[].environmentVariables is for documentation
+          }
+
+          // Fallback: try parsing from transport.command/args
+          if (!pkgRef && transport) {
+            pkgRef = parsePackageRef(transport);
+          }
 
           if (!pkgRef) {
             if (opts.json) {
               output({
-                error: 'Cannot parse package reference from transport',
+                error: 'Cannot determine package reference',
                 server: server.name,
                 transport,
+                packages: server.packages,
               });
             } else {
-              outputError('Cannot parse package reference from transport config.');
+              outputError('Cannot determine package reference for this server.');
               console.error();
+              console.error('Neither packages[] nor transport command/args provide enough info.');
               console.error('This server may require manual configuration:');
               console.error(`  pfscan connectors add ${deriveConnectorId(server.name)} --stdio "<command>"`);
             }
@@ -1044,8 +1220,37 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
               }
               process.exit(1);
             }
+          } else if (runnerHint) {
+            // Use runner hint from packages[] (npm -> npx, pypi -> uvx)
+            runner = getRunner(runnerHint);
+            const status = await runner.detect();
+
+            if (!status.available) {
+              // Fallback to auto-select if hinted runner is not available
+              runner = await findAvailableRunner();
+            }
+
+            if (!runner) {
+              if (opts.json) {
+                output({
+                  error: 'No package runner available',
+                  suggestion: `Install ${runnerHint === 'npx' ? 'npm' : 'uv'} or an alternative runner`,
+                });
+              } else {
+                outputError('No package runner available.');
+                console.error();
+                console.error(`This package requires ${runnerHint}, but it's not installed.`);
+                console.error('Install one of the following:');
+                console.error('  - npm (provides npx): https://nodejs.org');
+                console.error('  - uv (provides uvx): https://github.com/astral-sh/uv');
+                console.error();
+                console.error('Then run diagnostics:');
+                console.error('  pfscan runners doctor');
+              }
+              process.exit(1);
+            }
           } else {
-            // No --runner specified: auto-select (npx > uvx)
+            // No --runner specified and no hint: auto-select (npx > uvx)
             runner = await findAvailableRunner();
 
             if (!runner) {
@@ -1068,8 +1273,8 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
             }
           }
 
-          // Materialize transport with sanitized env
-          const sanitizedEnv = sanitizeEnv(transport.env);
+          // Materialize transport with sanitized env (from transport if available)
+          const sanitizedEnv = sanitizeEnv(transport?.env);
           const materialized = runner.materialize(pkgRef, sanitizedEnv);
           runnerUsed = runner.name;
 
@@ -1086,6 +1291,18 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           };
         } else {
           // Handle HTTP transports
+          // Note: transport must exist here since we only reach this branch when
+          // transportType came from transport.type (not from packages[] fallback)
+          if (!transport) {
+            // This should never happen, but handle defensively
+            if (opts.json) {
+              output({ error: 'Internal error: transport undefined in HTTP branch', server: server.name });
+            } else {
+              outputError('Internal error: transport configuration missing.');
+            }
+            process.exit(1);
+          }
+
           const isHttpTransport = transportType === 'http' || transportType === 'streamable-http';
           if (!isHttpTransport) {
             if (opts.json) {

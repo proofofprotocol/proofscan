@@ -133,43 +133,51 @@ describe('RegistryClient', () => {
   });
 
   describe('searchServers', () => {
-    it('should filter servers by name', async () => {
-      const mockResponse = {
+    it('should return servers from server-side search (official source)', async () => {
+      // With server-side search, the API returns already-filtered results
+      const mockSearchResponse = {
         servers: [
           createMockServerEntry('ai.time/time-server', 'Time utilities', '1.0.0'),
-          createMockServerEntry('ai.file/file-server', 'File operations', '1.0.0'),
-          createMockServerEntry('ai.other/other', 'Other server', '1.0.0'),
         ],
       };
 
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockResponse),
+        json: () => Promise.resolve(mockSearchResponse),
       });
 
       const client = new RegistryClient();
       const results = await client.searchServers('time');
 
+      // Verify search parameter was used in request
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('search=time'),
+        expect.any(Object)
+      );
       expect(results).toHaveLength(1);
       expect(results[0].name).toBe('ai.time/time-server');
     });
 
-    it('should filter servers by description', async () => {
-      const mockResponse = {
+    it('should fallback to client-side filter when server-side search fails', async () => {
+      // First call (server-side search) fails, second call (listServers) succeeds
+      const mockListResponse = {
         servers: [
           createMockServerEntry('server1', 'Provides time utilities', '1.0.0'),
           createMockServerEntry('server2', 'File operations', '1.0.0'),
         ],
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
+      global.fetch = vi.fn()
+        .mockRejectedValueOnce(new Error('Search API error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(mockListResponse),
+        });
 
       const client = new RegistryClient();
       const results = await client.searchServers('time');
 
+      // Fallback to client-side filter: should find 'time' in description
       expect(results).toHaveLength(1);
       expect(results[0].name).toBe('server1');
     });

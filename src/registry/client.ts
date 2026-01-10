@@ -30,6 +30,32 @@ export interface ServerTransport {
 }
 
 /**
+ * Package info from registry (for stdio install)
+ */
+export interface PackageInfo {
+  /** Registry type: 'npm', 'pypi', 'docker', etc. */
+  registryType: string;
+  /** Package identifier (e.g., '@scope/name' for npm, 'package-name' for pypi) */
+  identifier: string;
+  /** Package version */
+  version?: string;
+  /** Transport configuration */
+  transport?: {
+    type: string;
+    command?: string;
+    args?: string[];
+  };
+  /** Environment variable definitions */
+  environmentVariables?: Array<{
+    name: string;
+    description?: string;
+    isRequired?: boolean;
+    isSecret?: boolean;
+    format?: string;
+  }>;
+}
+
+/**
  * Server metadata from registry
  */
 export interface ServerInfo {
@@ -40,6 +66,8 @@ export interface ServerInfo {
   repository?: string;
   homepage?: string;
   transport?: ServerTransport;
+  /** Package info for stdio servers (npm, pypi, etc.) */
+  packages?: PackageInfo[];
   // Allow additional fields for future extensibility
   [key: string]: unknown;
 }
@@ -55,6 +83,23 @@ export interface RegistryClientOptions {
 }
 
 /**
+ * Raw package entry from registry v0 API
+ */
+interface RawPackageEntry {
+  registryType?: string;
+  identifier?: string;
+  version?: string;
+  transport?: { type: string; command?: string; args?: string[] };
+  environmentVariables?: Array<{
+    name: string;
+    description?: string;
+    isRequired?: boolean;
+    isSecret?: boolean;
+    format?: string;
+  }>;
+}
+
+/**
  * Raw server entry from registry v0 API
  */
 interface RawServerEntry {
@@ -64,8 +109,8 @@ interface RawServerEntry {
     version?: string;
     repository?: { url?: string; source?: string };
     websiteUrl?: string;
-    packages?: Array<{ transport?: { type: string; command?: string; args?: string[] } }>;
-    remotes?: Array<{ type: string; url?: string }>;
+    packages?: RawPackageEntry[];
+    remotes?: Array<{ type: string; url?: string; headers?: unknown[] }>;
     [key: string]: unknown;
   };
   _meta?: {
@@ -245,10 +290,28 @@ export class RegistryClient {
       info.homepage = raw.websiteUrl;
     }
 
-    // Map transport from packages or remotes
-    if (raw.packages && raw.packages.length > 0 && raw.packages[0].transport) {
-      info.transport = raw.packages[0].transport as ServerTransport;
-    } else if (raw.remotes && raw.remotes.length > 0) {
+    // Map packages array (preserve full info for install)
+    if (raw.packages && raw.packages.length > 0) {
+      info.packages = raw.packages
+        .filter((pkg): pkg is RawPackageEntry & { registryType: string; identifier: string } =>
+          !!(pkg.registryType && pkg.identifier)
+        )
+        .map((pkg) => ({
+          registryType: pkg.registryType,
+          identifier: pkg.identifier,
+          version: pkg.version,
+          transport: pkg.transport,
+          environmentVariables: pkg.environmentVariables,
+        }));
+
+      // Also set transport from first package if available
+      if (raw.packages[0].transport) {
+        info.transport = raw.packages[0].transport as ServerTransport;
+      }
+    }
+
+    // Fallback to remotes for transport
+    if (!info.transport && raw.remotes && raw.remotes.length > 0) {
       info.transport = {
         type: raw.remotes[0].type,
         url: raw.remotes[0].url,
@@ -258,25 +321,78 @@ export class RegistryClient {
     return info;
   }
 
+  /** Flag indicating if last search used server-side (for verbose logging) */
+  private lastSearchWasServerSide = false;
+
+  /**
+   * Check if last search used server-side API
+   */
+  wasLastSearchServerSide(): boolean {
+    return this.lastSearchWasServerSide;
+  }
+
   /**
    * Search servers by query
    * - Smithery: Uses server-side semantic search via API
-   * - Official: Uses client-side filter on cached list
+   * - Official: Uses server-side search (preferred) with client-side fallback
    */
   async searchServers(query: string): Promise<ServerInfo[]> {
     if (this.isSmithery) {
+      this.lastSearchWasServerSide = true;
       return this.searchSmitheryServers(query);
     }
 
-    // Official registry: client-side filter
-    const servers = await this.listServers();
-    const lowerQuery = query.toLowerCase();
+    // Official registry: try server-side search first
+    try {
+      const results = await this.searchOfficialServers(query);
+      this.lastSearchWasServerSide = true;
+      return results;
+    } catch {
+      // Fallback to client-side filter if server-side search fails
+      this.lastSearchWasServerSide = false;
+      const servers = await this.listServers();
+      const lowerQuery = query.toLowerCase();
 
-    return servers.filter((server) => {
-      const name = server.name?.toLowerCase() || '';
-      const desc = server.description?.toLowerCase() || '';
-      return name.includes(lowerQuery) || desc.includes(lowerQuery);
-    });
+      return servers.filter((server) => {
+        const name = server.name?.toLowerCase() || '';
+        const desc = server.description?.toLowerCase() || '';
+        return name.includes(lowerQuery) || desc.includes(lowerQuery);
+      });
+    }
+  }
+
+  /**
+   * Search Official registry using server-side search API
+   * GET /servers?search=<query>&limit=<n>
+   */
+  private async searchOfficialServers(query: string, limit = 50): Promise<ServerInfo[]> {
+    const allServers: ServerInfo[] = [];
+    let cursor: string | undefined;
+    let pageCount = 0;
+    const maxPages = 3; // Limit pagination to avoid excessive requests
+
+    do {
+      let url = `${this.baseUrl}/servers?search=${encodeURIComponent(query)}&limit=${limit}`;
+      if (cursor) {
+        url += `&cursor=${encodeURIComponent(cursor)}`;
+      }
+
+      const response = await this.fetch(url);
+
+      const data = (await response.json()) as RegistryListResponse;
+      const rawServers = data.servers || [];
+
+      // Map entries to ServerInfo (server-side search returns relevant entries directly)
+      for (const entry of rawServers) {
+        // For search results, include all entries (not just isLatest)
+        allServers.push(this.mapRawToServerInfo(entry));
+      }
+
+      cursor = data.metadata?.nextCursor;
+      pageCount++;
+    } while (cursor && pageCount < maxPages);
+
+    return allServers;
   }
 
   /**
