@@ -7,6 +7,7 @@ export {
   RegistryError,
   type ServerInfo,
   type ServerTransport,
+  type PackageInfo,
   type RegistryClientOptions,
   SUPPORTED_FIELDS,
   type SupportedField,
