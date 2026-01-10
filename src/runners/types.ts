@@ -2,6 +2,8 @@
  * Runner types for package execution (npx, uvx)
  */
 
+import { execSync } from 'child_process';
+
 /**
  * Runner names supported by proofscan
  */
@@ -67,4 +69,93 @@ export interface Runner {
    * @returns Transport config for StdioTransport
    */
   materialize(pkg: PackageRef, env?: Record<string, string>): MaterializedTransport;
+}
+
+/**
+ * Common detection logic for runners
+ * @param runnerName - Name of the runner to detect
+ * @returns RunnerStatus with availability info
+ */
+export async function detectRunner(runnerName: RunnerName): Promise<RunnerStatus> {
+  try {
+    // Use 'which' on Unix, 'where' on Windows
+    const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+    const pathOutput = execSync(`${whichCmd} ${runnerName}`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    // Take first line (Windows 'where' may return multiple paths)
+    const path = pathOutput.split('\n')[0].trim();
+
+    // Get version
+    let version: string | undefined;
+    try {
+      version = execSync(`${runnerName} --version`, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim();
+    } catch {
+      // Version detection failed, but runner exists
+    }
+
+    return {
+      name: runnerName,
+      available: true,
+      version,
+      path,
+    };
+  } catch (error) {
+    return {
+      name: runnerName,
+      available: false,
+      error: error instanceof Error ? error.message : `${runnerName} not found in PATH`,
+    };
+  }
+}
+
+/**
+ * Regex pattern for valid environment variable names
+ * Only alphanumeric and underscore, must start with letter or underscore
+ */
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Maximum length for environment variable values (security limit)
+ */
+const MAX_ENV_VALUE_LENGTH = 32768;
+
+/**
+ * Validate and sanitize environment variables from catalog
+ * @param env - Raw environment variables from catalog
+ * @returns Sanitized environment variables (invalid entries removed)
+ */
+export function sanitizeEnv(env: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!env || typeof env !== 'object') {
+    return undefined;
+  }
+
+  const sanitized: Record<string, string> = {};
+  let hasValidEntries = false;
+
+  for (const [key, value] of Object.entries(env)) {
+    // Validate key format
+    if (!ENV_KEY_PATTERN.test(key)) {
+      continue; // Skip invalid key
+    }
+
+    // Validate value type and length
+    if (typeof value !== 'string') {
+      continue; // Skip non-string value
+    }
+
+    if (value.length > MAX_ENV_VALUE_LENGTH) {
+      continue; // Skip too-long value
+    }
+
+    sanitized[key] = value;
+    hasValidEntries = true;
+  }
+
+  return hasValidEntries ? sanitized : undefined;
 }

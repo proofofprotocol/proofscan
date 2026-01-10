@@ -5,11 +5,15 @@
  */
 
 import type { Runner, RunnerName, RunnerStatus, PackageRef, MaterializedTransport } from './types.js';
+import { sanitizeEnv } from './types.js';
 import { npxRunner } from './npx.js';
 import { uvxRunner } from './uvx.js';
 
 // Re-export types
 export type { Runner, RunnerName, RunnerStatus, PackageRef, MaterializedTransport };
+
+// Re-export utility functions
+export { sanitizeEnv };
 
 /**
  * All available runners in priority order (npx first, then uvx)

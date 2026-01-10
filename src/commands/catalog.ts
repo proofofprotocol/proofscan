@@ -39,6 +39,7 @@ import {
   getRunner,
   findAvailableRunner,
   parsePackageRef,
+  sanitizeEnv,
   type RunnerName,
 } from '../runners/index.js';
 import { SqliteSecretStore } from '../secrets/store.js';
@@ -414,16 +415,27 @@ function findSimilarServers(
  *   "my-server" -> "my-server"
  */
 function deriveConnectorId(serverName: string): string {
+  // Input validation
+  if (!serverName || typeof serverName !== 'string') {
+    return 'server';
+  }
+
+  // Limit input length to prevent DoS
+  const truncated = serverName.slice(0, 256);
+
   // Take the last segment after / or @
-  const parts = serverName.split(/[/@]/);
-  const lastPart = parts[parts.length - 1] || serverName;
+  const parts = truncated.split(/[/@]/);
+  const lastPart = parts[parts.length - 1] || truncated;
 
   // Sanitize: lowercase, replace non-alphanumeric with hyphen
-  return lastPart
+  const sanitized = lastPart
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
+
+  // Ensure non-empty result
+  return sanitized || 'server';
 }
 
 /**
@@ -1056,8 +1068,9 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
             }
           }
 
-          // Materialize transport
-          const materialized = runner.materialize(pkgRef, transport.env);
+          // Materialize transport with sanitized env
+          const sanitizedEnv = sanitizeEnv(transport.env);
+          const materialized = runner.materialize(pkgRef, sanitizedEnv);
           runnerUsed = runner.name;
 
           // Build stdio connector config

@@ -382,4 +382,70 @@ describe('runners', () => {
       expect(runner).toBeNull();
     });
   });
+
+  describe('sanitizeEnv', () => {
+    it('should return undefined for undefined input', async () => {
+      const { sanitizeEnv } = await import('./index.js');
+      expect(sanitizeEnv(undefined)).toBeUndefined();
+    });
+
+    it('should return undefined for empty object', async () => {
+      const { sanitizeEnv } = await import('./index.js');
+      expect(sanitizeEnv({})).toBeUndefined();
+    });
+
+    it('should pass through valid environment variables', async () => {
+      const { sanitizeEnv } = await import('./index.js');
+      const result = sanitizeEnv({
+        API_KEY: 'secret123',
+        DATABASE_URL: 'postgres://localhost',
+        _PRIVATE: 'value',
+      });
+      expect(result).toEqual({
+        API_KEY: 'secret123',
+        DATABASE_URL: 'postgres://localhost',
+        _PRIVATE: 'value',
+      });
+    });
+
+    it('should filter out invalid key names', async () => {
+      const { sanitizeEnv } = await import('./index.js');
+      const result = sanitizeEnv({
+        'VALID_KEY': 'value1',
+        '123_INVALID': 'value2', // starts with number
+        'INVALID-KEY': 'value3', // contains hyphen
+        'INVALID.KEY': 'value4', // contains dot
+        'ANOTHER_VALID': 'value5',
+      });
+      expect(result).toEqual({
+        VALID_KEY: 'value1',
+        ANOTHER_VALID: 'value5',
+      });
+    });
+
+    it('should filter out non-string values', async () => {
+      const { sanitizeEnv } = await import('./index.js');
+      const result = sanitizeEnv({
+        STRING_VAL: 'value',
+        NUMBER_VAL: 123 as any,
+        BOOL_VAL: true as any,
+        NULL_VAL: null as any,
+      });
+      expect(result).toEqual({
+        STRING_VAL: 'value',
+      });
+    });
+
+    it('should filter out overly long values', async () => {
+      const { sanitizeEnv } = await import('./index.js');
+      const longValue = 'x'.repeat(40000); // > 32768
+      const result = sanitizeEnv({
+        SHORT: 'ok',
+        LONG: longValue,
+      });
+      expect(result).toEqual({
+        SHORT: 'ok',
+      });
+    });
+  });
 });
