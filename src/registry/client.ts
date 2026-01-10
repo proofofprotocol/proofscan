@@ -18,6 +18,9 @@ const REQUEST_TIMEOUT_MS = 10000;
 /** Cache TTL in milliseconds (5 minutes) */
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
+/** Maximum pages to fetch during server-side search (balance between completeness and API load) */
+const MAX_SEARCH_PAGES = 3;
+
 /**
  * Server transport configuration
  */
@@ -304,9 +307,9 @@ export class RegistryClient {
           environmentVariables: pkg.environmentVariables,
         }));
 
-      // Also set transport from first package if available
-      if (raw.packages[0].transport) {
-        info.transport = raw.packages[0].transport as ServerTransport;
+      // Also set transport from first package if available (use filtered array)
+      if (info.packages.length > 0 && info.packages[0].transport) {
+        info.transport = info.packages[0].transport as ServerTransport;
       }
     }
 
@@ -347,8 +350,12 @@ export class RegistryClient {
       const results = await this.searchOfficialServers(query);
       this.lastSearchWasServerSide = true;
       return results;
-    } catch {
+    } catch (error) {
       // Fallback to client-side filter if server-side search fails
+      // Log error for debugging (visible in verbose mode or when debugging)
+      if (process.env.DEBUG || process.env.PFSCAN_VERBOSE) {
+        console.error('[registry] Server-side search failed, falling back to client-side filter:', error);
+      }
       this.lastSearchWasServerSide = false;
       const servers = await this.listServers();
       const lowerQuery = query.toLowerCase();
@@ -369,7 +376,6 @@ export class RegistryClient {
     const allServers: ServerInfo[] = [];
     let cursor: string | undefined;
     let pageCount = 0;
-    const maxPages = 3; // Limit pagination to avoid excessive requests
 
     do {
       let url = `${this.baseUrl}/servers?search=${encodeURIComponent(query)}&limit=${limit}`;
@@ -390,7 +396,7 @@ export class RegistryClient {
 
       cursor = data.metadata?.nextCursor;
       pageCount++;
-    } while (cursor && pageCount < maxPages);
+    } while (cursor && pageCount < MAX_SEARCH_PAGES);
 
     return allServers;
   }
