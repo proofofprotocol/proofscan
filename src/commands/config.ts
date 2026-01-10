@@ -24,6 +24,8 @@ import {
 } from '../config/snapshot.js';
 import { output, outputSuccess, outputError, redactSecrets, getOutputOptions } from '../utils/output.js';
 import { redactionSummary } from '../secrets/redaction.js';
+import { DEFAULT_TRUSTED_NPM_SCOPES } from '../registry/trust.js';
+import type { CatalogSecurityConfig } from '../types/index.js';
 
 export function createConfigCommand(getConfigPath: () => string): Command {
   const cmd = new Command('config')
@@ -516,6 +518,199 @@ Examples:
         }
       } catch (error) {
         outputError('Failed to delete snapshot', error instanceof Error ? error : undefined);
+        process.exit(1);
+      }
+    });
+
+  // ============================================================
+  // config security - manage catalog security settings
+  // ============================================================
+  const securityCmd = cmd
+    .command('security')
+    .description('Manage catalog security settings (trust policy)');
+
+  // config security (show current settings)
+  securityCmd
+    .action(async () => {
+      try {
+        const manager = new ConfigManager(getConfigPath());
+        const config = await manager.loadOrDefault();
+        const security = config.catalog?.security;
+        const effectiveScopes = security?.trustedNpmScopes ?? DEFAULT_TRUSTED_NPM_SCOPES;
+        const trustedOnly = security?.trustedOnly ?? false;
+
+        if (getOutputOptions().json) {
+          output({
+            trustedOnly,
+            trustedNpmScopes: effectiveScopes,
+            allowSources: security?.allowSources ?? {},
+            isDefault: !security,
+          });
+        } else {
+          console.log('Catalog Security Settings');
+          console.log('=========================');
+          console.log();
+          console.log(`trustedOnly: ${trustedOnly ? 'on' : 'off'}`);
+          console.log();
+          console.log('Trusted npm scopes:');
+          for (const scope of effectiveScopes) {
+            console.log(`  ${scope}`);
+          }
+          if (!security?.trustedNpmScopes) {
+            console.log('  (using defaults)');
+          }
+          if (security?.allowSources && Object.keys(security.allowSources).length > 0) {
+            console.log();
+            console.log('Source restrictions:');
+            for (const [source, allowed] of Object.entries(security.allowSources)) {
+              console.log(`  ${source}: ${allowed ? 'allowed' : 'blocked'}`);
+            }
+          }
+        }
+      } catch (error) {
+        outputError('Failed to load security settings', error instanceof Error ? error : undefined);
+        process.exit(1);
+      }
+    });
+
+  // config security scope list
+  securityCmd
+    .command('scope')
+    .description('Manage trusted npm scopes')
+    .argument('<action>', 'Action: list, add, remove')
+    .argument('[scope]', 'npm scope (e.g., @mycompany)')
+    .action(async (action: string, scope?: string) => {
+      try {
+        const manager = new ConfigManager(getConfigPath());
+        const config = await manager.loadOrDefault();
+
+        // Ensure catalog.security exists
+        if (!config.catalog) {
+          config.catalog = {};
+        }
+
+        const security: CatalogSecurityConfig = config.catalog.security ?? {};
+        const currentScopes = security.trustedNpmScopes ?? [...DEFAULT_TRUSTED_NPM_SCOPES];
+
+        switch (action) {
+          case 'list':
+          case 'ls': {
+            const isDefault = !config.catalog.security?.trustedNpmScopes;
+            if (getOutputOptions().json) {
+              output({ scopes: currentScopes, isDefault });
+            } else {
+              console.log('Trusted npm scopes:');
+              for (const s of currentScopes) {
+                console.log(`  ${s}`);
+              }
+              if (isDefault) {
+                console.log('  (using defaults)');
+              }
+            }
+            break;
+          }
+
+          case 'add': {
+            if (!scope) {
+              outputError('Scope is required for add action');
+              process.exit(1);
+            }
+            if (!scope.startsWith('@')) {
+              outputError(`Scope must start with @: ${scope}`);
+              process.exit(1);
+            }
+            if (currentScopes.includes(scope)) {
+              outputError(`Scope already exists: ${scope}`);
+              process.exit(1);
+            }
+
+            currentScopes.push(scope);
+            security.trustedNpmScopes = currentScopes;
+            config.catalog.security = security;
+            await manager.save(config);
+
+            if (getOutputOptions().json) {
+              output({ added: scope, scopes: currentScopes });
+            } else {
+              outputSuccess(`Added trusted scope: ${scope}`);
+            }
+            break;
+          }
+
+          case 'remove':
+          case 'rm': {
+            if (!scope) {
+              outputError('Scope is required for remove action');
+              process.exit(1);
+            }
+            const index = currentScopes.indexOf(scope);
+            if (index === -1) {
+              outputError(`Scope not found: ${scope}`);
+              process.exit(1);
+            }
+
+            currentScopes.splice(index, 1);
+            security.trustedNpmScopes = currentScopes;
+            config.catalog.security = security;
+            await manager.save(config);
+
+            if (getOutputOptions().json) {
+              output({ removed: scope, scopes: currentScopes });
+            } else {
+              outputSuccess(`Removed trusted scope: ${scope}`);
+            }
+            break;
+          }
+
+          default:
+            outputError(`Unknown action: ${action}\nValid actions: list, add, remove`);
+            process.exit(1);
+        }
+      } catch (error) {
+        outputError('Failed to manage scopes', error instanceof Error ? error : undefined);
+        process.exit(1);
+      }
+    });
+
+  // config security trusted-only
+  securityCmd
+    .command('trusted-only')
+    .description('Set trusted-only mode (block untrusted installs)')
+    .argument('<state>', 'on or off')
+    .action(async (state: string) => {
+      try {
+        const manager = new ConfigManager(getConfigPath());
+        const config = await manager.loadOrDefault();
+
+        const newValue = state === 'on' || state === 'true' || state === '1';
+
+        if (state !== 'on' && state !== 'off' && state !== 'true' && state !== 'false' && state !== '1' && state !== '0') {
+          outputError(`Invalid state: ${state}\nUse: on, off, true, false, 1, 0`);
+          process.exit(1);
+        }
+
+        // Ensure catalog.security exists
+        if (!config.catalog) {
+          config.catalog = {};
+        }
+        if (!config.catalog.security) {
+          config.catalog.security = {};
+        }
+
+        config.catalog.security.trustedOnly = newValue;
+        await manager.save(config);
+
+        if (getOutputOptions().json) {
+          output({ trustedOnly: newValue });
+        } else {
+          outputSuccess(`trustedOnly set to: ${newValue ? 'on' : 'off'}`);
+          if (newValue) {
+            console.log('  Installations of untrusted servers will be blocked.');
+            console.log('  Use --allow-untrusted to override.');
+          }
+        }
+      } catch (error) {
+        outputError('Failed to set trusted-only mode', error instanceof Error ? error : undefined);
         process.exit(1);
       }
     });
