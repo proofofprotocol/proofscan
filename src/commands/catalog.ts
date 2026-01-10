@@ -33,6 +33,16 @@ import {
   formatSourceLine,
   setSecretResolver,
   getSourceApiKey,
+  type CatalogSource,
+  // Trust and new clients
+  determineTrust,
+  shouldAllowInstall,
+  getInstallWarning,
+  formatTrustBadgeColor,
+  type TrustInfo,
+  githubClient,
+  npmClient,
+  DEFAULT_TRUSTED_NPM_SCOPES,
 } from '../registry/index.js';
 import { ConfigManager } from '../config/index.js';
 import type { Connector, HttpTransport, StdioTransport } from '../types/index.js';
@@ -56,10 +66,11 @@ const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', 
 const TERM_WIDTH = process.stdout.columns || 80;
 
 /**
- * Extended ServerInfo with source information for cross-source search
+ * Extended ServerInfo with source and trust information for cross-source search
  */
 interface ServerInfoWithSource extends ServerInfo {
   _source?: string;
+  _trust?: TrustInfo;
 }
 
 /**
@@ -250,19 +261,46 @@ async function createClientForSource(
 }
 
 /**
+ * Search options for cross-source search
+ */
+interface SearchAllSourcesOptions {
+  /** Include untrusted sources like smithery (default: false) */
+  includeUntrusted?: boolean;
+  /** Security config from user config */
+  securityConfig?: import('../types/index.js').CatalogSecurityConfig;
+}
+
+/**
  * Cross-source search: search all available sources in parallel and merge results
+ *
+ * Default behavior:
+ * - github + official + npm (trusted scopes) are searched
+ * - smithery is excluded unless includeUntrusted=true (--all flag)
+ *
+ * Results include trust info (_trust) for each server.
  */
 async function searchAllSources(
   query: string,
-  spinner: Ora | null
+  spinner: Ora | null,
+  options: SearchAllSourcesOptions = {}
 ): Promise<{ servers: ServerInfoWithSource[]; skipped: string[]; warnings: string[] }> {
+  const { includeUntrusted = false, securityConfig } = options;
   const allServers: ServerInfoWithSource[] = [];
   const skipped: string[] = [];
   const warnings: string[] = [];
   const seenNames = new Set<string>();
 
+  // Filter sources based on --all flag and trust level
+  const activeSources = CATALOG_SOURCES.filter((source) => {
+    // Exclude untrusted sources (like smithery) unless --all is specified
+    if (!includeUntrusted && source.defaultTrust === 'untrusted') {
+      return false;
+    }
+    return true;
+  });
+
   // Check each source and get API keys for auth-required sources
-  const sourcePromises = CATALOG_SOURCES.map(async (source) => {
+  const sourcePromises = activeSources.map(async (source) => {
     if (!isSourceReady(source)) {
       return { source, ready: false, apiKey: undefined };
     }
@@ -277,11 +315,13 @@ async function searchAllSources(
   const sourceResults = await Promise.all(sourcePromises);
 
   // Separate ready and not-ready sources
-  const readySources: { source: typeof CATALOG_SOURCES[0]; apiKey?: string }[] = [];
+  const readySources: { source: CatalogSource; apiKey?: string }[] = [];
   for (const result of sourceResults) {
     if (!result.ready) {
       skipped.push(result.source.name);
-      warnings.push(`(${result.source.name} skipped: API key not set)`);
+      if (result.source.authRequired) {
+        warnings.push(`(${result.source.name} skipped: API key not set)`);
+      }
     } else {
       readySources.push({ source: result.source, apiKey: result.apiKey });
     }
@@ -292,15 +332,35 @@ async function searchAllSources(
     spinner.text = `Searching ${readySources.length} source(s)...`;
   }
 
-  // Search all ready sources in parallel
+  // Search all ready sources in parallel using source-specific clients
   const searchPromises = readySources.map(async ({ source, apiKey }) => {
     try {
-      const client = new RegistryClient({ baseUrl: source.baseUrl, apiKey });
-      const servers = await client.searchServers(query);
-      return { source: source.name, servers, error: null };
+      let servers: ServerInfo[];
+
+      switch (source.sourceType) {
+        case 'github':
+          servers = await githubClient.searchServers(query);
+          break;
+
+        case 'npm':
+          servers = await npmClient.searchServers({
+            query,
+            scopes: securityConfig?.trustedNpmScopes ?? DEFAULT_TRUSTED_NPM_SCOPES,
+          });
+          break;
+
+        case 'registry':
+        default: {
+          const client = new RegistryClient({ baseUrl: source.baseUrl, apiKey });
+          servers = await client.searchServers(query);
+          break;
+        }
+      }
+
+      return { source, servers, error: null };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      return { source: source.name, servers: [] as ServerInfo[], error: msg };
+      return { source, servers: [] as ServerInfo[], error: msg };
     }
   });
 
@@ -309,16 +369,17 @@ async function searchAllSources(
   // Merge results and collect warnings
   for (const result of results) {
     if (result.error) {
-      warnings.push(`(${result.source} error: ${result.error})`);
+      warnings.push(`(${result.source.name} error: ${result.error})`);
       continue;
     }
 
-    // Add source info and deduplicate by name
+    // Add source info, trust info, and deduplicate by name
     for (const server of result.servers) {
       const key = server.name || server.repository || JSON.stringify(server);
       if (!seenNames.has(key)) {
         seenNames.add(key);
-        allServers.push({ ...server, _source: result.source });
+        const trust = determineTrust(server, result.source.name, securityConfig);
+        allServers.push({ ...server, _source: result.source.name, _trust: trust });
       }
     }
   }
@@ -327,12 +388,25 @@ async function searchAllSources(
 }
 
 /**
- * Format search results with two-line format
- * Line 1: NAME (full) + transport badge
- * Line 2: VERSION + truncated DESC
- * Optional: source info for cross-source search
+ * Format search results options
  */
-function formatSearchResults(servers: ServerInfoWithSource[], showSource = false): void {
+interface FormatSearchResultsOptions {
+  /** Show source name in output (default: false) */
+  showSource?: boolean;
+  /** Show trust badge in output (default: true) */
+  showTrust?: boolean;
+}
+
+/**
+ * Format search results with two-line format
+ * Line 1: NAME (full) + trust badge + transport badge
+ * Line 2: VERSION + truncated DESC + source info
+ */
+function formatSearchResults(
+  servers: ServerInfoWithSource[],
+  options: FormatSearchResultsOptions = {}
+): void {
+  const { showSource = false, showTrust = true } = options;
   console.log();
 
   for (const server of servers) {
@@ -340,12 +414,14 @@ function formatSearchResults(servers: ServerInfoWithSource[], showSource = false
     const version = server.version || '-';
     const desc = server.description || '';
     const transportBadge = getTransportBadge(server);
+    const trustBadge = showTrust && server._trust ? formatTrustBadgeColor(server._trust) : '';
 
-    // Line 1: Full name + transport badge
-    const line1 = transportBadge ? `  ${name}  ${transportBadge}` : `  ${name}`;
+    // Line 1: Full name + trust badge + transport badge
+    const badges = [trustBadge, transportBadge].filter(Boolean).join(' ');
+    const line1 = badges ? `  ${name}  ${badges}` : `  ${name}`;
     console.log(line1);
 
-    // Line 2: version + description (truncated to fit)
+    // Line 2: version + description (truncated to fit) + source info
     const versionPart = `    v${version}`;
     const sourceInfo = showSource && server._source ? `  [${server._source}]` : '';
     const maxDescLen = TERM_WIDTH - versionPart.length - sourceInfo.length - 4;
@@ -879,13 +955,25 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         process.exit(1);
       }
 
-      // Cross-source search with --all
-      if (options.all) {
-        const spinner = createSpinner(`Searching all sources for "${query}"...`);
+      // Cross-source search (default or with --all)
+      // Default: github + official + npm (trusted scopes)
+      // --all: also include smithery (untrusted)
+      if (options.all || !options.source) {
+        const includeUntrusted = !!options.all;
+        const searchLabel = includeUntrusted ? 'all sources' : 'trusted sources';
+        const spinner = createSpinner(`Searching ${searchLabel} for "${query}"...`);
 
         try {
+          // Load security config for trust determination
+          const manager = new ConfigManager(getConfigPath());
+          const config = await manager.loadOrDefault();
+          const securityConfig = config.catalog?.security;
+
           spinner?.start();
-          let { servers, warnings } = await searchAllSources(query, spinner);
+          let { servers, warnings } = await searchAllSources(query, spinner, {
+            includeUntrusted,
+            securityConfig,
+          });
 
           // Apply transport filter if specified
           if (options.transport) {
@@ -893,7 +981,11 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           }
 
           if (opts.json) {
-            output(servers.map((s) => ({ ...s, source: s._source })));
+            output(servers.map((s) => ({
+              ...s,
+              source: s._source,
+              trust: s._trust ? { level: s._trust.level, root: s._trust.root } : undefined,
+            })));
             return;
           }
 
@@ -903,14 +995,17 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           }
 
           if (servers.length === 0) {
-            console.log(`No servers found matching "${query}" across all sources.`);
+            console.log(`No servers found matching "${query}" across ${searchLabel}.`);
+            if (!includeUntrusted) {
+              console.log('Tip: use --all to include community sources (smithery)');
+            }
             return;
           }
 
-          // Two-line format with source info
-          formatSearchResults(servers, true);
+          // Two-line format with source and trust info
+          formatSearchResults(servers, { showSource: true, showTrust: true });
 
-          console.log(`${servers.length} server(s) found across sources.`);
+          console.log(`${servers.length} server(s) found across ${searchLabel}.`);
           console.log();
 
           // Improved Tip: embed full ID if single result
@@ -927,13 +1022,48 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         return;
       }
 
-      // Single source search
-      const spinner = createSpinner(`Searching for "${query}"...`);
+      // Single source search (--source specified)
+      const sourceName = options.source!;
+      const source = getSource(sourceName);
+
+      if (!source) {
+        if (opts.json) {
+          output({ error: `Unknown catalog source: ${sourceName}` });
+        } else {
+          outputError(`Unknown catalog source: ${sourceName}`);
+          console.error(`Available sources: ${getSourceNames().join(', ')}`);
+        }
+        process.exit(1);
+      }
+
+      const spinner = createSpinner(`Searching "${sourceName}" for "${query}"...`);
 
       try {
-        const client = await createClientForSource(getConfigPath, options.source);
         spinner?.start();
-        let servers = await client.searchServers(query);
+        let servers: ServerInfo[];
+
+        // Use source-specific client
+        switch (source.sourceType) {
+          case 'github':
+            servers = await githubClient.searchServers(query);
+            break;
+
+          case 'npm': {
+            // Load security config for trusted scopes
+            const manager = new ConfigManager(getConfigPath());
+            const config = await manager.loadOrDefault();
+            const scopes = config.catalog?.security?.trustedNpmScopes ?? DEFAULT_TRUSTED_NPM_SCOPES;
+            servers = await npmClient.searchServers({ query, scopes });
+            break;
+          }
+
+          case 'registry':
+          default: {
+            const client = await createClientForSource(getConfigPath, sourceName);
+            servers = await client.searchServers(query);
+            break;
+          }
+        }
 
         // Apply transport filter if specified
         if (options.transport) {
@@ -1049,6 +1179,7 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .option('--dry-run', 'Show what would be added without modifying config')
     .option('--name <id>', 'Override connector ID')
     .option('--runner <name>', 'Package runner to use for stdio servers (npx, uvx)')
+    .option('--allow-untrusted', 'Allow installation of untrusted servers')
     .option('--spinner', 'Show spinner')
     .option('--no-spinner', 'Disable spinner')
     .action(async (serverName: string, options: {
@@ -1056,6 +1187,7 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
       dryRun?: boolean;
       name?: string;
       runner?: string;
+      allowUntrusted?: boolean;
       spinner?: boolean;
       noSpinner?: boolean;
     }) => {
@@ -1079,6 +1211,41 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         );
 
         stopSpinner(spinner);
+
+        // Determine effective source for trust determination
+        const effectiveSource = options.source || currentSource;
+
+        // Load security config and check trust policy
+        const manager = new ConfigManager(getConfigPath());
+        const config = await manager.loadOrDefault();
+        const securityConfig = config.catalog?.security;
+
+        // Determine trust level
+        const trust = determineTrust(server, effectiveSource, securityConfig);
+
+        // Check if installation is allowed
+        const installCheck = shouldAllowInstall(trust, effectiveSource, securityConfig, options.allowUntrusted);
+        if (!installCheck.allowed) {
+          if (opts.json) {
+            output({
+              error: 'Installation blocked by trust policy',
+              trust: { level: trust.level, root: trust.root, reason: trust.reason },
+              suggestion: 'Use --allow-untrusted to override',
+            });
+          } else {
+            outputError(`Installation blocked: ${installCheck.reason}`);
+            console.error();
+            console.error('To install anyway:');
+            console.error(`  pfscan cat install "${server.name}" --allow-untrusted`);
+          }
+          process.exit(1);
+        }
+
+        // Warn for untrusted installs (when allowed but not trusted)
+        const installWarning = getInstallWarning(trust);
+        if (installWarning && !opts.json) {
+          console.error(`\x1b[33mWarning: ${installWarning}\x1b[0m`);
+        }
 
         // Check for packages[] as fallback for missing transport
         const hasPackages = server.packages && server.packages.length > 0;
@@ -1120,10 +1287,7 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
         // Generate connector ID
         const connectorId = options.name || deriveConnectorId(server.name);
 
-        // ConfigManager for all paths
-        const manager = new ConfigManager(getConfigPath());
-
-        // Check for ID collision before attempting to add
+        // Check for ID collision before attempting to add (manager already created above)
         const existing = await manager.getConnector(connectorId).catch(() => null);
         if (existing) {
           if (opts.json) {

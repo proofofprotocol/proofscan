@@ -57,6 +57,33 @@ export interface InscriberConfig {
 }
 
 /**
+ * Security configuration for catalog operations (Phase 7.1)
+ */
+export interface CatalogSecurityConfig {
+  /**
+   * Block installation of untrusted/unknown servers
+   * - New configs (via init): true (safe default)
+   * - Existing configs without security section: false (backward compatibility)
+   */
+  trustedOnly?: boolean;
+
+  /**
+   * npm scopes considered trusted
+   * Packages from these scopes are marked as trusted.
+   * Default: ['@modelcontextprotocol', '@anthropic']
+   */
+  trustedNpmScopes?: string[];
+
+  /**
+   * Enable/disable specific sources for installation
+   * Note: search/view always work regardless of this setting
+   * Only install is blocked when source is disabled.
+   * Example: { smithery: false } to block smithery installs
+   */
+  allowSources?: Record<string, boolean>;
+}
+
+/**
  * Catalog configuration for registry source (Phase 7.0)
  */
 export interface CatalogConfig {
@@ -64,6 +91,8 @@ export interface CatalogConfig {
   defaultSource?: string;
   /** Namespace secrets for catalog sources (e.g., 'catalog.smithery.apiKey' -> encrypted value) */
   secrets?: Record<string, string>;
+  /** Security configuration for trust policy (Phase 7.1) */
+  security?: CatalogSecurityConfig;
 }
 
 export interface Config {

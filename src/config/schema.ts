@@ -2,7 +2,7 @@
  * Config schema validation
  */
 
-import type { Config, Connector, Transport, StdioTransport } from '../types/index.js';
+import type { Config, Connector, Transport, StdioTransport, CatalogSecurityConfig } from '../types/index.js';
 
 export interface ValidationError {
   path: string;
@@ -132,7 +132,73 @@ export function validateConfig(config: unknown): ValidationResult {
     });
   }
 
+  // Validate catalog.security if present
+  if (cfg.catalog && typeof cfg.catalog === 'object') {
+    const catalog = cfg.catalog as Record<string, unknown>;
+    if (catalog.security !== undefined) {
+      errors.push(...validateCatalogSecurity(catalog.security, 'catalog.security'));
+    }
+  }
+
   return { valid: errors.length === 0, errors };
+}
+
+/**
+ * Validate catalog security configuration
+ */
+function validateCatalogSecurity(security: unknown, path: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  if (!security || typeof security !== 'object') {
+    errors.push({ path, message: 'security must be an object' });
+    return errors;
+  }
+
+  const sec = security as CatalogSecurityConfig;
+
+  // trustedOnly must be boolean if present
+  if (sec.trustedOnly !== undefined && typeof sec.trustedOnly !== 'boolean') {
+    errors.push({ path: `${path}.trustedOnly`, message: 'trustedOnly must be a boolean' });
+  }
+
+  // trustedNpmScopes must be array of strings starting with @
+  if (sec.trustedNpmScopes !== undefined) {
+    if (!Array.isArray(sec.trustedNpmScopes)) {
+      errors.push({ path: `${path}.trustedNpmScopes`, message: 'trustedNpmScopes must be an array' });
+    } else {
+      sec.trustedNpmScopes.forEach((scope, i) => {
+        if (typeof scope !== 'string') {
+          errors.push({
+            path: `${path}.trustedNpmScopes[${i}]`,
+            message: 'each scope must be a string',
+          });
+        } else if (!scope.startsWith('@')) {
+          errors.push({
+            path: `${path}.trustedNpmScopes[${i}]`,
+            message: `scope must start with @: "${scope}"`,
+          });
+        }
+      });
+    }
+  }
+
+  // allowSources must be object with boolean values
+  if (sec.allowSources !== undefined) {
+    if (typeof sec.allowSources !== 'object' || sec.allowSources === null || Array.isArray(sec.allowSources)) {
+      errors.push({ path: `${path}.allowSources`, message: 'allowSources must be an object' });
+    } else {
+      for (const [key, value] of Object.entries(sec.allowSources)) {
+        if (typeof value !== 'boolean') {
+          errors.push({
+            path: `${path}.allowSources.${key}`,
+            message: 'each value must be a boolean',
+          });
+        }
+      }
+    }
+  }
+
+  return errors;
 }
 
 /**
