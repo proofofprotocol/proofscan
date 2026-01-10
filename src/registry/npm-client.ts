@@ -117,16 +117,17 @@ export class NpmRegistryClient {
 
     // 2. Search unscoped packages by maintainer for non-default scopes
     // Extract maintainer names from scopes (e.g., @nulab -> nulab)
-    // Only search if query is provided (maintainer search without query returns all packages)
+    // Note: npm search API ignores additional keywords when using maintainer:,
+    // so we fetch all packages by maintainer and filter client-side
     const nonDefaultScopes = scopes.filter(
       (s) => !DEFAULT_TRUSTED_NPM_SCOPES.includes(s)
     );
     if (query) {
       for (const scope of nonDefaultScopes) {
         const maintainer = scope.replace(/^@/, '');
-        const maintainerTerms: string[] = [`maintainer:${maintainer}`, query];
-        const maintainerUrl = `${NPM_SEARCH_URL}?text=${encodeURIComponent(maintainerTerms.join(' '))}&size=${effectiveSize}`;
-        searchPromises.push(this.fetchSearch(maintainerUrl));
+        const maintainerUrl = `${NPM_SEARCH_URL}?text=${encodeURIComponent(`maintainer:${maintainer}`)}&size=${effectiveSize}`;
+        // Filter results client-side since npm API ignores query with maintainer:
+        searchPromises.push(this.fetchSearchWithFilter(maintainerUrl, query));
       }
     }
 
@@ -157,6 +158,29 @@ export class NpmRegistryClient {
       const response = await this.fetch(url);
       const data = (await response.json()) as NpmSearchResponse;
       return data.objects.map((obj) => this.mapToServerInfo(obj.package));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Fetch search results and filter by query string
+   * Used for maintainer search where npm API ignores additional keywords
+   */
+  private async fetchSearchWithFilter(url: string, query: string): Promise<ServerInfo[]> {
+    try {
+      const response = await this.fetch(url);
+      const data = (await response.json()) as NpmSearchResponse;
+
+      // Filter packages that match the query in name or description
+      const lowerQuery = query.toLowerCase();
+      const filtered = data.objects.filter((obj) => {
+        const name = obj.package.name.toLowerCase();
+        const description = (obj.package.description ?? '').toLowerCase();
+        return name.includes(lowerQuery) || description.includes(lowerQuery);
+      });
+
+      return filtered.map((obj) => this.mapToServerInfo(obj.package));
     } catch {
       return [];
     }
