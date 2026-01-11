@@ -277,16 +277,14 @@ export function createRpcCommand(getConfigPath: () => string): Command {
   const cmd = new Command('rpc')
     .description('View RPC call details');
 
-  // rpc list [--session <sid>] [--latest] [--connector <id>]
-  cmd
-    .command('list')
-    .description('List RPC calls for a session')
-    .option('--session <id>', 'Session ID (partial match supported)')
-    .option('--latest', 'Use the latest session')
-    .option('--connector <id>', 'Filter by connector (with --latest)')
-    .option('--fulltime', 'Show full timestamp')
-    .option('--limit <n>', 'Number of RPCs to show', '20')
-    .action(async (options) => {
+  // rpc ls [--session <sid>] [--latest] [--connector <id>]
+  const listAction = async (options: {
+    session?: string;
+    latest?: boolean;
+    connector?: string;
+    fulltime?: boolean;
+    limit: string;
+  }) => {
       try {
         const manager = new ConfigManager(getConfigPath());
         const configDir = manager.getConfigDir();
@@ -353,7 +351,27 @@ export function createRpcCommand(getConfigPath: () => string): Command {
         }
         throw error;
       }
-    });
+  };
+
+  cmd
+    .command('ls')
+    .description('List RPC calls for a session')
+    .option('--session <id>', 'Session ID (partial match supported)')
+    .option('--latest', 'Use the latest session')
+    .option('--connector <id>', 'Filter by connector (with --latest)')
+    .option('--fulltime', 'Show full timestamp')
+    .option('--limit <n>', 'Number of RPCs to show', '20')
+    .action(listAction);
+
+  cmd
+    .command('list')
+    .description('Alias for ls')
+    .option('--session <id>', 'Session ID (partial match supported)')
+    .option('--latest', 'Use the latest session')
+    .option('--connector <id>', 'Filter by connector (with --latest)')
+    .option('--fulltime', 'Show full timestamp')
+    .option('--limit <n>', 'Number of RPCs to show', '20')
+    .action(listAction);
 
   // rpc show [--session <sid>] --id <rpc_id>
   cmd

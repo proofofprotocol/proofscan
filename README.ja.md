@@ -80,6 +80,12 @@ Time         Sym Dir St Method              Session      Extra
 21:01:59.025 • →   notifications/initi... f2442c...
 21:01:59.037 → → ✓ tools/list            f2442c...
 21:01:59.049 ← ← ✓ tools/list            f2442c... lat=12ms size=1.0KB
+
+# リアルタイム監視
+$ pfscan view -f --connector time
+
+# ファイルへエクスポート
+$ pfscan view --export events.csv
 ```
 
 ### 🌳 階層ツリー
@@ -140,35 +146,37 @@ pfscan tool call time get_current_time --args '{}'
 ## コマンド概要
 
 ```
-一般コマンド:
+観察・調査:
   view, v       最近のイベントタイムライン表示（デフォルト）
   tree, t       コネクタ → セッション → RPC 構造表示
-  explore, e    対話的データブラウザ
-  scan, s       新規スキャン実行
-  status, st    システムステータス表示
-  shell         対話型シェル（REPL）TAB 補完付き
   rpc           RPC 呼び出し詳細表示（list, show）
   summary       セッションサマリ表示
-  permissions   カテゴリ別権限統計表示
-  tool          MCP ツール操作（ls, show, call）
+  analyze       セッション横断のツール使用状況分析
 
-管理:
-  archive, a    古いデータのアーカイブと削減
-  config, c     設定管理
+実行・キャプチャ:
+  scan, s       新規スキャン実行
+  proxy         MCP プロキシサーバー
+
+対話的探索:
+  shell         対話型シェル（REPL）TAB 補完付き
+
+MCP ツール操作:
+  tool          MCP ツール操作（ls, show, call）
+  catalog       レジストリから MCP サーバーを検索・表示
+  runners       パッケージランナー管理（npx, uvx）
+
+設定・データ管理:
   connectors    コネクタ管理
+  config, c     設定管理
   secrets       シークレット管理
+  archive, a    データ保持とクリーンアップ
   doctor        データベース診断と修復
+
+証明・台帳:
   popl          公開可能証明台帳
 
-高度な機能:
-  proxy         MCP プロキシサーバー操作
-  log           プロキシログ表示
-  monitor       スキャンイベント監視
-  sessions      セッション管理
-  events        イベントエクスポート
-
 ショートカット:
-  v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
+  v=view  t=tree  s=scan  st=status  a=archive  c=config
 ```
 
 ## ドキュメント
@@ -264,12 +272,13 @@ pfscan rpc list --session abc  # RPC 詳細
 ```bash
 pfscan shell
 
-# セッションに移動
-proofscan> cc time
-proofscan> pwd
+# cd コマンドでナビゲーション
+proofscan> cd time
+proofscan:/time > pwd
 Context: connector=time
 
-proofscan> up abc123
+proofscan:/time > cd abc123
+proofscan:/time/abc123 > pwd
 Context: session=abc123 (connector=time)
 
 # 参照を保存して後で使用

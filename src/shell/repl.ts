@@ -13,7 +13,6 @@ import {
   BLOCKED_SUBCOMMANDS_IN_SHELL,
   DEFAULT_COMPLETION_LIMIT,
   SESSION_SEARCH_LIMIT,
-  getAllowedCommands,
 } from './types.js';
 import { applyContext } from './context-applicator.js';
 import {
@@ -369,11 +368,10 @@ export class ShellRepl {
   }
 
   /**
-   * Handle router-style commands (cc, cd, ls, show, ..)
+   * Handle router-style commands (cd, ls, show, ..)
    */
   private async handleRouterCommand(command: string, args: string[]): Promise<void> {
     switch (command) {
-      case 'cc':
       case 'cd':
         await handleCc(args, this.context, this.configPath);
         break;
@@ -412,10 +410,6 @@ export class ShellRepl {
         handlePwd(this.context, this.configPath, args);
         break;
 
-      case 'use':
-        await this.handleUse(args);
-        break;
-
       case 'reset':
         this.resetContext();
         break;
@@ -429,6 +423,12 @@ export class ShellRepl {
    * Show help
    */
   private showHelp(topic?: string): void {
+    // Handle -a / --all for detailed help
+    if (topic === '-a' || topic === '--all') {
+      this.showDetailedHelp();
+      return;
+    }
+
     // Handle blocked commands
     if (topic && BLOCKED_IN_SHELL.includes(topic)) {
       printError(`'${topic}' is not available in shell mode (stdin conflict)`);
@@ -442,9 +442,44 @@ export class ShellRepl {
     }
 
     console.log(`
+proofscan shell - context-aware interactive exploration
+
+Navigation & Inspection:
+  cd <target>       Change context (/, .., -, <connector>, <session>, @last, @ref:name)
+  ls                List items at current level
+  pwd               Show current path
+  show [target]     Show resource details
+
+References & Tool Calls:
+  ref <action>      Manage references (add, ls, rm)
+  send <tool>       Call MCP tool interactively
+  inscribe @...     Inscribe RPC to blockchain
+
+Session Control:
+  reset             Clear all context
+  help [-a]         Show help (-a for details)
+  clear             Clear screen
+  exit              Exit shell
+
+CLI Commands (also available here):
+  view, tree, scan, summary, rpc, analyze, tool
+  config, connectors, secrets, catalog, archive, doctor
+  popl, runners, status, sessions
+
+Type 'help -a' for detailed command reference.
+`);
+  }
+
+  /**
+   * Show detailed help (help -a)
+   */
+  private showDetailedHelp(): void {
+    console.log(`
+proofscan shell - detailed command reference
+
 Navigation:
-  cd, cc                  Change context (alias for each other)
-    cd /                  Go to root
+  cd <target>             Change context
+    cd /                  Go to root (clear context)
     cd <connector>        Enter connector context
     cd <session>          Enter session (in connector context)
     cd <conn>/<sess>      Enter session directly
@@ -455,40 +490,55 @@ Navigation:
   ls [-l] [--json]        List items at current level
   pwd [--json]            Show current path (--json for RefStruct)
 
-Resource Details (show):
+Resource Details:
   show [target] [--json]  Show resource details (request/response data)
   show @rpc:abc           Show specific RPC details
   show @ref:<name>        Show referenced resource details
 
-Reference Resolution (ref):
+References:
   ref @this               Resolve current context to RefStruct
   ref @last               Resolve latest session/RPC
   ref @rpc:abc            Resolve specific RPC
-  ref @ref:<name>         Resolve saved reference
   ref add <name> @...     Save a reference
-  ref ls                  List all user-defined references
+  ref ls                  List saved references
   ref rm <name>           Remove a reference
 
-Tool Commands:
+Interactive Tool Calls:
   tool ls                 List tools on current connector
-  tool show <name>        Show tool details (description, schema)
-  send <name>             Call a tool interactively
+  tool show <name>        Show tool details
+  send <tool-name>        Call a tool with interactive argument input
   send @last              Replay last RPC call
   send @ref:<name>        Replay from saved reference
 
-Inscribe Commands:
+Inscribe:
   inscribe @rpc:<id>      Inscribe RPC to blockchain
-  inscribe @ref:<name>    Inscribe from saved reference
   inscribe @last          Inscribe latest RPC
-  show @rpc:<id> --json | inscribe   Inscribe via pipe
+  show @... --json | inscribe   Inscribe via pipe
 
-Shell Commands:
-  help [command]          Show help
+Session Control:
+  reset                   Clear all context
+  help [topic]            Show help
   clear                   Clear screen
   exit, quit              Exit shell
 
-ProofScan Commands:
-  ${getAllowedCommands().join(', ')}
+CLI Commands (passthrough to pfscan):
+  view (v)          View recent events timeline (use -f for follow mode)
+  tree (t)          Show connector/session/RPC structure
+  scan (s)          Run a new scan
+  summary           Show session summary and capabilities
+  rpc               View RPC call details (ls, show)
+  analyze           Analyze tool usage across sessions
+  tool              MCP tool operations (ls, show, call)
+  config (c)        Configuration management
+  connectors        Manage MCP server connectors
+  secrets           Secret management
+  catalog (cat)     Search and inspect MCP servers from registry
+  archive (a)       Data retention and cleanup
+  doctor            Diagnose and fix database issues
+  popl              Public Observable Proof Ledger
+  runners           Manage package runners (npx, uvx)
+  status (st)       Show database and system status
+  sessions          Manage scan sessions
 
 Tips:
   - @ is the dereference operator (e.g., @this, @last, @ref:<name>)
@@ -507,152 +557,6 @@ Tips:
     console.log(`  Connector: ${this.context.connector || '(not set)'}`);
     console.log(`  Session:   ${this.context.session ? shortenSessionId(this.context.session) : '(not set)'}`);
     console.log();
-  }
-
-  /**
-   * Handle 'use' command
-   */
-  private async handleUse(args: string[]): Promise<void> {
-    if (args.length === 0) {
-      // Show interactive connector selection
-      if (!canInteract()) {
-        printError('Usage: use <connector> or use session <prefix>');
-        return;
-      }
-
-      const dataProvider = this.getDataProvider();
-      const connectors = dataProvider.getConnectorIds();
-
-      if (connectors.length === 0) {
-        printError('No connectors found. Run a scan first.');
-        return;
-      }
-
-      const selected = await selectConnector(connectors);
-      if (selected) {
-        this.context.connector = selected;
-        this.context.session = undefined;
-        setCurrentSession('', selected); // Save connector only
-        printSuccess(`Connector set to: ${selected}`);
-      }
-      return;
-    }
-
-    if (args[0] === 'session') {
-      if (args.length < 2) {
-        // Show interactive session selection
-        if (!canInteract()) {
-          printError('Usage: use session <prefix>');
-          return;
-        }
-
-        try {
-          const manager = new ConfigManager(this.configPath);
-          const store = new EventLineStore(manager.getConfigDir());
-          const sessions = store.getSessions(this.context.connector, 10);
-
-          if (sessions.length === 0) {
-            printError('No sessions found. Run a scan first.');
-            return;
-          }
-
-          const selected = await selectSession(
-            sessions.map(s => ({ id: s.session_id, connector_id: s.connector_id }))
-          );
-
-          if (selected) {
-            this.context.session = selected;
-            // Also set connector from session
-            const session = sessions.find(s => s.session_id === selected);
-            if (session) {
-              this.context.connector = session.connector_id;
-            }
-            setCurrentSession(selected, this.context.connector);
-            printSuccess(`Session set to: ${shortenSessionId(selected)}`);
-          }
-        } catch (err) {
-          printError(`Failed to load sessions: ${err instanceof Error ? err.message : String(err)}`);
-        }
-        return;
-      }
-
-      // Find session by prefix
-      const prefix = args[1];
-      try {
-        const manager = new ConfigManager(this.configPath);
-        const store = new EventLineStore(manager.getConfigDir());
-        const sessions = store.getSessions(this.context.connector, SESSION_SEARCH_LIMIT);
-        const matches = sessions.filter(s => s.session_id.startsWith(prefix));
-
-        if (matches.length === 0) {
-          printError(`Session not found: ${prefix}`);
-          return;
-        }
-
-        if (matches.length > 1) {
-          // Ambiguous prefix - offer interactive selection if possible
-          if (canInteract()) {
-            printInfo(`Multiple sessions match "${prefix}". Select one:`);
-            const selected = await selectSession(
-              matches.slice(0, 20).map(s => ({ id: s.session_id, connector_id: s.connector_id }))
-            );
-            if (selected) {
-              this.context.session = selected;
-              const session = matches.find(s => s.session_id === selected);
-              if (session) {
-                this.context.connector = session.connector_id;
-              }
-              setCurrentSession(selected, this.context.connector);
-              printSuccess(`Session set to: ${shortenSessionId(selected)} (${this.context.connector})`);
-            }
-          } else {
-            printError(`Ambiguous session prefix: ${prefix}`);
-            printInfo('Matching sessions:');
-            matches.slice(0, 10).forEach(s => {
-              console.log(`  ${shortenSessionId(s.session_id)} (${s.connector_id})`);
-            });
-            if (matches.length > 10) {
-              printInfo(`  ... and ${matches.length - 10} more`);
-            }
-            printInfo('Provide a longer prefix to disambiguate.');
-          }
-          return;
-        }
-
-        const match = matches[0];
-        this.context.session = match.session_id;
-        this.context.connector = match.connector_id;
-        setCurrentSession(match.session_id, match.connector_id);
-        printSuccess(`Session set to: ${shortenSessionId(match.session_id)} (${match.connector_id})`);
-      } catch (err) {
-        printError(`Failed to load sessions: ${err instanceof Error ? err.message : String(err)}`);
-      }
-      return;
-    }
-
-    // Set connector
-    const connectorId = args[0];
-    const dataProvider = this.getDataProvider();
-    const connectors = dataProvider.getConnectorIds();
-
-    if (!connectors.includes(connectorId)) {
-      // Try partial match
-      const match = connectors.find(c => c.startsWith(connectorId));
-      if (match) {
-        this.context.connector = match;
-        this.context.session = undefined;
-        printSuccess(`Connector set to: ${match}`);
-        return;
-      }
-
-      printError(`Connector not found: ${connectorId}`);
-      printInfo(`Available: ${connectors.join(', ')}`);
-      return;
-    }
-
-    this.context.connector = connectorId;
-    this.context.session = undefined;
-    printSuccess(`Connector set to: ${connectorId}`);
   }
 
   /**

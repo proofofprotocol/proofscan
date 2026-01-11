@@ -60,78 +60,103 @@ async function computeArchivePlan(
   };
 }
 
+/**
+ * Show archive status and plan (default action)
+ */
+async function showStatusAndPlan(getConfigPath: () => string): Promise<void> {
+  try {
+    const manager = new ConfigManager(getConfigPath());
+    const config = await manager.load();
+    const eventsStore = new EventsStore(manager.getConfigDir());
+    const proofsStore = new ProofsStore(manager.getConfigDir());
+
+    // Get retention settings with defaults
+    const retention: RetentionConfig = {
+      keep_last_sessions: config.retention?.keep_last_sessions ?? 50,
+      raw_days: config.retention?.raw_days ?? 7,
+      max_db_mb: config.retention?.max_db_mb ?? 500,
+    };
+
+    const plan = await computeArchivePlan(eventsStore, proofsStore, retention, manager.getConfigDir());
+    const dbSizes = getDbSizes(manager.getConfigDir());
+
+    // Get current data stats
+    const sessions = eventsStore.getAllSessions();
+    const protectedIds = proofsStore.getProtectedSessionIds();
+
+    if (getOutputOptions().json) {
+      output({
+        database: {
+          events_db_size: dbSizes.events,
+          proofs_db_size: dbSizes.proofs,
+        },
+        current_data: {
+          total_sessions: sessions.length,
+          protected_sessions: protectedIds.length,
+        },
+        retention,
+        plan,
+      });
+    } else {
+      console.log('Archive Status & Plan');
+      console.log('=====================\n');
+
+      console.log('Database:');
+      console.log(`  events.db:   ${formatBytes(dbSizes.events)}`);
+      console.log(`  proofs.db:   ${formatBytes(dbSizes.proofs)}`);
+      console.log();
+
+      console.log('Current Data:');
+      console.log(`  Sessions:    ${sessions.length} (${protectedIds.length} protected)`);
+      console.log();
+
+      console.log('Retention Settings:');
+      console.log(`  keep_last_sessions: ${retention.keep_last_sessions}`);
+      console.log(`  raw_days: ${retention.raw_days}`);
+      console.log(`  max_db_mb: ${retention.max_db_mb}`);
+      console.log();
+
+      console.log('Cleanup Plan:');
+
+      if (plan.sessions_to_delete.length > 0) {
+        console.log(`  Sessions to delete:  ${plan.sessions_to_delete.length}`);
+        const headers = ['Session ID', 'Connector', 'Events', 'Reason'];
+        const rows = plan.sessions_to_delete.slice(0, 5).map(s => [
+          s.session_id.slice(0, 8) + '...',
+          s.connector_id,
+          String(s.event_count),
+          s.reason,
+        ]);
+        outputTable(headers, rows);
+        if (plan.sessions_to_delete.length > 5) {
+          console.log(`  ... and ${plan.sessions_to_delete.length - 5} more`);
+        }
+      } else {
+        console.log('  Sessions to delete:  0 (within limit)');
+      }
+
+      console.log(`  raw_json to clear:   ${plan.raw_json_to_clear} events (older than ${retention.raw_days} days)`);
+      console.log(`  Estimated savings:   ~${plan.estimated_savings_mb.toFixed(1)} MB`);
+      console.log('\nRun "pfscan archive run --yes" to execute.');
+    }
+  } catch (error) {
+    outputError('Failed to compute archive plan', error instanceof Error ? error : undefined);
+    process.exit(1);
+  }
+}
+
 export function createArchiveCommand(getConfigPath: () => string): Command {
   const cmd = new Command('archive')
-    .description('Manage data retention and cleanup');
-
-  cmd
-    .command('plan')
-    .description('Show what would be archived based on retention settings')
+    .description('Manage data retention and cleanup')
+    .addHelpText('after', `
+Examples:
+  pfscan archive              # Show status and cleanup plan
+  pfscan archive run          # Dry run (show what would be done)
+  pfscan archive run --yes    # Execute cleanup
+`)
     .action(async () => {
-      try {
-        const manager = new ConfigManager(getConfigPath());
-        const config = await manager.load();
-        const eventsStore = new EventsStore(manager.getConfigDir());
-        const proofsStore = new ProofsStore(manager.getConfigDir());
-
-        // Get retention settings with defaults
-        const retention: RetentionConfig = {
-          keep_last_sessions: config.retention?.keep_last_sessions ?? 50,
-          raw_days: config.retention?.raw_days ?? 7,
-          max_db_mb: config.retention?.max_db_mb ?? 500,
-        };
-
-        const plan = await computeArchivePlan(eventsStore, proofsStore, retention, manager.getConfigDir());
-        const dbSizes = getDbSizes(manager.getConfigDir());
-
-        if (getOutputOptions().json) {
-          output({
-            retention,
-            plan,
-            current_db_size_mb: dbSizes.events / (1024 * 1024),
-          });
-        } else {
-          console.log('Archive Plan');
-          console.log('============\n');
-
-          console.log('Retention Settings:');
-          console.log(`  keep_last_sessions: ${retention.keep_last_sessions}`);
-          console.log(`  raw_days: ${retention.raw_days}`);
-          console.log(`  max_db_mb: ${retention.max_db_mb}`);
-          console.log();
-
-          console.log('Current Status:');
-          console.log(`  events.db size: ${formatBytes(dbSizes.events)}`);
-          console.log(`  proofs.db size: ${formatBytes(dbSizes.proofs)}`);
-          console.log();
-
-          console.log('Planned Actions:');
-
-          if (plan.sessions_to_delete.length > 0) {
-            console.log(`\n  Sessions to delete: ${plan.sessions_to_delete.length}`);
-            const headers = ['Session ID', 'Connector', 'Events', 'Reason'];
-            const rows = plan.sessions_to_delete.slice(0, 10).map(s => [
-              s.session_id.slice(0, 8) + '...',
-              s.connector_id,
-              String(s.event_count),
-              s.reason,
-            ]);
-            outputTable(headers, rows);
-            if (plan.sessions_to_delete.length > 10) {
-              console.log(`  ... and ${plan.sessions_to_delete.length - 10} more`);
-            }
-          } else {
-            console.log('  Sessions to delete: 0');
-          }
-
-          console.log(`\n  raw_json to clear: ${plan.raw_json_to_clear} events`);
-          console.log(`  Estimated savings: ~${plan.estimated_savings_mb.toFixed(1)} MB`);
-          console.log('\nRun "pfscan archive run" to execute (or "pfscan archive run --yes" to confirm).');
-        }
-      } catch (error) {
-        outputError('Failed to compute archive plan', error instanceof Error ? error : undefined);
-        process.exit(1);
-      }
+      // Default action: show status and plan
+      await showStatusAndPlan(getConfigPath);
     });
 
   cmd
@@ -227,50 +252,6 @@ export function createArchiveCommand(getConfigPath: () => string): Command {
         }
       } catch (error) {
         outputError('Failed to run archive', error instanceof Error ? error : undefined);
-        process.exit(1);
-      }
-    });
-
-  cmd
-    .command('status')
-    .description('Show current database status')
-    .action(async () => {
-      try {
-        const manager = new ConfigManager(getConfigPath());
-        const eventsStore = new EventsStore(manager.getConfigDir());
-        const proofsStore = new ProofsStore(manager.getConfigDir());
-        const dbSizes = getDbSizes(manager.getConfigDir());
-
-        const sessions = eventsStore.getAllSessions();
-        const proofCount = proofsStore.countProofs();
-        const protectedIds = proofsStore.getProtectedSessionIds();
-        const rawJsonSize = eventsStore.getRawJsonSize();
-
-        const status = {
-          events_db_size: dbSizes.events,
-          proofs_db_size: dbSizes.proofs,
-          total_sessions: sessions.length,
-          protected_sessions: protectedIds.length,
-          total_proofs: proofCount,
-          raw_json_size: rawJsonSize,
-        };
-
-        if (getOutputOptions().json) {
-          output(status);
-        } else {
-          console.log('Database Status');
-          console.log('===============\n');
-
-          console.log(`events.db size: ${formatBytes(dbSizes.events)}`);
-          console.log(`proofs.db size: ${formatBytes(dbSizes.proofs)}`);
-          console.log();
-          console.log(`Total sessions: ${sessions.length}`);
-          console.log(`Protected sessions: ${protectedIds.length}`);
-          console.log(`Total proofs: ${proofCount}`);
-          console.log(`raw_json storage: ${formatBytes(rawJsonSize)}`);
-        }
-      } catch (error) {
-        outputError('Failed to get status', error instanceof Error ? error : undefined);
         process.exit(1);
       }
     });

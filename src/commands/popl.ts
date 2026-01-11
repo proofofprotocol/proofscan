@@ -264,10 +264,10 @@ export function createPoplCommand(getConfigPath: () => string): Command {
       }
     );
 
-  // popl list
+  // popl ls (main) / list (alias)
   cmd
-    .command('list')
-    .alias('ls')
+    .command('ls')
+    .alias('list')
     .description('List POPL entries')
     .option('--oneline', 'One line per entry (compact format)')
     .action(async (options: { oneline?: boolean }) => {

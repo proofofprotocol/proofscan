@@ -80,6 +80,12 @@ Time         Sym Dir St Method              Session      Extra
 21:01:59.025 • →   notifications/initi... f2442c...
 21:01:59.037 → → ✓ tools/list            f2442c...
 21:01:59.049 ← ← ✓ tools/list            f2442c... lat=12ms size=1.0KB
+
+# Real-time monitoring
+$ pfscan view -f --connector time
+
+# Export to file
+$ pfscan view --export events.csv
 ```
 
 ### 🌳 Hierarchical Tree
@@ -140,35 +146,37 @@ pfscan tool call time get_current_time --args '{}'
 ## Command Overview
 
 ```
-Common Commands:
+Observe & Inspect:
   view, v       View recent events timeline (default)
-  tree, t       Show connector → session → rpc structure
-  explore, e    Interactive data browser
-  scan, s       Run a new scan
-  status, st    Show system status
-  shell         Interactive shell (REPL) with TAB completion
+  tree, t       Show connector → session → RPC structure
   rpc           View RPC call details (list, show)
   summary       Show session summary
-  permissions   Show permission stats per category
-  tool          MCP tool operations (ls, show, call)
+  analyze       Analyze tool usage across sessions
 
-Management:
-  archive, a    Archive and prune old data
-  config, c     Configuration management
+Run & Capture:
+  scan, s       Run a new scan
+  proxy         MCP proxy server
+
+Explore Interactively:
+  shell         Interactive shell (REPL) with TAB completion
+
+Work with MCP Tools:
+  tool          MCP tool operations (ls, show, call)
+  catalog       Search and inspect MCP servers from registry
+  runners       Manage package runners (npx, uvx)
+
+Manage Configuration & Data:
   connectors    Connector management
+  config, c     Configuration management
   secrets       Secret management
+  archive, a    Data retention and cleanup
   doctor        Diagnose and fix database issues
+
+Proof & Ledger:
   popl          Public Observable Proof Ledger
 
-Advanced:
-  proxy         MCP proxy server operations
-  log           View proxy logs
-  monitor       Monitor scan events
-  sessions      Session management
-  events        Event export
-
 Shortcuts:
-  v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
+  v=view  t=tree  s=scan  st=status  a=archive  c=config
 ```
 
 ## Documentation
@@ -264,12 +272,13 @@ pfscan rpc list --session abc  # RPC details
 ```bash
 pfscan shell
 
-# Navigate to session
-proofscan> cc time
-proofscan> pwd
+# Navigate using cd command
+proofscan> cd time
+proofscan:/time > pwd
 Context: connector=time
 
-proofscan> up abc123
+proofscan:/time > cd abc123
+proofscan:/time/abc123 > pwd
 Context: session=abc123 (connector=time)
 
 # Save reference and use later

@@ -13,10 +13,8 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
   const cmd = new Command('connectors')
     .description('Manage MCP server connectors');
 
-  cmd
-    .command('list')
-    .description('List all connectors')
-    .action(async () => {
+  // List connectors action
+  const listAction = async () => {
       try {
         const manager = new ConfigManager(getConfigPath());
         const connectors = await manager.getConnectors();
@@ -44,7 +42,17 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
         outputError('Failed to list connectors', error instanceof Error ? error : undefined);
         process.exit(1);
       }
-    });
+  };
+
+  cmd
+    .command('ls')
+    .description('List all connectors')
+    .action(listAction);
+
+  cmd
+    .command('list')
+    .description('Alias for ls')
+    .action(listAction);
 
   cmd
     .command('show')

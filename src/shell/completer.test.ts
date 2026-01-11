@@ -30,11 +30,9 @@ describe('getCompletions', () => {
       // Should include shell builtins
       expect(completions).toContain('help');
       expect(completions).toContain('exit');
-      expect(completions).toContain('use');
 
       // Should include router commands
       expect(completions).toContain('cd');
-      expect(completions).toContain('cc');
       expect(completions).toContain('ls');
       expect(completions).toContain('show');
 
@@ -70,7 +68,7 @@ describe('getCompletions', () => {
     });
   });
 
-  describe('cd/cc command (router navigation)', () => {
+  describe('cd command (router navigation)', () => {
     it('should complete with navigation shortcuts at root', () => {
       const context: ShellContext = {};
       const [completions] = getCompletions('cd ', context, dataProvider);
@@ -98,14 +96,6 @@ describe('getCompletions', () => {
       // Session prefixes (not connector ids)
       expect(completions).toContain('abc12345');
       expect(completions).toContain('def67890');
-    });
-
-    it('should complete cc the same as cd', () => {
-      const context: ShellContext = {};
-      const [cdCompletions] = getCompletions('cd ', context, dataProvider);
-      const [ccCompletions] = getCompletions('cc ', context, dataProvider);
-
-      expect(cdCompletions).toEqual(ccCompletions);
     });
 
     it('should filter by prefix', () => {
@@ -200,25 +190,6 @@ describe('getCompletions', () => {
     });
   });
 
-  describe('use command', () => {
-    it('should complete with session keyword and connector ids', () => {
-      const context: ShellContext = {};
-      const [completions] = getCompletions('use ', context, dataProvider);
-
-      expect(completions).toContain('session');
-      expect(completions).toContain('mcp-server');
-      expect(completions).toContain('my-connector');
-    });
-
-    it('should complete use session with session prefixes', () => {
-      const context: ShellContext = {};
-      const [completions] = getCompletions('use session ', context, dataProvider);
-
-      expect(completions).toContain('abc12345');
-      expect(completions).toContain('def67890');
-    });
-  });
-
   describe('scan command', () => {
     it('should complete scan start with connector ids', () => {
       const context: ShellContext = {};
@@ -275,13 +246,5 @@ describe('getCompletions', () => {
       expect(completions).toHaveLength(1);
     });
 
-    it('should handle empty connector list for use command', () => {
-      const context: ShellContext = {};
-      const [completions] = getCompletions('use ', context, emptyDataProvider);
-
-      // Should still show session keyword
-      expect(completions).toContain('session');
-      expect(completions).toHaveLength(1);
-    });
   });
 });
