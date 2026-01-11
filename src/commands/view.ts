@@ -252,8 +252,8 @@ Examples:
     .option('--export <file>', 'Export events to file (CSV or JSONL based on extension)')
     .action(async (options) => {
       // Compute effective options from aliases (avoid mutating options object)
-      // Commander converts --full-time to options['full-time'], not options.fullTime
-      const showFulltime = options.fulltime || options['full-time'] || options['time-full'];
+      // Commander converts kebab-case (--full-time, --time-full) to camelCase (fullTime, timeFull)
+      const showFulltime = options.fulltime || options.fullTime || options.timeFull;
       const showPairs = options.pairs || options.pair;
       try {
         const manager = new ConfigManager(getConfigPath());
