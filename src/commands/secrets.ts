@@ -41,14 +41,9 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
     .description('Secret management (list, set, edit, prune, export, import)');
 
   // ============================================================
-  // secrets list
+  // secrets ls (main) / list (alias)
   // ============================================================
-  secrets
-    .command('list')
-    .description('List all stored secrets with bindings')
-    .option('--json', 'Output in JSON format')
-    .option('--orphans', 'Show only orphan secrets (not bound to any config)')
-    .action(async (options) => {
+  const listAction = async (options: { json?: boolean; orphans?: boolean }) => {
       try {
         const configPath = getConfigPath();
         const configDir = dirname(configPath);
@@ -110,7 +105,21 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
         outputError(`Failed to list secrets: ${msg}`);
         process.exit(1);
       }
-    });
+  };
+
+  secrets
+    .command('ls')
+    .description('List all stored secrets with bindings')
+    .option('--json', 'Output in JSON format')
+    .option('--orphans', 'Show only orphan secrets (not bound to any config)')
+    .action(listAction);
+
+  secrets
+    .command('list')
+    .description('Alias for ls')
+    .option('--json', 'Output in JSON format')
+    .option('--orphans', 'Show only orphan secrets (not bound to any config)')
+    .action(listAction);
 
   // ============================================================
   // secrets set

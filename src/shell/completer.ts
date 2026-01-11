@@ -81,7 +81,7 @@ function getCandidates(
 
   const firstToken = completedTokens[0];
 
-  // Handle router-style commands (cd, cc, ls, show, ..)
+  // Handle router-style commands (cd, ls, show, ..)
   if (ROUTER_COMMANDS.includes(firstToken)) {
     return getRouterCompletions(firstToken, completedTokens, context, dataProvider);
   }
@@ -118,7 +118,7 @@ function getContextLevel(context: ShellContext): 'root' | 'connector' | 'session
 }
 
 /**
- * Get completions for router-style commands (cd, cc, ls, show, ..)
+ * Get completions for router-style commands (cd, ls, show, ..)
  */
 function getRouterCompletions(
   command: string,
@@ -130,8 +130,7 @@ function getRouterCompletions(
 
   switch (command) {
     case 'cd':
-    case 'cc':
-      // cd/cc expects context-aware targets
+      // cd expects context-aware targets
       if (tokens.length === 1) {
         // Navigation shortcuts
         const candidates = ['/', '..', '-'];
@@ -190,20 +189,9 @@ function getRouterCompletions(
 function getBuiltinCompletions(
   command: string,
   tokens: string[],
-  dataProvider: DynamicDataProvider
+  _dataProvider: DynamicDataProvider
 ): string[] {
   switch (command) {
-    case 'use':
-      if (tokens.length === 1) {
-        // `use <connector>` or `use session`
-        return ['session', ...dataProvider.getConnectorIds()];
-      }
-      if (tokens.length === 2 && tokens[1] === 'session') {
-        // `use session <sessionPrefix>`
-        return dataProvider.getSessionPrefixes(undefined, DEFAULT_COMPLETION_LIMIT);
-      }
-      return [];
-
     case 'help':
       if (tokens.length === 1) {
         return [...SHELL_BUILTINS, ...ROUTER_COMMANDS, ...TOOL_COMMANDS, ...getAllowedCommands()];

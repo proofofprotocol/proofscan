@@ -2,9 +2,15 @@
  * View command - the main entry point for viewing events
  *
  * pfscan view (or just pfscan) shows a timeline of recent events
+ *
+ * Consolidated features:
+ * - Basic event viewing (original view)
+ * - Follow mode for live streaming (from monitor)
+ * - Export to CSV/JSONL (from events export)
  */
 
 import { Command } from 'commander';
+import { createWriteStream } from 'fs';
 import { ConfigManager } from '../config/index.js';
 import { EventLineStore } from '../eventline/store.js';
 import {
@@ -18,6 +24,68 @@ import {
 } from '../eventline/types.js';
 import { groupEventsToPairs } from '../eventline/normalizer.js';
 import { output, getOutputOptions } from '../utils/output.js';
+
+// ============================================================
+// Export helpers (from events.ts)
+// ============================================================
+
+/**
+ * Convert EventLine to CSV row
+ */
+function eventToCSV(event: EventLine): string {
+  const fields = [
+    event.ts_ms,
+    event.seq || '',
+    event.kind,
+    event.direction || '',
+    event.label,
+    event.status,
+    event.connector_id || '',
+    event.session_id || '',
+    event.rpc_id || '',
+    event.latency_ms || '',
+    event.size_bytes || '',
+    event.payload_hash || '',
+    event.summary || '',
+    event.error_code || '',
+  ];
+
+  return fields.map(f => {
+    const str = String(f);
+    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  }).join(',');
+}
+
+/**
+ * Get CSV header
+ */
+function getCSVHeader(): string {
+  return 'ts_ms,seq,kind,direction,label,status,connector_id,session_id,rpc_id,latency_ms,size_bytes,payload_hash,summary,error_code';
+}
+
+/**
+ * Convert EventLine to JSONL
+ */
+function eventToJSONL(event: EventLine): string {
+  return JSON.stringify(event);
+}
+
+/**
+ * Determine export format from filename extension
+ */
+function getExportFormat(filename: string): 'csv' | 'jsonl' {
+  if (filename.endsWith('.csv')) {
+    return 'csv';
+  }
+  return 'jsonl';
+}
+
+// ============================================================
+// Display helpers
+// ============================================================
 
 /**
  * Render a single EventLine to terminal string
@@ -137,7 +205,7 @@ function printHint(events: EventLine[]): void {
     hints.push(`pfscan tree ${connector}`);
   }
   if (session) {
-    hints.push(`pfscan explore --session ${shortenId(session, 8)}`);
+    hints.push(`pfscan summary --session ${shortenId(session, 8)}`);
   }
 
   if (hints.length > 0) {
@@ -149,6 +217,15 @@ function printHint(events: EventLine[]): void {
 export function createViewCommand(getConfigPath: () => string): Command {
   const cmd = new Command('view')
     .description('View recent events timeline (default command)')
+    .addHelpText('after', `
+Examples:
+  pfscan view                       # Show recent events
+  pfscan view --connector time      # Events for specific connector
+  pfscan view --pairs               # Show request/response pairs
+  pfscan view -f                    # Follow mode (real-time updates)
+  pfscan view --export events.csv   # Export to CSV file
+  pfscan view --export events.jsonl # Export to JSONL file
+`)
     .option('--limit <n>', 'Number of events to show', '20')
     .option('--since <time>', 'Show events since (24h, 7d, YYYY-MM-DD)')
     .option('--errors', 'Show only errors')
@@ -161,6 +238,9 @@ export function createViewCommand(getConfigPath: () => string): Command {
     .option('--with-sessions', 'Include session start/end events')
     .option('--pairs', 'Show request/response pairs instead of individual events')
     .option('--pair', 'Alias for --pairs')
+    .option('-f, --follow', 'Follow mode: watch for new events in real-time')
+    .option('--interval <ms>', 'Poll interval in milliseconds for follow mode', '1000')
+    .option('--export <file>', 'Export events to file (CSV or JSONL based on extension)')
     .action(async (options) => {
       // Compute effective options from aliases (avoid mutating options object)
       // Commander converts --full-time to options['full-time'], not options.fullTime
@@ -170,6 +250,105 @@ export function createViewCommand(getConfigPath: () => string): Command {
         const manager = new ConfigManager(getConfigPath());
         const store = new EventLineStore(manager.getConfigDir());
 
+        // Export mode
+        if (options.export) {
+          const exportLimit = parseInt(options.limit, 10) || 1000;
+          const events = store.getRecentEvents({
+            limit: exportLimit,
+            since: options.since,
+            errors: options.errors,
+            method: options.method,
+            connector: options.connector,
+            session: options.session,
+          });
+
+          if (events.length === 0) {
+            console.log('No events to export.');
+            return;
+          }
+
+          const format = getExportFormat(options.export);
+          const stream = createWriteStream(options.export);
+
+          if (format === 'csv') {
+            stream.write(getCSVHeader() + '\n');
+            for (const event of events) {
+              stream.write(eventToCSV(event) + '\n');
+            }
+          } else {
+            for (const event of events) {
+              stream.write(eventToJSONL(event) + '\n');
+            }
+          }
+
+          stream.end();
+          console.log(`Exported ${events.length} events to ${options.export} (${format})`);
+          return;
+        }
+
+        // Follow mode
+        if (options.follow) {
+          const initialEvents = store.getRecentEvents({
+            limit: parseInt(options.limit, 10),
+            connector: options.connector,
+            session: options.session,
+            method: options.method,
+            errors: options.errors,
+          });
+
+          // Print header
+          const connectorInfo = options.connector ? ` for '${options.connector}'` : '';
+          console.log(`Events${connectorInfo} (following, Ctrl+C to stop):\n`);
+          console.log('Time         Sym Dir St Method                         Session');
+          console.log('-'.repeat(80));
+
+          // Print initial events
+          for (const event of initialEvents) {
+            console.log(renderEventLine(event, { fulltime: showFulltime }));
+          }
+
+          // Start polling
+          let lastTs = initialEvents.length > 0 ? initialEvents[initialEvents.length - 1].ts_ms : Date.now();
+          const interval = parseInt(options.interval, 10);
+
+          // Handle Ctrl+C gracefully
+          process.on('SIGINT', () => {
+            console.log('\n\nStopped following.');
+            process.exit(0);
+          });
+
+          const poll = async () => {
+            try {
+              const newEvents = store.getRecentEvents({
+                limit: 50,
+                connector: options.connector,
+                session: options.session,
+                method: options.method,
+                errors: options.errors,
+              }).filter(e => e.ts_ms > lastTs);
+
+              if (newEvents.length > 0) {
+                for (const event of newEvents) {
+                  if (getOutputOptions().json) {
+                    console.log(JSON.stringify(event));
+                  } else {
+                    console.log(renderEventLine(event, { fulltime: showFulltime }));
+                  }
+                }
+                lastTs = newEvents[newEvents.length - 1].ts_ms;
+              }
+            } catch {
+              // Ignore errors during polling
+            }
+          };
+
+          setInterval(poll, interval);
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
+          await new Promise(() => {});
+          return;
+        }
+
+        // Normal mode
         const events = store.getRecentEvents({
           limit: parseInt(options.limit, 10) * (showPairs ? 2 : 1), // Get more events for pairing
           since: options.since,

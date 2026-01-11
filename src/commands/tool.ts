@@ -157,6 +157,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
   // ─────────────────────────────────────────────────────────────────
   cmd
     .command('ls <connector>')
+    .alias('list')
     .description('List tools available on a connector')
     .option('--timeout <sec>', 'Timeout in seconds', '30')
     .action(async (connectorId: string, options: { timeout: string }) => {

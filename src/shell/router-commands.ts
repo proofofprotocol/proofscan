@@ -1,5 +1,5 @@
 /**
- * Router-style commands: cc, ls, show, ..
+ * Router-style commands: cd, ls, show, ..
  *
  * These commands provide a router-cli inspired navigation experience
  * for exploring connectors, sessions, and RPC calls.

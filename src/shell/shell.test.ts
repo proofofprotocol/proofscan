@@ -107,18 +107,6 @@ describe('completer', () => {
       expect(completions).toContain('def67890');
     });
 
-    it('should complete use command with connector and session', () => {
-      const [completions] = getCompletions('use ', context, mockDataProvider);
-      expect(completions).toContain('session');
-      expect(completions).toContain('mcp');
-      expect(completions).toContain('yfinance');
-    });
-
-    it('should complete use session with session prefixes', () => {
-      const [completions] = getCompletions('use session ', context, mockDataProvider);
-      expect(completions).toContain('abc12345');
-      expect(completions).toContain('def67890');
-    });
   });
 });
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * proofscan CLI - Phase 2.1
+ * proofscan CLI
  * MCP Server scanner - eliminate black boxes
  *
  * Command structure (git-style flat):
  *   pfscan view        # View events (default)
  *   pfscan tree        # Structure overview
- *   pfscan explore     # Interactive browse
+ *   pfscan shell       # Interactive REPL
  *   pfscan scan        # Run scan
  *   pfscan status      # System status
  *   pfscan archive     # Archive/prune data
@@ -14,7 +14,7 @@
  *   pfscan connectors  # Connector management
  *
  * Shortcuts:
- *   v = view, t = tree, e = explore, s = scan
+ *   v = view, t = tree, s = scan
  *   st = status, a = archive, c = config
  */
 
@@ -31,17 +31,14 @@ import {
   createConfigCommand,
   createConnectorsCommand,
   createScanCommand,
-  createMonitorCommand,
   createSessionsCommand,
   createArchiveCommand,
   createViewCommand,
   createTreeCommand,
-  createExploreCommand,
   createStatusCommand,
-  createEventsCommand,
   createRpcCommand,
   createSummaryCommand,
-  createPermissionsCommand,
+  createAnalyzeCommand,
   createRecordCommand,
   createDoctorCommand,
   createShellCommand,
@@ -53,6 +50,7 @@ import {
   createCatalogCommand,
   createRunnersCommand,
 } from './commands/index.js';
+import { createHelpCommand, generateGuideHelp } from './help/index.js';
 
 const program = new Command();
 
@@ -63,44 +61,6 @@ function getConfigPath(): string {
   return resolveConfigPath({ configPath: globalConfigPath });
 }
 
-// Custom help formatting
-const HELP_HEADER = `
-proofscan - MCP Server scanner
-Eliminate black boxes by capturing JSON-RPC communication.
-
-Common Commands:
-  view, v       View recent events timeline (default)
-  tree, t       Show connector → session → rpc structure
-  explore, e    Interactive data browser
-  scan, s       Run a new scan
-  status, st    Show system status
-  shell         Interactive shell (REPL) with TAB completion
-  rpc           View RPC call details (list, show)
-  summary       Show session summary
-  permissions   Show permission stats per category
-  tool          MCP tool operations (ls, show, call)
-
-Management:
-  archive, a    Archive and prune old data
-  config, c     Configuration management
-  connectors    Connector management
-  secrets       Secret management (list, set, edit, prune, export, import)
-  doctor        Diagnose and fix database issues
-
-Shortcuts:
-  v=view  t=tree  e=explore  s=scan  st=status  a=archive  c=config
-
-Examples:
-  pfscan                      # View recent events (default)
-  pfscan shell                # Start interactive shell
-  pfscan view --limit 50      # View last 50 events
-  pfscan view --pairs         # View request/response pairs
-  pfscan tree                 # Show structure overview
-  pfscan scan start mcp       # Start scanning connector 'mcp'
-  pfscan tool ls mcp          # List tools on connector
-  pfscan tool call mcp echo --args '{"msg":"hi"}'
-`;
-
 program
   .name('pfscan')
   .description('MCP Server scanner - eliminate black boxes by capturing JSON-RPC')
@@ -108,7 +68,7 @@ program
   .option('-c, --config <path>', 'Path to config file')
   .option('--json', 'Output in JSON format')
   .option('-v, --verbose', 'Verbose output')
-  .addHelpText('before', HELP_HEADER)
+  .helpOption(false) // Disable default help, use custom help command
   .hook('preAction', (thisCommand) => {
     const opts = thisCommand.opts();
     globalConfigPath = opts.config;
@@ -139,15 +99,6 @@ program.addCommand(treeCmd);
 const tCmd = createTreeCommand(getConfigPath);
 tCmd.name('t').description('Alias for tree');
 program.addCommand(tCmd);
-
-// explore
-const exploreCmd = createExploreCommand(getConfigPath);
-program.addCommand(exploreCmd);
-
-// Alias: e = explore
-const eCmd = createExploreCommand(getConfigPath);
-eCmd.name('e').description('Alias for explore');
-program.addCommand(eCmd);
 
 // status
 const statusCmd = createStatusCommand(getConfigPath);
@@ -197,23 +148,17 @@ const connectorCmd = createConnectorsCommand(getConfigPath);
 connectorCmd.name('connector').description('Alias for connectors');
 program.addCommand(connectorCmd);
 
-// sessions (kept for compatibility, but sessions list → view --with-sessions)
+// sessions (kept for compatibility)
 program.addCommand(createSessionsCommand(getConfigPath));
 
-// monitor (kept for compatibility, but monitor tail → view)
-program.addCommand(createMonitorCommand(getConfigPath));
-
-// events (Phase 2.1: events ls, export events)
-program.addCommand(createEventsCommand(getConfigPath));
-
-// rpc (Phase 2.2: rpc list, rpc show)
+// rpc
 program.addCommand(createRpcCommand(getConfigPath));
 
 // summary (Phase 3: capabilities, tool calls, concerns)
 program.addCommand(createSummaryCommand(getConfigPath));
 
-// permissions (Phase 3: detailed permission stats)
-program.addCommand(createPermissionsCommand(getConfigPath));
+// analyze (replaces permissions - cross-session tool analysis)
+program.addCommand(createAnalyzeCommand(getConfigPath));
 
 // record (Phase 3: record dry-run)
 program.addCommand(createRecordCommand(getConfigPath));
@@ -255,6 +200,9 @@ program.addCommand(catCmd);
 // runners (Phase 7.x: Package runners)
 program.addCommand(createRunnersCommand(getConfigPath));
 
+// help (custom help command)
+program.addCommand(createHelpCommand(program));
+
 // ============================================================
 // Default action: pfscan → pfscan view
 // ============================================================
@@ -266,9 +214,9 @@ function hasHelpFlag(): boolean {
 
 // Known CLI commands (registered with commander)
 const KNOWN_COMMANDS = new Set([
-  'view', 'v', 'tree', 't', 'explore', 'e', 'status', 'st',
+  'view', 'v', 'tree', 't', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'monitor', 'events', 'rpc', 'summary', 'permissions', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'help'
+  'connectors', 'connector', 'sessions', 'rpc', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'help'
 ]);
 
 // Shell-only commands (not available as CLI commands)
@@ -314,6 +262,12 @@ if (subcommandCheck.unknownCommand) {
   }
   console.error(`  Run 'pfscan --help' for available commands.`);
   process.exit(1);
+}
+
+// Handle -h / --help at root level
+if (!subcommandCheck.hasCommand && hasHelpFlag()) {
+  console.log(generateGuideHelp());
+  process.exit(0);
 }
 
 if (!subcommandCheck.hasCommand && !hasHelpFlag()) {

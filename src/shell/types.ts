@@ -43,18 +43,15 @@ export interface ShellCommand {
 export const TOP_LEVEL_COMMANDS = [
   'view', 'v',
   'tree', 't',
-  'explore', 'e',
   'scan', 's',
   'status', 'st',
   'archive', 'a',
   'config', 'c',
   'connectors',  // 'connector' alias removed to allow 'conn' prefix matching
   'sessions',
-  'monitor',
-  'events',
   'rpc',
   'summary',
-  'permissions',
+  'analyze',
   'record',
   'doctor',
   'secrets', 'secret',
@@ -118,7 +115,7 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'rpc list': ['--session', '--format'],
   'rpc show': ['--session', '--id', '--format', '--copy'],
   summary: ['--session', '--format'],
-  permissions: ['--session', '--category'],
+  analyze: ['--session', '--latest', '--connector'],
   connectors: ['--id', '--from', '--file', '--stdin', '--name'],
   sessions: ['--limit'],
   archive: ['--older-than', '--dry-run'],
@@ -151,13 +148,12 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
 /**
  * Shell built-in commands
  */
-export const SHELL_BUILTINS = ['use', 'reset', 'pwd', 'help', 'exit', 'quit', 'clear'];
+export const SHELL_BUILTINS = ['reset', 'pwd', 'help', 'exit', 'quit', 'clear'];
 
 /**
  * Router-style navigation commands
- * Note: 'cd' is an alias for 'cc'
  */
-export const ROUTER_COMMANDS = ['cc', 'cd', 'ls', 'show', '..'];
+export const ROUTER_COMMANDS = ['cd', 'ls', 'show', '..'];
 
 /**
  * Shell-native tool commands (Phase 4.0)
@@ -187,7 +183,7 @@ export const INSCRIBE_COMMANDS = ['inscribe'];
  *
  * Users should exit shell first, then run: pfscan <command>
  */
-export const BLOCKED_IN_SHELL = ['explore', 'e'];
+export const BLOCKED_IN_SHELL: string[] = [];
 
 /**
  * Subcommands blocked in shell mode due to stdin conflicts (hidden input).
