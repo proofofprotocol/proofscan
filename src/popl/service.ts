@@ -248,6 +248,258 @@ export async function createSessionPoplEntry(
 }
 
 /**
+ * Create a POPL entry for a validation plan
+ *
+ * Plans are static definitions, so POPL entries contain the plan YAML and metadata.
+ */
+export async function createPlanPoplEntry(
+  planName: string,
+  planDigest: string,
+  planYaml: string,
+  planDescription: string | undefined,
+  options: Omit<CreatePoplOptions, 'kind' | 'ids'>
+): Promise<CreatePoplResult> {
+  const { outputRoot, title, author } = options;
+
+  // Validate .popl exists
+  if (!hasPoplDir(outputRoot)) {
+    return {
+      success: false,
+      error: '.popl directory not found. Run "pfscan popl init" first.',
+    };
+  }
+
+  try {
+    // Generate entry ID
+    const entryId = ulid();
+
+    // Create entry directory
+    const entryPath = join(getPoplEntriesDir(outputRoot), entryId);
+    await mkdir(entryPath, { recursive: true });
+
+    // Write plan.yaml artifact
+    const planArtifactPath = join(entryPath, 'plan.yaml');
+    await writeFile(planArtifactPath, planYaml, 'utf-8');
+
+    // Calculate hash
+    const crypto = await import('crypto');
+    const planHash = crypto.createHash('sha256').update(planYaml).digest('hex');
+
+    // Load config for author
+    const config = await loadPoplConfig(outputRoot);
+    const effectiveAuthor: PoplAuthor = author || config.author || { name: 'Unknown' };
+
+    // Generate title
+    const createdAt = new Date();
+    const effectiveTitle = title || `Validation Plan: ${planName}`;
+
+    // Build POPL document
+    const poplDoc: PoplDocument = {
+      popl: POPL_VERSION,
+      entry: {
+        id: entryId,
+        created_at: createdAt.toISOString(),
+        title: effectiveTitle,
+        author: effectiveAuthor,
+        trust: {
+          level: 0 as TrustLevel,
+          label: TRUST_LABELS[0],
+        },
+      },
+      target: {
+        kind: 'plan',
+        name: planName,
+        ids: {
+          plan_name: planName,
+        },
+      },
+      capture: {
+        window: {
+          started_at: createdAt.toISOString(),
+          ended_at: createdAt.toISOString(),
+        },
+        summary: {
+          rpc_total: 0,
+          errors: 0,
+        },
+      },
+      evidence: {
+        policy: {
+          redaction: 'none',
+          ruleset_version: SANITIZER_RULESET_VERSION,
+        },
+        artifacts: [
+          {
+            name: 'Plan Definition',
+            path: 'plan.yaml',
+            sha256: planHash,
+          },
+        ],
+      },
+    };
+
+    // Write POPL.yml
+    const poplYmlPath = join(entryPath, 'POPL.yml');
+    const poplYmlContent = yaml.stringify(poplDoc);
+    await writeFile(poplYmlPath, poplYmlContent, 'utf-8');
+
+    return {
+      success: true,
+      entryId,
+      entryPath: toRelativePath(entryPath, outputRoot),
+      poplYmlPath: toRelativePath(poplYmlPath, outputRoot),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * Create a POPL entry for a plan run
+ *
+ * Run entries contain the execution results, inventory, and plan used.
+ */
+export async function createRunPoplEntry(
+  runId: string,
+  planName: string | null,
+  planDigest: string,
+  connectorId: string,
+  status: string,
+  resultsJson: string,
+  inventoryJson: string,
+  planYaml: string,
+  startedAt: string,
+  endedAt: string,
+  options: Omit<CreatePoplOptions, 'kind' | 'ids'>
+): Promise<CreatePoplResult> {
+  const { outputRoot, title, author } = options;
+
+  // Validate .popl exists
+  if (!hasPoplDir(outputRoot)) {
+    return {
+      success: false,
+      error: '.popl directory not found. Run "pfscan popl init" first.',
+    };
+  }
+
+  try {
+    // Generate entry ID
+    const entryId = ulid();
+
+    // Create entry directory
+    const entryPath = join(getPoplEntriesDir(outputRoot), entryId);
+    await mkdir(entryPath, { recursive: true });
+
+    // Write artifacts
+    const artifacts = [
+      { name: 'results.json', content: resultsJson },
+      { name: 'inventory.json', content: inventoryJson },
+      { name: 'plan.yaml', content: planYaml },
+    ];
+
+    const crypto = await import('crypto');
+    const artifactList: { name: string; path: string; sha256: string }[] = [];
+
+    for (const artifact of artifacts) {
+      const artifactPath = join(entryPath, artifact.name);
+      await writeFile(artifactPath, artifact.content, 'utf-8');
+      const hash = crypto.createHash('sha256').update(artifact.content).digest('hex');
+      artifactList.push({
+        name: artifact.name,
+        path: artifact.name,
+        sha256: hash,
+      });
+    }
+
+    // Calculate stats from results
+    let rpcTotal = 0;
+    let errors = 0;
+    try {
+      const results = JSON.parse(resultsJson);
+      if (Array.isArray(results)) {
+        rpcTotal = results.filter((r: { skipped?: boolean }) => !r.skipped).length;
+        errors = results.filter((r: { response?: { error?: unknown } }) => r.response?.error).length;
+      }
+    } catch {
+      // Ignore parse errors
+    }
+
+    // Load config for author
+    const config = await loadPoplConfig(outputRoot);
+    const effectiveAuthor: PoplAuthor = author || config.author || { name: 'Unknown' };
+
+    // Generate title
+    const createdAt = new Date();
+    const planLabel = planName || `digest:${planDigest.slice(0, 8)}`;
+    const effectiveTitle = title || `Plan Run: ${planLabel} on ${connectorId}`;
+
+    // Build POPL document
+    const poplDoc: PoplDocument = {
+      popl: POPL_VERSION,
+      entry: {
+        id: entryId,
+        created_at: createdAt.toISOString(),
+        title: effectiveTitle,
+        author: effectiveAuthor,
+        trust: {
+          level: 0 as TrustLevel,
+          label: TRUST_LABELS[0],
+        },
+      },
+      target: {
+        kind: 'run',
+        name: `run:${runId.slice(0, 8)}`,
+        ids: {
+          run_id: runId,
+          connector_id: connectorId,
+          ...(planName && { plan_name: planName }),
+        },
+      },
+      capture: {
+        window: {
+          started_at: startedAt,
+          ended_at: endedAt,
+        },
+        summary: {
+          rpc_total: rpcTotal,
+          errors,
+        },
+        mcp: {
+          servers: [{ name: connectorId }],
+        },
+      },
+      evidence: {
+        policy: {
+          redaction: 'default',
+          ruleset_version: SANITIZER_RULESET_VERSION,
+        },
+        artifacts: artifactList,
+      },
+    };
+
+    // Write POPL.yml
+    const poplYmlPath = join(entryPath, 'POPL.yml');
+    const poplYmlContent = yaml.stringify(poplDoc);
+    await writeFile(poplYmlPath, poplYmlContent, 'utf-8');
+
+    return {
+      success: true,
+      entryId,
+      entryPath: toRelativePath(entryPath, outputRoot),
+      poplYmlPath: toRelativePath(poplYmlPath, outputRoot),
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
  * List existing POPL entries
  */
 export async function listPoplEntries(

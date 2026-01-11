@@ -49,6 +49,7 @@ import {
   createPoplCommand,
   createCatalogCommand,
   createRunnersCommand,
+  createPlansCommand,
 } from './commands/index.js';
 import { createHelpCommand, generateGuideHelp } from './help/index.js';
 
@@ -200,6 +201,9 @@ program.addCommand(catCmd);
 // runners (Phase 7.x: Package runners)
 program.addCommand(createRunnersCommand(getConfigPath));
 
+// plans (Phase 5.2: Validation plans)
+program.addCommand(createPlansCommand(getConfigPath));
+
 // i18n (Issue #47: Internationalization utilities)
 import { createI18nCommand } from './commands/i18n.js';
 program.addCommand(createI18nCommand());
@@ -220,7 +224,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'rpc', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'i18n', 'help'
+  'connectors', 'connector', 'sessions', 'rpc', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'plans', 'i18n', 'help'
 ]);
 
 // Shell-only commands (not available as CLI commands)

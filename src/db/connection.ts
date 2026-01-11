@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -266,7 +266,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
 }
 
 /**
- * Initialize proofs.db
+ * Initialize proofs.db with migrations
  */
 function initProofsDb(dir: string): Database.Database {
   const dbPath = join(dir, 'proofs.db');
@@ -275,13 +275,50 @@ function initProofsDb(dir: string): Database.Database {
   // Check version
   const currentVersion = db.pragma('user_version', { simple: true }) as number;
 
-  if (currentVersion < PROOFS_DB_VERSION) {
-    // Run migrations
+  if (currentVersion === 0) {
+    // Fresh database - create full schema
     db.exec(PROOFS_DB_SCHEMA);
+    db.pragma(`user_version = ${PROOFS_DB_VERSION}`);
+  } else if (currentVersion < PROOFS_DB_VERSION) {
+    // Run incremental migrations
+    runProofsMigrations(db, currentVersion);
     db.pragma(`user_version = ${PROOFS_DB_VERSION}`);
   }
 
   return db;
+}
+
+/**
+ * Run incremental migrations for proofs.db
+ */
+function runProofsMigrations(db: Database.Database, fromVersion: number): void {
+  // Migration 1 → 2: Add plans and runs tables (Phase 5.2)
+  if (fromVersion < 2) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      const statements = PROOFS_DB_MIGRATION_1_TO_2
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Ignore "table already exists" errors
+          if (err instanceof Error && !err.message.includes('already exists')) {
+            throw err;
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
 }
 
 /**

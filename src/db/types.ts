@@ -99,9 +99,10 @@ export interface ArchivePlan {
   estimated_savings_mb: number;
 }
 
-// User-defined references (Phase 4.1)
+// User-defined references (Phase 4.1 + Phase 5.2)
 // Note: 'popl' kind stores target as 'popl/<entry_id>' (no local paths for public ledger safety)
-export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context' | 'popl';
+// Note: 'plan' kind stores plan_name, 'run' kind stores run_id
+export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context' | 'popl' | 'plan' | 'run';
 
 export interface UserRef {
   name: string;

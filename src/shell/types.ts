@@ -57,6 +57,7 @@ export const TOP_LEVEL_COMMANDS = [
   'secrets', 'secret',
   'catalog', 'cat',
   'runners',
+  'plans',
 ];
 
 /**
@@ -82,6 +83,7 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   'catalog sources': ['list', 'set'],
   'cat sources': ['list', 'set'],
   runners: ['list', 'ls', 'doctor'],
+  plans: ['ls', 'list', 'show', 'add', 'delete', 'import', 'export', 'run', 'runs', 'run-show'],
 };
 
 /**
@@ -143,6 +145,16 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   runners: [],
   'runners list': [],
   'runners doctor': [],
+  plans: ['--json'],
+  'plans ls': ['--json'],
+  'plans show': ['--raw', '--json'],
+  'plans add': ['--file', '--stdin'],
+  'plans delete': ['--force'],
+  'plans import': ['--file', '--stdin'],
+  'plans export': ['--file', '--stdout'],
+  'plans run': ['--connector', '--out', '--timeout', '--dry-run', '--json'],
+  'plans runs': ['--plan', '--limit'],
+  'plans run-show': ['--json'],
 };
 
 /**

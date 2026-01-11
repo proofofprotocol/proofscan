@@ -19,8 +19,10 @@ import { getContextLevel, type ContextLevel } from './router-commands.js';
 /**
  * Reference kind - what type of entity the reference points to
  * Note: 'popl' kind stores POPL entry ID - target format is 'popl/<entry_id>'
+ * Note: 'plan' kind refers to validation plans by name
+ * Note: 'run' kind refers to plan execution runs by ID
  */
-export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context' | 'popl';
+export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context' | 'popl' | 'plan' | 'run';
 
 /**
  * RefStruct - The universal reference structure
@@ -49,6 +51,10 @@ export interface RefStruct {
   target?: string;
   /** POPL entry ID (for kind='popl') */
   entry_id?: string;
+  /** Plan name (for kind='plan') */
+  plan_name?: string;
+  /** Run ID (for kind='run') */
+  run_id?: string;
 }
 
 /**
@@ -56,8 +62,8 @@ export interface RefStruct {
  */
 export interface ParsedRef {
   /** Reference type */
-  type: 'this' | 'last' | 'rpc' | 'session' | 'fav' | 'ref' | 'popl' | 'literal';
-  /** Optional identifier (e.g., RPC ID, favorite name, POPL entry ID) */
+  type: 'this' | 'last' | 'rpc' | 'session' | 'fav' | 'ref' | 'popl' | 'plan' | 'run' | 'literal';
+  /** Optional identifier (e.g., RPC ID, favorite name, POPL entry ID, plan name, run ID) */
   id?: string;
   /** Original input string */
   raw: string;
@@ -89,6 +95,12 @@ export interface RefDataProvider {
   getUserRef(name: string): RefStruct | null;
   /** Get favorite by name */
   getFavorite(name: string): RefStruct | null;
+  /** Get plan by name (optional - for @plan refs) */
+  getPlan?(name: string): { name: string; digest_sha256: string } | null;
+  /** Get run by ID (optional - for @run refs) */
+  getRun?(runId: string): { run_id: string; plan_name: string | null; plan_digest: string } | null;
+  /** Get latest run (optional - for @run:last) */
+  getLatestRun?(): { run_id: string; plan_name: string | null; plan_digest: string } | null;
 }
 
 /**
@@ -145,6 +157,10 @@ export function parseRef(input: string): ParsedRef {
       return { type: 'ref', id: refId, raw: input };
     case 'popl':
       return { type: 'popl', id: refId, raw: input };
+    case 'plan':
+      return { type: 'plan', id: refId, raw: input };
+    case 'run':
+      return { type: 'run', id: refId, raw: input };
     default:
       // Unknown type - treat as literal
       return { type: 'literal', raw: input };
@@ -396,6 +412,122 @@ export class RefResolver {
   }
 
   /**
+   * Resolve @plan:<name> to validation plan reference
+   */
+  resolvePlan(planName: string): ResolveResult {
+    if (!planName) {
+      return {
+        success: false,
+        error: 'Plan reference requires a name',
+      };
+    }
+
+    // Check if data provider has getPlan method
+    if (!this.dataProvider.getPlan) {
+      return {
+        success: true,
+        ref: {
+          kind: 'plan',
+          plan_name: planName,
+          captured_at: new Date().toISOString(),
+          source: `@plan:${planName}`,
+        },
+      };
+    }
+
+    const plan = this.dataProvider.getPlan(planName);
+    if (!plan) {
+      return {
+        success: false,
+        error: `Plan not found: @plan:${planName}. Use 'plans ls' to list available plans.`,
+      };
+    }
+
+    return {
+      success: true,
+      ref: {
+        kind: 'plan',
+        plan_name: plan.name,
+        captured_at: new Date().toISOString(),
+        source: `@plan:${planName}`,
+      },
+    };
+  }
+
+  /**
+   * Resolve @run:<id> or @run:last to plan run reference
+   */
+  resolveRun(runId: string): ResolveResult {
+    if (!runId) {
+      return {
+        success: false,
+        error: 'Run reference requires an ID or "last"',
+      };
+    }
+
+    // Handle @run:last
+    if (runId === 'last') {
+      if (!this.dataProvider.getLatestRun) {
+        return {
+          success: false,
+          error: 'Run resolution not available',
+        };
+      }
+
+      const latestRun = this.dataProvider.getLatestRun();
+      if (!latestRun) {
+        return {
+          success: false,
+          error: 'No runs found. Use "plans run" to execute a plan first.',
+        };
+      }
+
+      return {
+        success: true,
+        ref: {
+          kind: 'run',
+          run_id: latestRun.run_id,
+          plan_name: latestRun.plan_name || undefined,
+          captured_at: new Date().toISOString(),
+          source: '@run:last',
+        },
+      };
+    }
+
+    // Check if data provider has getRun method
+    if (!this.dataProvider.getRun) {
+      return {
+        success: true,
+        ref: {
+          kind: 'run',
+          run_id: runId,
+          captured_at: new Date().toISOString(),
+          source: `@run:${runId}`,
+        },
+      };
+    }
+
+    const run = this.dataProvider.getRun(runId);
+    if (!run) {
+      return {
+        success: false,
+        error: `Run not found: @run:${runId}. Use 'plans runs' to list available runs.`,
+      };
+    }
+
+    return {
+      success: true,
+      ref: {
+        kind: 'run',
+        run_id: run.run_id,
+        plan_name: run.plan_name || undefined,
+        captured_at: new Date().toISOString(),
+        source: `@run:${runId}`,
+      },
+    };
+  }
+
+  /**
    * Resolve any reference string
    */
   resolve(input: string, context: ShellContext): ResolveResult {
@@ -431,6 +563,16 @@ export class RefResolver {
           return { success: false, error: 'POPL reference requires an entry ID' };
         }
         return this.resolvePopl(parsed.id);
+      case 'plan':
+        if (!parsed.id) {
+          return { success: false, error: 'Plan reference requires a name' };
+        }
+        return this.resolvePlan(parsed.id);
+      case 'run':
+        if (!parsed.id) {
+          return { success: false, error: 'Run reference requires an ID or "last"' };
+        }
+        return this.resolveRun(parsed.id);
       case 'literal':
         return {
           success: false,
@@ -465,6 +607,12 @@ export class RefResolver {
       if (ref.entry_id) {
         // For popl refs, use entry_id
         resolved.push(ref.entry_id);
+      } else if (ref.run_id) {
+        // For run refs, use run_id
+        resolved.push(ref.run_id);
+      } else if (ref.plan_name) {
+        // For plan refs, use plan_name
+        resolved.push(ref.plan_name);
       } else if (ref.rpc) {
         resolved.push(ref.rpc);
       } else if (ref.session) {
@@ -544,7 +692,7 @@ export function refFromJson(json: string): RefStruct | null {
     }
 
     // Validate required fields for standard refs
-    const validKinds = ['connector', 'session', 'rpc', 'tool_call', 'context', 'popl'];
+    const validKinds = ['connector', 'session', 'rpc', 'tool_call', 'context', 'popl', 'plan', 'run'];
     if (!parsed.kind || !validKinds.includes(parsed.kind)) {
       return null;
     }
