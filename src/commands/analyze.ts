@@ -22,7 +22,7 @@ import {
   OperationCategory,
   CATEGORY_ORDER,
   CATEGORY_ORDER_FRIENDLY,
-  CATEGORY_LABELS,
+  getCategoryLabel,
   ToolInfo,
   CategoryStats,
   ToolPermission,
@@ -38,6 +38,7 @@ import {
   getLatestToolsForConnector,
   getSessionsForConnector,
 } from '../db/tool-analysis.js';
+import { t } from '../i18n/index.js';
 
 // ============================================================
 // Types
@@ -344,7 +345,7 @@ function renderOverallAnalysis(data: OverallAnalysisData): void {
       const count = data.by_category[cat];
       if (count > 0) {
         const pct = Math.round((count / totalCalls) * 100);
-        console.log(`  ${CATEGORY_LABELS[cat].padEnd(24)} ${count} calls (${pct}%)`);
+        console.log(`  ${getCategoryLabel(cat).padEnd(24)} ${count} calls (${pct}%)`);
       }
     }
   }
@@ -369,7 +370,7 @@ function renderConnectorAnalysis(data: ConnectorAnalysisData): void {
       const tools = toolsByCategory[cat];
       if (tools.length > 0) {
         for (const tool of tools) {
-          console.log(`  ${tool.name.padEnd(24)} ${CATEGORY_LABELS[cat]}`);
+          console.log(`  ${tool.name.padEnd(24)} ${getCategoryLabel(cat)}`);
         }
       }
     }
@@ -394,7 +395,7 @@ function renderConnectorAnalysis(data: ConnectorAnalysisData): void {
       const count = data.by_category[cat];
       if (count > 0) {
         const pct = Math.round((count / totalCalls) * 100);
-        console.log(`  ${CATEGORY_LABELS[cat].padEnd(24)} ${count} calls (${pct}%)`);
+        console.log(`  ${getCategoryLabel(cat).padEnd(24)} ${count} calls (${pct}%)`);
       }
     }
   }
@@ -409,22 +410,22 @@ function renderSessionAnalysis(data: SessionAnalysisData): void {
 
   for (const cat of CATEGORY_ORDER_FRIENDLY) {
     const stats = data.categories[cat];
-    const label = CATEGORY_LABELS[cat];
+    const label = getCategoryLabel(cat);
 
     // Category header
-    console.log(`【${label}】`);
+    console.log(t('analyze.section.header', { label }));
 
     // Permission/usage
     const hasPermission = stats.allowed_tool_count > 0;
-    console.log(`  許可: ${hasPermission ? 'あり' : 'なし'}`);
-    console.log(`  使用: ${stats.called_count} 回`);
+    console.log(`  ${t('analyze.permission.label')}: ${hasPermission ? t('analyze.permission.allowed') : t('analyze.permission.denied')}`);
+    console.log(`  ${t('analyze.usage.label')}: ${t('analyze.usage.count', { count: stats.called_count })}`);
 
     // Tool list
     if (stats.tools.length > 0) {
       console.log();
       for (const tool of stats.tools) {
-        const allowedMark = tool.allowed ? '' : ' (未許可)';
-        console.log(`    ${tool.name}: ${tool.called} 回${allowedMark}`);
+        const allowedMark = tool.allowed ? '' : ` ${t('analyze.notAllowed')}`;
+        console.log(`    ${tool.name}: ${t('analyze.usage.count', { count: tool.called })}${allowedMark}`);
       }
     }
 
@@ -433,7 +434,7 @@ function renderSessionAnalysis(data: SessionAnalysisData): void {
 
   // Totals
   console.log('─'.repeat(40));
-  console.log(`合計: ${data.totals.allowed_tool_count} ツール許可, ${data.totals.called_count} 回使用`);
+  console.log(t('analyze.total', { allowed: data.totals.allowed_tool_count, count: data.totals.called_count }));
 }
 
 // ============================================================

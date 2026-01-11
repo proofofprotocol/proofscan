@@ -27,6 +27,8 @@ import {
   formatSessionError,
 } from '../utils/session-resolver.js';
 import { shortenId } from '../eventline/types.js';
+import { getCategoryLabel } from '../db/tool-analysis.js';
+import { t } from '../i18n/index.js';
 
 // ============================================================
 // Types
@@ -34,15 +36,6 @@ import { shortenId } from '../eventline/types.js';
 
 /** Operation category */
 export type OperationCategory = 'read' | 'write' | 'network' | 'exec' | 'other';
-
-/** Japanese labels for categories (Phase 3 UX format) */
-const CATEGORY_LABELS: Record<OperationCategory, string> = {
-  read: '読み取り（Read）',
-  write: '書き込み（Write）',
-  network: 'ネット接続（Network）',
-  exec: 'コマンド実行（Exec）',
-  other: 'その他操作（Other）',
-};
 
 /** Tool info extracted from tools/list response */
 export interface ToolInfo {
@@ -601,15 +594,11 @@ function generateSummary(
 // ============================================================
 
 /**
- * Note code to Japanese message mapping
+ * Get note message from i18n
  */
-const NOTE_MESSAGES: Record<string, string> = {
-  exec_called: 'コマンド実行が行われました',
-  exec_capable: 'コマンド実行可能なツールがあります',
-  write_called: '書き込み操作が行われました',
-  network_called: '外部ネットワーク接続が行われました',
-  no_sensitive_calls: '重要な操作（書き込み・ネット接続・コマンド実行）は実行されていません',
-};
+function getNoteMessage(code: string): string {
+  return t(`summary.notes.${code}`);
+}
 
 /**
  * Render summary to terminal (Phase 3 UX format)
@@ -626,9 +615,9 @@ function renderSummary(data: SummaryData): void {
   console.log();
 
   // ============================================================
-  // 【できること（capability）】
+  // Capabilities section
   // ============================================================
-  console.log(`【できること（capability）】 ${data.capabilities.total_count} 種類`);
+  console.log(t('summary.section.capability', { count: data.capabilities.total_count }));
   console.log();
 
   // Show tools by category
@@ -639,20 +628,20 @@ function renderSummary(data: SummaryData): void {
     const tools = data.capabilities.by_category[cat];
     if (tools.length > 0) {
       hasAnyCapability = true;
-      console.log(`  ${CATEGORY_LABELS[cat]}: ${tools.join(', ')}`);
+      console.log(`  ${getCategoryLabel(cat)}: ${tools.join(', ')}`);
     }
   }
 
   if (!hasAnyCapability) {
-    console.log('  (なし)');
+    console.log(`  ${t('common.none')}`);
   }
 
   console.log();
 
   // ============================================================
-  // 【やったこと（tool call）】
+  // Tool calls section
   // ============================================================
-  console.log(`【やったこと（tool call）】 ${data.tool_calls.total_count} 回`);
+  console.log(t('summary.section.toolCall', { count: data.tool_calls.total_count }));
   console.log();
 
   let hasAnyCall = false;
@@ -662,33 +651,33 @@ function renderSummary(data: SummaryData): void {
     if (calls.length > 0) {
       hasAnyCall = true;
       const callStrings = calls.map(c =>
-        c.count > 1 ? `${c.name} (${c.count}回)` : c.name
+        c.count > 1 ? `${c.name} (${t('common.times', { count: c.count })})` : c.name
       );
-      console.log(`  ${CATEGORY_LABELS[cat]}: ${callStrings.join(', ')}`);
+      console.log(`  ${getCategoryLabel(cat)}: ${callStrings.join(', ')}`);
     }
   }
 
   if (!hasAnyCall) {
-    console.log('  (なし)');
+    console.log(`  ${t('common.none')}`);
   }
 
   console.log();
 
   // ============================================================
-  // 【注意点】
+  // Notes section
   // ============================================================
-  console.log('【注意点】');
+  console.log(t('summary.section.notes'));
   console.log();
 
   if (data.notes.length > 0) {
     for (const note of data.notes) {
-      const message = NOTE_MESSAGES[note.code] || note.code;
+      const message = getNoteMessage(note.code);
       const icon = note.severity === 'critical' ? '🔴' :
                    note.severity === 'warn' ? '⚠️' : 'ℹ️';
       console.log(`  ${icon} ${message}`);
     }
   } else {
-    console.log('  (なし)');
+    console.log(`  ${t('common.none')}`);
   }
 
   // Phase 3.4: Show secret refs if any

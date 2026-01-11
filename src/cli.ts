@@ -200,6 +200,10 @@ program.addCommand(catCmd);
 // runners (Phase 7.x: Package runners)
 program.addCommand(createRunnersCommand(getConfigPath));
 
+// i18n (Issue #47: Internationalization utilities)
+import { createI18nCommand } from './commands/i18n.js';
+program.addCommand(createI18nCommand());
+
 // help (custom help command)
 program.addCommand(createHelpCommand(program));
 
@@ -216,7 +220,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'rpc', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'help'
+  'connectors', 'connector', 'sessions', 'rpc', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'i18n', 'help'
 ]);
 
 // Shell-only commands (not available as CLI commands)
