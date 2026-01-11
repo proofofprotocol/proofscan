@@ -10,7 +10,8 @@
  */
 
 import { Command } from 'commander';
-import { createWriteStream } from 'fs';
+import { createWriteStream, existsSync } from 'fs';
+import { resolve, dirname, isAbsolute } from 'path';
 import { ConfigManager } from '../config/index.js';
 import { EventLineStore } from '../eventline/store.js';
 import {
@@ -261,6 +262,33 @@ Examples:
 
         // Export mode
         if (options.export) {
+          // Validate export file path
+          const exportPath = isAbsolute(options.export)
+            ? options.export
+            : resolve(process.cwd(), options.export);
+
+          // Security: prevent directory traversal attacks
+          const resolvedPath = resolve(exportPath);
+          const cwd = process.cwd();
+          // Allow absolute paths but warn if outside cwd
+          if (!resolvedPath.startsWith(cwd) && !isAbsolute(options.export)) {
+            console.error('Error: Export path escapes current directory.');
+            console.error('Use an absolute path or a path within the current directory.');
+            process.exit(1);
+          }
+
+          // Check if file exists (warn about overwrite)
+          if (existsSync(resolvedPath)) {
+            console.log(`Warning: File '${options.export}' already exists. Overwriting...`);
+          }
+
+          // Verify parent directory exists
+          const parentDir = dirname(resolvedPath);
+          if (!existsSync(parentDir)) {
+            console.error(`Error: Parent directory does not exist: ${parentDir}`);
+            process.exit(1);
+          }
+
           const exportLimit = parseInt(options.limit, 10) || 1000;
           const events = store.getRecentEvents({
             limit: exportLimit,
@@ -277,7 +305,7 @@ Examples:
           }
 
           const format = getExportFormat(options.export);
-          const stream = createWriteStream(options.export);
+          const stream = createWriteStream(resolvedPath);
 
           if (format === 'csv') {
             stream.write(getCSVHeader() + '\n');
@@ -316,25 +344,49 @@ Examples:
             console.log(renderEventLine(event, { fulltime: showFulltime }));
           }
 
-          // Start polling
+          // Use event seq (or ts_ms + session_id) for deduplication to avoid race condition
+          // Track seen events by their unique identifier
+          const seenEvents = new Set<string>();
+          for (const event of initialEvents) {
+            // Use seq if available, otherwise ts_ms + session_id as unique key
+            const eventKey = event.seq?.toString() ?? `${event.ts_ms}-${event.session_id ?? ''}`;
+            seenEvents.add(eventKey);
+          }
+
+          // Start polling - use seq/ts_ms for deduplication instead of just timestamp
           let lastTs = initialEvents.length > 0 ? initialEvents[initialEvents.length - 1].ts_ms : Date.now();
           const interval = parseInt(options.interval, 10);
+          let intervalId: ReturnType<typeof setInterval> | undefined;
 
-          // Handle Ctrl+C gracefully
-          process.on('SIGINT', () => {
+          // Handle Ctrl+C gracefully with cleanup
+          const cleanup = () => {
+            if (intervalId) {
+              clearInterval(intervalId);
+            }
             console.log('\n\nStopped following.');
             process.exit(0);
-          });
+          };
+          process.on('SIGINT', cleanup);
+          process.on('SIGTERM', cleanup);
 
           const poll = async () => {
             try {
+              // Get events since slightly before lastTs to catch any missed during race
               const newEvents = store.getRecentEvents({
-                limit: 50,
+                limit: 100,
                 connector: options.connector,
                 session: options.session,
                 method: options.method,
                 errors: options.errors,
-              }).filter(e => e.ts_ms > lastTs);
+              }).filter(e => {
+                // Filter by timestamp first (coarse filter)
+                if (e.ts_ms < lastTs - 1000) return false; // Allow 1s overlap for safety
+                // Then deduplicate by unique key
+                const eventKey = e.seq?.toString() ?? `${e.ts_ms}-${e.session_id ?? ''}`;
+                if (seenEvents.has(eventKey)) return false;
+                seenEvents.add(eventKey);
+                return true;
+              });
 
               if (newEvents.length > 0) {
                 for (const event of newEvents) {
@@ -345,13 +397,24 @@ Examples:
                   }
                 }
                 lastTs = newEvents[newEvents.length - 1].ts_ms;
+
+                // Limit seenEvents size to prevent memory leak (keep last 10000)
+                if (seenEvents.size > 10000) {
+                  const keysToDelete = Array.from(seenEvents).slice(0, 5000);
+                  for (const key of keysToDelete) {
+                    seenEvents.delete(key);
+                  }
+                }
               }
-            } catch {
-              // Ignore errors during polling
+            } catch (err) {
+              // Log errors in verbose mode, but don't crash
+              if (getOutputOptions().verbose) {
+                console.error('Poll error:', err instanceof Error ? err.message : String(err));
+              }
             }
           };
 
-          setInterval(poll, interval);
+          intervalId = setInterval(poll, interval);
           // eslint-disable-next-line @typescript-eslint/no-empty-function
           await new Promise(() => {});
           return;

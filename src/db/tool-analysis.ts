@@ -459,12 +459,16 @@ export function getSessionsForConnector(
 ): SessionInfo[] {
   const db = getEventsDb(configDir);
 
+  // Validate limit to prevent SQL injection (must be positive integer)
+  const safeLimit = limit !== undefined ? Math.max(1, Math.floor(Number(limit))) : undefined;
+  const limitClause = safeLimit !== undefined && Number.isFinite(safeLimit) ? `LIMIT ${safeLimit}` : '';
+
   const sql = `
     SELECT session_id, connector_id, started_at
     FROM sessions
     WHERE connector_id = ?
     ORDER BY started_at DESC
-    ${limit ? `LIMIT ${limit}` : ''}
+    ${limitClause}
   `;
 
   return db.prepare(sql).all(connectorId) as SessionInfo[];
