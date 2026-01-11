@@ -486,10 +486,19 @@ function generateDryRun(
 // ============================================================
 
 /**
+ * Convert snake_case to camelCase
+ */
+function snakeToCamel(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
  * Get type label from i18n
  */
 function getTypeLabel(type: string): string {
-  return t(`record.type.${type}`);
+  // Convert snake_case (tool_call) to camelCase (toolCall) for i18n keys
+  const camelKey = snakeToCamel(type);
+  return t(`record.type.${camelKey}`);
 }
 
 /**
@@ -529,7 +538,7 @@ function renderDryRun(data: DryRunData): void {
     } else if (candidate.type === 'capability_catalog') {
       const payload = candidate.payload as CapabilityCatalogPayload;
       console.log(
-        `  [${candidate.importance}] ${typeLabel} ${t('record.toolCount', { count: payload.tool_count })} rpc:${rpcShort}`
+        `  [${candidate.importance}] ${typeLabel} ${t('record.tools', { count: payload.tool_count })} rpc:${rpcShort}`
       );
     }
   }
