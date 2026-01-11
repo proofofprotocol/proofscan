@@ -108,6 +108,13 @@ function renderEventLine(event: EventLine, options: { fulltime?: boolean }): str
   parts.push(status);
   parts.push(event.label.slice(0, 30).padEnd(30));
 
+  // Connector ID (shortened to 12 chars, padded)
+  if (event.connector_id) {
+    parts.push(event.connector_id.slice(0, 12).padEnd(12));
+  } else {
+    parts.push(''.padEnd(12));
+  }
+
   // Session ID (shortened)
   if (event.session_id) {
     parts.push(`ses=${shortenId(event.session_id, 6)}`);
@@ -136,11 +143,6 @@ function renderEventLine(event: EventLine, options: { fulltime?: boolean }): str
     }
   }
 
-  // For session start, show connector
-  if (event.kind === 'session_start' && event.connector_id) {
-    parts.push(`[${event.connector_id}]`);
-  }
-
   // Error code
   if (event.error_code !== undefined) {
     parts.push(`err=${event.error_code}`);
@@ -163,6 +165,13 @@ function renderPairLine(pair: EventLinePair, options: { fulltime?: boolean }): s
     status,
     pair.method.slice(0, 30).padEnd(30),
   ];
+
+  // Connector ID (shortened to 12 chars, padded)
+  if (pair.request.connector_id) {
+    parts.push(pair.request.connector_id.slice(0, 12).padEnd(12));
+  } else {
+    parts.push(''.padEnd(12));
+  }
 
   // RPC ID (for easy copy-paste to rpc show command)
   parts.push(`rpc=${String(pair.rpc_id).slice(0, 8).padEnd(8)}`);
@@ -385,8 +394,8 @@ Examples:
 
           // Print header for pairs
           const header = showFulltime
-            ? 'Time                    ↔ St Method                         RPC      Session      Latency    Size'
-            : 'Time         ↔ St Method                         RPC      Session      Latency    Size';
+            ? 'Time                    ↔ St Method                         Connector    RPC      Session      Latency    Size'
+            : 'Time         ↔ St Method                         Connector    RPC      Session      Latency    Size';
           console.log(header);
           console.log('-'.repeat(header.length));
 
@@ -415,8 +424,8 @@ Examples:
 
         // Print header
         const header = showFulltime
-          ? 'Time                    Sym Dir St Method                         Session      Extra'
-          : 'Time         Sym Dir St Method                         Session      Extra';
+          ? 'Time                    Sym Dir St Method                         Connector    Session      Extra'
+          : 'Time         Sym Dir St Method                         Connector    Session      Extra';
         console.log(header);
         console.log('-'.repeat(header.length));
 
