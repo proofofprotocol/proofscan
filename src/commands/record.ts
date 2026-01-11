@@ -21,6 +21,8 @@ import {
 } from '../utils/session-resolver.js';
 import { shortenId } from '../eventline/types.js';
 import { classifyTool, OperationCategory, ActorInfo } from './summary.js';
+import { getCategoryLabel } from '../db/tool-analysis.js';
+import { t } from '../i18n/index.js';
 
 // ============================================================
 // Types
@@ -483,20 +485,12 @@ function generateDryRun(
 // Rendering
 // ============================================================
 
-/** Japanese type labels */
-const TYPE_LABELS: Record<string, string> = {
-  tool_call: 'やったこと（tool call）',
-  capability_catalog: '能力一覧（capability catalog）',
-};
-
-/** Japanese category labels */
-const CATEGORY_LABELS: Record<OperationCategory, string> = {
-  read: '読取',
-  write: '書込',
-  network: '通信',
-  exec: '実行',
-  other: 'その他',
-};
+/**
+ * Get type label from i18n
+ */
+function getTypeLabel(type: string): string {
+  return t(`record.type.${type}`);
+}
 
 /**
  * Render dry-run to terminal
@@ -514,16 +508,16 @@ function renderDryRun(data: DryRunData): void {
   console.log();
 
   if (data.candidates.length === 0) {
-    console.log('候補なし（No candidates）');
+    console.log(t('record.noCandidates'));
     return;
   }
 
-  console.log(`候補数: ${data.summary.candidate_count}`);
+  console.log(t('record.candidateCount', { count: data.summary.candidate_count }));
   console.log();
 
   for (const candidate of data.candidates) {
-    const typeLabel = TYPE_LABELS[candidate.type] || candidate.type;
-    const catLabel = CATEGORY_LABELS[candidate.category];
+    const typeLabel = getTypeLabel(candidate.type);
+    const catLabel = getCategoryLabel(candidate.category);
     const rpcShort = shortenId(candidate.source.rpc_id, 8);
 
     if (candidate.type === 'tool_call') {
@@ -535,7 +529,7 @@ function renderDryRun(data: DryRunData): void {
     } else if (candidate.type === 'capability_catalog') {
       const payload = candidate.payload as CapabilityCatalogPayload;
       console.log(
-        `  [${candidate.importance}] ${typeLabel} ${payload.tool_count}ツール rpc:${rpcShort}`
+        `  [${candidate.importance}] ${typeLabel} ${t('record.toolCount', { count: payload.tool_count })} rpc:${rpcShort}`
       );
     }
   }

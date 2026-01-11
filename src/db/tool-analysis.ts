@@ -6,6 +6,7 @@
  */
 
 import { getEventsDb } from './connection.js';
+import { t } from '../i18n/index.js';
 
 // ============================================================
 // Types
@@ -20,14 +21,13 @@ export const CATEGORY_ORDER: OperationCategory[] = ['exec', 'network', 'write', 
 /** Category display order for permissions view (user-friendly) */
 export const CATEGORY_ORDER_FRIENDLY: OperationCategory[] = ['read', 'write', 'network', 'exec', 'other'];
 
-/** Japanese labels for categories */
-export const CATEGORY_LABELS: Record<OperationCategory, string> = {
-  read: '読み取り（Read）',
-  write: '書き込み（Write）',
-  network: 'ネット接続（Network）',
-  exec: 'コマンド実行（Exec）',
-  other: 'その他操作（Other）',
-};
+/**
+ * Get localized label for a category
+ * Uses i18n module for translation
+ */
+export function getCategoryLabel(category: OperationCategory): string {
+  return t(`category.${category}`);
+}
 
 /** Tool info extracted from tools/list response */
 export interface ToolInfo {
