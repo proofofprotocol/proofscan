@@ -1,15 +1,18 @@
 /**
  * Plan runner - executes validation plans against MCP servers
  * Phase 5.2: MCP validation scenario execution
+ * Phase 5.3: Unified session recording (events.db + proofs.db)
  */
 
 import { ulid } from 'ulid';
 import type { Connector, StdioTransport } from '../types/index.js';
-import { StdioConnection, JsonRpcResponse } from '../transports/stdio.js';
+import { StdioConnection, JsonRpcResponse, JsonRpcMessage } from '../transports/stdio.js';
 import type { Plan, PlanDefinition, PlanStep, StepResult, RunResult, RunInventory, RunStatus } from './schema.js';
 import { PlansStore } from './store.js';
+import { EventsStore } from '../db/events-store.js';
 import { writeAllArtifacts } from './artifacts.js';
 import { normalizePlanForDigest } from './digest.js';
+import type { EventDirection, EventKind } from '../db/types.js';
 
 export interface RunOptions {
   /** Timeout per step in seconds */
@@ -20,23 +23,31 @@ export interface RunOptions {
   dryRun?: boolean;
 }
 
+export interface RunResultWithSession extends RunResult {
+  /** Session ID in events.db (for navigation in shell) */
+  sessionId?: string;
+}
+
 export class PlanRunner {
   private configDir: string;
   private store: PlansStore;
+  private eventsStore: EventsStore;
 
   constructor(configDir: string) {
     this.configDir = configDir;
     this.store = new PlansStore(configDir);
+    this.eventsStore = new EventsStore(configDir);
   }
 
   /**
    * Run a plan against a connector
+   * Records session in both proofs.db (runs table) and events.db (sessions/events)
    */
   async run(
     plan: Plan,
     connector: Connector,
     options: RunOptions = {}
-  ): Promise<RunResult> {
+  ): Promise<RunResultWithSession> {
     const timeout = (options.timeout || 30) * 1000;
     const dryRun = options.dryRun || false;
 
@@ -48,7 +59,7 @@ export class PlanRunner {
       await import('yaml').then(yaml => yaml.parse(plan.content_yaml))
     )) as PlanDefinition;
 
-    // Create run record in DB (unless dry run)
+    // Create run record in proofs.db (unless dry run)
     if (!dryRun) {
       this.store.createRun({
         runId,
@@ -59,6 +70,15 @@ export class PlanRunner {
       });
     }
 
+    // Create session in events.db (unless dry run)
+    const session = dryRun
+      ? { session_id: `dry-run-${Date.now()}` }
+      : this.eventsStore.createSession(connector.id);
+    const sessionId = session.session_id;
+
+    // Track RPC calls for events.db
+    const rpcIdMap = new Map<string | number, string>();
+
     const steps: StepResult[] = [];
     const inventory: RunInventory = {};
     let finalStatus: 'completed' | 'failed' | 'partial' = 'completed';
@@ -66,7 +86,15 @@ export class PlanRunner {
     // Check transport type
     if (connector.transport.type !== 'stdio') {
       const endedAt = new Date().toISOString();
-      const errorResult: RunResult = {
+
+      if (!dryRun) {
+        this.eventsStore.saveEvent(sessionId, 'client_to_server', 'transport_event', {
+          rawJson: JSON.stringify({ type: 'error', message: `Unsupported transport type: ${connector.transport.type}` }),
+        });
+        this.eventsStore.endSession(sessionId, 'error');
+      }
+
+      const errorResult: RunResultWithSession = {
         runId,
         planName: plan.name,
         planDigest: plan.digest_sha256,
@@ -76,6 +104,7 @@ export class PlanRunner {
         inventory,
         startedAt,
         endedAt,
+        sessionId: dryRun ? undefined : sessionId,
       };
 
       if (!dryRun) {
@@ -96,8 +125,86 @@ export class PlanRunner {
     const connection = new StdioConnection(transport);
 
     try {
+      // Log connection attempt
+      if (!dryRun) {
+        this.eventsStore.saveEvent(sessionId, 'client_to_server', 'transport_event', {
+          rawJson: JSON.stringify({
+            type: 'connect_attempt',
+            command: transport.command,
+            args: transport.args,
+            plan: plan.name,
+            runId,
+          }),
+        });
+      }
+
+      // Set up message logging for events.db
+      connection.on('message', (msg: JsonRpcMessage, raw: string) => {
+        if (dryRun) return;
+
+        const isRequest = 'method' in msg && 'id' in msg && msg.id !== null;
+        const isNotification = 'method' in msg && !('id' in msg);
+        const isResponse = 'id' in msg && !('method' in msg);
+
+        const direction: EventDirection = isResponse ? 'server_to_client' :
+          (isRequest || isNotification) && !('id' in msg && 'result' in msg) ? 'client_to_server' : 'server_to_client';
+
+        let kind: EventKind;
+        if (isRequest) kind = 'request';
+        else if (isNotification) kind = 'notification';
+        else if (isResponse) kind = 'response';
+        else kind = 'transport_event';
+
+        let rpcId: string | undefined;
+
+        // Handle RPC tracking
+        if (isRequest && 'id' in msg && msg.id !== null && 'method' in msg) {
+          const rpcCall = this.eventsStore.saveRpcCall(sessionId, String(msg.id), msg.method);
+          rpcIdMap.set(msg.id, rpcCall.rpc_id);
+          rpcId = rpcCall.rpc_id;
+        } else if (isResponse && 'id' in msg && msg.id !== null) {
+          rpcId = rpcIdMap.get(msg.id);
+          if (rpcId) {
+            const resp = msg as JsonRpcResponse;
+            this.eventsStore.completeRpcCall(
+              sessionId,
+              String(msg.id),
+              !resp.error,
+              resp.error?.code
+            );
+          }
+        }
+
+        this.eventsStore.saveEvent(sessionId, direction, kind, {
+          rpcId: rpcId || (('id' in msg && msg.id !== null) ? String(msg.id) : undefined),
+          rawJson: raw,
+        });
+      });
+
+      connection.on('stderr', (data: string) => {
+        if (!dryRun) {
+          this.eventsStore.saveEvent(sessionId, 'server_to_client', 'transport_event', {
+            rawJson: JSON.stringify({ type: 'stderr', data: data.trim() }),
+          });
+        }
+      });
+
+      connection.on('error', (error: Error) => {
+        if (!dryRun) {
+          this.eventsStore.saveEvent(sessionId, 'server_to_client', 'transport_event', {
+            rawJson: JSON.stringify({ type: 'error', message: error.message }),
+          });
+        }
+      });
+
       // Connect to MCP server
       await connection.connect();
+
+      if (!dryRun) {
+        this.eventsStore.saveEvent(sessionId, 'server_to_client', 'transport_event', {
+          rawJson: JSON.stringify({ type: 'connected' }),
+        });
+      }
 
       // Execute each step
       for (let i = 0; i < def.steps.length; i++) {
@@ -146,13 +253,27 @@ export class PlanRunner {
         durationMs: 0,
       };
       steps.push(errorStep);
+
+      if (!dryRun) {
+        this.eventsStore.saveEvent(sessionId, 'client_to_server', 'transport_event', {
+          rawJson: JSON.stringify({ type: 'execution_error', error: err instanceof Error ? err.message : String(err) }),
+        });
+      }
     } finally {
       connection.close();
     }
 
     const endedAt = new Date().toISOString();
 
-    const result: RunResult = {
+    // End session in events.db
+    if (!dryRun) {
+      this.eventsStore.saveEvent(sessionId, 'client_to_server', 'transport_event', {
+        rawJson: JSON.stringify({ type: 'disconnected', plan: plan.name, runId, status: finalStatus }),
+      });
+      this.eventsStore.endSession(sessionId, finalStatus === 'failed' ? 'error' : 'normal');
+    }
+
+    const result: RunResultWithSession = {
       runId,
       planName: plan.name,
       planDigest: plan.digest_sha256,
@@ -162,9 +283,10 @@ export class PlanRunner {
       inventory,
       startedAt,
       endedAt,
+      sessionId: dryRun ? undefined : sessionId,
     };
 
-    // Complete run in DB and write artifacts (unless dry run)
+    // Complete run in proofs.db and write artifacts (unless dry run)
     if (!dryRun) {
       this.store.completeRun(runId, finalStatus);
       writeAllArtifacts(
@@ -260,7 +382,7 @@ export class PlanRunner {
           protocolVersion: '2024-11-05',
           capabilities: {},
           clientInfo: {
-            name: 'proofscan-plans',
+            name: 'proofscan',
             version: '1.0.0',
           },
         };

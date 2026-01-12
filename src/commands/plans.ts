@@ -5,13 +5,24 @@
 
 import { Command } from 'commander';
 import { promises as fs } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname } from 'path';
 import { PlansStore } from '../plans/store.js';
 import { PlanRunner } from '../plans/runner.js';
 import { validatePlanDefinition, isValidPlanName } from '../plans/schema.js';
 import { ConfigManager } from '../config/index.js';
+import { EventLineStore } from '../eventline/store.js';
 import { output, outputSuccess, outputError, outputTable } from '../utils/output.js';
+import { setCurrentSession } from '../utils/state.js';
+import { shortenSessionId } from '../shell/prompt.js';
 import type { PlanDefinition } from '../plans/schema.js';
+
+/**
+ * Get config directory from config file path
+ * PlansStore and PlanRunner expect a directory, not a file path
+ */
+function getConfigDir(configPath: string): string {
+  return dirname(configPath);
+}
 
 /**
  * Read from stdin
@@ -31,7 +42,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
   // List plans action
   const listAction = async () => {
     try {
-      const store = new PlansStore(getConfigPath());
+      const store = new PlansStore(getConfigDir(getConfigPath()));
       const plans = store.listPlans();
 
       if (plans.length === 0) {
@@ -72,7 +83,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
     .option('--json', 'Output as JSON')
     .action(async (name, options) => {
       try {
-        const store = new PlansStore(getConfigPath());
+        const store = new PlansStore(getConfigDir(getConfigPath()));
         const plan = store.getPlan(name);
 
         if (!plan) {
@@ -152,7 +163,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
-        const store = new PlansStore(getConfigPath());
+        const store = new PlansStore(getConfigDir(getConfigPath()));
         const result = store.addPlan(name, yamlContent, 'manual');
 
         if (!result.success) {
@@ -174,7 +185,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
     .option('--force', 'Delete without confirmation')
     .action(async (name, options) => {
       try {
-        const store = new PlansStore(getConfigPath());
+        const store = new PlansStore(getConfigDir(getConfigPath()));
         const plan = store.getPlan(name);
 
         if (!plan) {
@@ -223,7 +234,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
           yamlContent = await fs.readFile(options.file, 'utf-8');
         }
 
-        const store = new PlansStore(getConfigPath());
+        const store = new PlansStore(getConfigDir(getConfigPath()));
         const result = store.importPlans(yamlContent, 'import');
 
         if (result.errors.length > 0) {
@@ -253,7 +264,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
     .option('--stdout', 'Output to stdout')
     .action(async (name, options) => {
       try {
-        const store = new PlansStore(getConfigPath());
+        const store = new PlansStore(getConfigDir(getConfigPath()));
         const plan = store.getPlan(name);
 
         if (!plan) {
@@ -285,7 +296,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
     .option('--json', 'Output result as JSON')
     .action(async (name, options) => {
       try {
-        const store = new PlansStore(getConfigPath());
+        const store = new PlansStore(getConfigDir(getConfigPath()));
         const plan = store.getPlan(name);
 
         if (!plan) {
@@ -298,7 +309,17 @@ export function createPlansCommand(getConfigPath: () => string): Command {
         const connector = await configManager.getConnector(options.connector);
 
         if (!connector) {
-          outputError(`Connector not found: ${options.connector}`);
+          // Check if connector exists in history (events.db) but not in config
+          const eventStore = new EventLineStore(getConfigDir(getConfigPath()));
+          const historyConnectors = eventStore.getConnectors();
+          const existsInHistory = historyConnectors.some((c: { id: string }) => c.id === options.connector);
+
+          if (existsInHistory) {
+            outputError(`Connector '${options.connector}' exists in history but is not configured.`);
+            console.error(`  Run 'pfscan connectors add' to add it, or use 'pfscan connectors ls' to see configured connectors.`);
+          } else {
+            outputError(`Connector not found: ${options.connector}`);
+          }
           process.exit(1);
         }
 
@@ -321,7 +342,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
 
         console.log(`Running plan '${name}' against connector '${connector.id}'...`);
 
-        const runner = new PlanRunner(getConfigPath());
+        const runner = new PlanRunner(getConfigDir(getConfigPath()));
         const result = await runner.run(plan, connector, {
           timeout: parseInt(options.timeout, 10),
           outDir: options.out,
@@ -333,9 +354,17 @@ export function createPlansCommand(getConfigPath: () => string): Command {
           return;
         }
 
+        // Set current session for shell navigation
+        if (result.sessionId) {
+          setCurrentSession(result.sessionId, connector.id);
+        }
+
         // Human-readable output
         console.log('');
         console.log(`Run ID: ${result.runId}`);
+        if (result.sessionId) {
+          console.log(`Session: ${shortenSessionId(result.sessionId)}`);
+        }
         console.log(`Status: ${result.status}`);
         console.log(`Duration: ${new Date(result.endedAt).getTime() - new Date(result.startedAt).getTime()}ms`);
         console.log('');
@@ -375,8 +404,14 @@ export function createPlansCommand(getConfigPath: () => string): Command {
         }
 
         console.log('');
-        const artifactPath = resolve(options.out || getConfigPath(), 'artifacts', result.runId);
+        const artifactPath = resolve(options.out || getConfigDir(getConfigPath()), 'artifacts', result.runId);
         console.log(`Artifacts: ${artifactPath}`);
+        console.log('');
+        if (result.sessionId) {
+          console.log(`Tip: Use "cd ${shortenSessionId(result.sessionId)}" to navigate to the session, or "plans runs" to list all runs.`);
+        } else {
+          console.log('Tip: Use "plans runs" to list all runs.');
+        }
       } catch (error) {
         outputError('Failed to run plan', error instanceof Error ? error : undefined);
         process.exit(1);
@@ -391,7 +426,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
     .option('--limit <n>', 'Limit results', '20')
     .action(async (options) => {
       try {
-        const store = new PlansStore(getConfigPath());
+        const store = new PlansStore(getConfigDir(getConfigPath()));
         const runs = store.listRuns(options.plan, parseInt(options.limit, 10));
 
         if (runs.length === 0) {
@@ -423,7 +458,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
     .option('--json', 'Output as JSON')
     .action(async (runId, options) => {
       try {
-        const store = new PlansStore(getConfigPath());
+        const store = new PlansStore(getConfigDir(getConfigPath()));
         const run = store.getRun(runId);
 
         if (!run) {

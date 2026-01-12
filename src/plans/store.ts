@@ -8,9 +8,11 @@ import { getProofsDb } from '../db/connection.js';
 import { calculatePlanDigest, normalizePlanForDigest } from './digest.js';
 import type { Plan, Run, RunStatus, PlanDefinition } from './schema.js';
 import { validatePlanDefinition, isValidPlanName } from './schema.js';
+import { BUILTIN_PLANS } from './builtin.js';
 
 export class PlansStore {
   private configDir?: string;
+  private builtinInitialized = false;
 
   constructor(configDir?: string) {
     this.configDir = configDir;
@@ -18,6 +20,21 @@ export class PlansStore {
 
   private get db() {
     return getProofsDb(this.configDir);
+  }
+
+  /**
+   * Ensure built-in plans are installed
+   * Called lazily on first access
+   */
+  private ensureBuiltinPlans(): void {
+    if (this.builtinInitialized) return;
+    this.builtinInitialized = true;
+
+    for (const builtin of BUILTIN_PLANS) {
+      if (!this.planExists(builtin.name)) {
+        this.addPlan(builtin.name, builtin.yaml, 'builtin');
+      }
+    }
   }
 
   // ============================================================
@@ -28,6 +45,7 @@ export class PlansStore {
    * List all plans
    */
   listPlans(): Plan[] {
+    this.ensureBuiltinPlans();
     const stmt = this.db.prepare(`
       SELECT * FROM plans ORDER BY created_at DESC
     `);
@@ -38,6 +56,7 @@ export class PlansStore {
    * Get plan by name
    */
   getPlan(name: string): Plan | null {
+    this.ensureBuiltinPlans();
     const stmt = this.db.prepare(`SELECT * FROM plans WHERE name = ?`);
     const result = stmt.get(name) as Plan | undefined;
     return result ?? null;

@@ -225,6 +225,31 @@ describe('applyContext', () => {
       expect(result.warnings.length).toBe(0);
     });
   });
+
+  describe('plans run', () => {
+    it('should add --connector from context for plans run', () => {
+      const context: ShellContext = { connector: 'time' };
+      const result = applyContext(['plans', 'run', 'basic-test'], context);
+      expect(result.args).toContain('--connector');
+      expect(result.args).toContain('time');
+    });
+
+    it('should not override explicit --connector for plans run', () => {
+      const context: ShellContext = { connector: 'time' };
+      const result = applyContext(['plans', 'run', 'basic-test', '--connector', 'other'], context);
+      // Should only have one --connector
+      const connectorCount = result.args.filter(a => a === '--connector').length;
+      expect(connectorCount).toBe(1);
+      expect(result.args).toContain('other');
+      expect(result.args).not.toContain('time');
+    });
+
+    it('should not add --connector when no context for plans run', () => {
+      const context: ShellContext = {};
+      const result = applyContext(['plans', 'run', 'basic-test'], context);
+      expect(result.args).not.toContain('--connector');
+    });
+  });
 });
 
 describe('getContextHint', () => {

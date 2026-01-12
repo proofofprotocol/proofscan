@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { PlansStore } from './store.js';
+import { BUILTIN_PLANS } from './builtin.js';
 
 describe('PlansStore', () => {
   let tempDir: string;
@@ -96,19 +97,26 @@ steps:
   });
 
   describe('listPlans', () => {
-    it('should list all plans', () => {
+    it('should list all plans including built-in', () => {
       store.addPlan('plan-a', validPlanYaml.replace('test-plan', 'plan-a'), 'manual');
       store.addPlan('plan-b', validPlanYaml.replace('test-plan', 'plan-b'), 'manual');
 
       const plans = store.listPlans();
 
-      expect(plans.length).toBe(2);
+      // 2 manual + built-in plans
+      expect(plans.length).toBe(2 + BUILTIN_PLANS.length);
+      expect(plans.some(p => p.name === 'plan-a')).toBe(true);
+      expect(plans.some(p => p.name === 'plan-b')).toBe(true);
     });
 
-    it('should return empty array when no plans', () => {
+    it('should include built-in plans when no manual plans added', () => {
       const plans = store.listPlans();
 
-      expect(plans).toEqual([]);
+      // Should have built-in plans
+      expect(plans.length).toBe(BUILTIN_PLANS.length);
+      for (const builtin of BUILTIN_PLANS) {
+        expect(plans.some(p => p.name === builtin.name)).toBe(true);
+      }
     });
   });
 
