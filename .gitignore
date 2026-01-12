@@ -16,3 +16,7 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Data
+pfscan_reports/
+.popl/
