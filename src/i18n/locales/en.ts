@@ -267,6 +267,9 @@ export const en = {
     redactedNote: 'Some values have been redacted',
     truncatedPayload: 'Payload truncated ({size} bytes, showing first 4096 chars)',
     spillFileWritten: 'Full payload written to {file}',
+    connectorExporting: 'Exporting connector HTML report ({count} sessions)...',
+    connectorExported: 'Exported connector to {path}',
+    paginationNote: 'Showing sessions {from}-{to} of {total}',
   },
 
   // Error messages

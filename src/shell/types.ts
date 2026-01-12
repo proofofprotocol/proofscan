@@ -118,7 +118,7 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'rpc show': ['--session', '--id', '--format', '--copy', '--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill'],
   summary: ['--session', '--format'],
   analyze: ['--session', '--latest', '--connector'],
-  connectors: ['--id', '--from', '--file', '--stdin', '--name'],
+  connectors: ['--id', '--from', '--file', '--stdin', '--name', '--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill', '--max-sessions', '--offset'],
   sessions: ['--limit'],
   'sessions show': ['--id', '--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill'],
   archive: ['--older-than', '--dry-run'],
@@ -156,8 +156,8 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'plans run': ['--connector', '--out', '--timeout', '--dry-run', '--json'],
   'plans runs': ['--plan', '--limit'],
   'plans run-show': ['--json'],
-  // Shell router commands
-  show: ['--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill', '--json', '--id'],
+  // Shell router commands (no --id: context-dependent is shell's strength)
+  show: ['--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill', '--json', '--max-sessions', '--offset'],
 };
 
 /**

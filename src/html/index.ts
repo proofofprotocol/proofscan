@@ -9,6 +9,7 @@ export {
   HTML_REPORT_SCHEMA_VERSION,
   DEFAULT_EMBED_MAX_BYTES,
   TRUNCATION_PREVIEW_LENGTH,
+  SHORT_ID_LENGTH,
   DEFAULT_EXPORT_OPTIONS,
   toRpcStatus,
   getStatusSymbol,
@@ -16,6 +17,7 @@ export {
   getRpcHtmlFilename,
   getSessionHtmlFilename,
   getSpillFilename,
+  getConnectorHtmlFilename,
 } from './types.js';
 
 export type {
@@ -28,6 +30,12 @@ export type {
   SessionRpcDetail,
   HtmlSessionData,
   HtmlSessionReportV1,
+  // Connector HTML types (Phase 5.1)
+  HtmlMcpCapabilities,
+  HtmlMcpServerInfo,
+  HtmlConnectorInfo,
+  HtmlConnectorSessionRow,
+  HtmlConnectorReportV1,
 } from './types.js';
 
 // Templates
@@ -36,6 +44,7 @@ export {
   escapeJsonForScript,
   generateRpcHtml,
   generateSessionHtml,
+  generateConnectorHtml,
 } from './templates.js';
 
 // Browser

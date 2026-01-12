@@ -10,6 +10,7 @@ import {
   escapeJsonForScript,
   generateRpcHtml,
   generateSessionHtml,
+  generateConnectorHtml,
 } from './templates.js';
 import {
   HTML_REPORT_SCHEMA_VERSION,
@@ -17,6 +18,7 @@ import {
   createPayloadData,
   type HtmlRpcReportV1,
   type HtmlSessionReportV1,
+  type HtmlConnectorReportV1,
 } from './types.js';
 
 describe('escapeHtml', () => {
@@ -413,5 +415,341 @@ describe('Embedded JSON parsing', () => {
       expect(parsed.meta.schemaVersion).toBe(HTML_REPORT_SCHEMA_VERSION);
       expect(parsed.session.session_id).toBe('abc12345');
     }
+  });
+});
+
+describe('generateConnectorHtml', () => {
+  const baseSessionReport: HtmlSessionReportV1 = {
+    meta: {
+      schemaVersion: HTML_REPORT_SCHEMA_VERSION,
+      generatedAt: '2025-01-12T10:00:00.000Z',
+      generatedBy: 'proofscan v0.10.0',
+      redacted: false,
+    },
+    session: {
+      session_id: 'abc12345-1234-1234-1234-123456789012',
+      connector_id: 'test-connector',
+      started_at: '2025-01-12T09:00:00.000Z',
+      ended_at: '2025-01-12T10:00:00.000Z',
+      exit_reason: null,
+      rpc_count: 2,
+      event_count: 4,
+      total_latency_ms: 30,
+    },
+    rpcs: [
+      {
+        rpc_id: '1',
+        method: 'initialize',
+        status: 'OK',
+        latency_ms: 10,
+        request_ts: '2025-01-12T09:00:00.000Z',
+        response_ts: '2025-01-12T09:00:00.010Z',
+        error_code: null,
+        request: createPayloadData({ method: 'initialize' }, '{"method":"initialize"}', 262144),
+        response: createPayloadData({ result: {} }, '{"result":{}}', 262144),
+      },
+      {
+        rpc_id: '2',
+        method: 'tools/list',
+        status: 'OK',
+        latency_ms: 20,
+        request_ts: '2025-01-12T09:00:01.000Z',
+        response_ts: '2025-01-12T09:00:01.020Z',
+        error_code: null,
+        request: createPayloadData({ method: 'tools/list' }, '{"method":"tools/list"}', 262144),
+        response: createPayloadData({ result: { tools: [] } }, '{"result":{"tools":[]}}', 262144),
+      },
+    ],
+  };
+
+  const baseConnectorReport: HtmlConnectorReportV1 = {
+    meta: {
+      schemaVersion: HTML_REPORT_SCHEMA_VERSION,
+      generatedAt: '2025-01-12T10:00:00.000Z',
+      generatedBy: 'proofscan v0.10.0',
+      redacted: false,
+    },
+    connector: {
+      connector_id: 'test-connector',
+      enabled: true,
+      transport: {
+        type: 'stdio',
+        command: 'npx -y @anthropic/mcp-server-test',
+      },
+      server: {
+        name: 'Test MCP Server',
+        version: '1.0.0',
+        protocolVersion: '2024-11-05',
+        capabilities: {
+          tools: true,
+          resources: true,
+          prompts: false,
+        },
+      },
+      session_count: 10,
+      displayed_sessions: 2,
+      offset: 0,
+    },
+    sessions: [
+      {
+        session_id: 'abc12345-1234-1234-1234-123456789012',
+        short_id: 'abc12345',
+        started_at: '2025-01-12T09:00:00.000Z',
+        ended_at: '2025-01-12T10:00:00.000Z',
+        rpc_count: 2,
+        event_count: 4,
+        error_count: 0,
+        total_latency_ms: 30,
+      },
+      {
+        session_id: 'def67890-5678-5678-5678-567890123456',
+        short_id: 'def67890',
+        started_at: '2025-01-12T08:00:00.000Z',
+        ended_at: '2025-01-12T09:00:00.000Z',
+        rpc_count: 3,
+        event_count: 6,
+        error_count: 1,
+        total_latency_ms: 50,
+      },
+    ],
+    session_reports: {
+      'abc12345-1234-1234-1234-123456789012': baseSessionReport,
+      'def67890-5678-5678-5678-567890123456': {
+        ...baseSessionReport,
+        session: {
+          ...baseSessionReport.session,
+          session_id: 'def67890-5678-5678-5678-567890123456',
+          started_at: '2025-01-12T08:00:00.000Z',
+          ended_at: '2025-01-12T09:00:00.000Z',
+        },
+      },
+    },
+  };
+
+  it('should generate valid HTML structure', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('<html');
+    expect(html).toContain('</html>');
+    expect(html).toContain('<head>');
+    expect(html).toContain('</head>');
+    expect(html).toContain('<body>');
+    expect(html).toContain('</body>');
+  });
+
+  it('should include connector ID in title', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('<title>');
+    expect(html).toContain('test-connector');
+  });
+
+  it('should include connector info section', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('connector-info');
+    expect(html).toContain('Transport');
+    expect(html).toContain('stdio');
+    expect(html).toContain('npx -y @anthropic/mcp-server-test');
+  });
+
+  it('should include server info when available', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('Test MCP Server');
+    expect(html).toContain('v1.0.0');
+    expect(html).toContain('MCP 2024-11-05');
+  });
+
+  it('should include capabilities badges', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('cap-enabled');
+    expect(html).toContain('tools');
+    expect(html).toContain('resources');
+    // prompts is false, so should not be shown
+  });
+
+  it('should include sessions pane', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('sessions-pane');
+    expect(html).toContain('sessions-list');
+    expect(html).toContain('session-item');
+  });
+
+  it('should show session IDs in list', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('abc12345');
+    expect(html).toContain('def67890');
+  });
+
+  it('should show OK badge for session with no errors', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('status-OK');
+  });
+
+  it('should show ERR badge for session with errors', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('status-ERR');
+  });
+
+  it('should include pagination info', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('Showing 1-2 of 10 sessions');
+  });
+
+  it('should include 3-pane layout structure', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('main-container');
+    expect(html).toContain('sessions-pane');
+    expect(html).toContain('session-detail-pane');
+    expect(html).toContain('left-pane');
+    expect(html).toContain('right-pane');
+  });
+
+  it('should include session content sections', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('session-content');
+    expect(html).toContain('data-session-id');
+  });
+
+  it('should include RPC table in session detail', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('rpc-table');
+    expect(html).toContain('initialize');
+    expect(html).toContain('tools/list');
+  });
+
+  it('should include embedded JSON for programmatic access', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('id="report-data"');
+    expect(html).toContain('type="application/json"');
+  });
+
+  it('should include JavaScript for session navigation', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('showSession');
+    expect(html).toContain('showRpcDetail');
+    expect(html).toContain('addEventListener');
+  });
+
+  it('should include dark theme CSS variables', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+    expect(html).toContain('--bg-primary');
+    expect(html).toContain('#0d1117');
+    expect(html).toContain('--accent-blue');
+    expect(html).toContain('#00d4ff');
+  });
+
+  it('should handle empty sessions list', () => {
+    const emptyReport: HtmlConnectorReportV1 = {
+      ...baseConnectorReport,
+      connector: {
+        ...baseConnectorReport.connector,
+        session_count: 0,
+        displayed_sessions: 0,
+      },
+      sessions: [],
+      session_reports: {},
+    };
+    const html = generateConnectorHtml(emptyReport);
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('No sessions');
+  });
+
+  it('should handle connector without server info', () => {
+    const noServerReport: HtmlConnectorReportV1 = {
+      ...baseConnectorReport,
+      connector: {
+        ...baseConnectorReport.connector,
+        server: undefined,
+      },
+    };
+    const html = generateConnectorHtml(noServerReport);
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).not.toContain('Server');
+    expect(html).not.toContain('Protocol');
+  });
+
+  it('should show disabled badge when connector is disabled', () => {
+    const disabledReport: HtmlConnectorReportV1 = {
+      ...baseConnectorReport,
+      connector: {
+        ...baseConnectorReport.connector,
+        enabled: false,
+      },
+    };
+    const html = generateConnectorHtml(disabledReport);
+    expect(html).toContain('status-ERR');
+    expect(html).toContain('no');
+  });
+
+  it('should handle redacted report', () => {
+    const redactedReport: HtmlConnectorReportV1 = {
+      ...baseConnectorReport,
+      meta: {
+        ...baseConnectorReport.meta,
+        redacted: true,
+      },
+    };
+    const html = generateConnectorHtml(redactedReport);
+    expect(html).toContain('(redacted)');
+  });
+
+  it('should escape HTML in connector ID', () => {
+    const xssReport: HtmlConnectorReportV1 = {
+      ...baseConnectorReport,
+      connector: {
+        ...baseConnectorReport.connector,
+        connector_id: '<script>alert(1)</script>',
+      },
+    };
+    const html = generateConnectorHtml(xssReport);
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('should escape JSON in script tag', () => {
+    const reportWithXss: HtmlConnectorReportV1 = {
+      ...baseConnectorReport,
+      connector: {
+        ...baseConnectorReport.connector,
+        connector_id: '</script><script>alert(1)',
+      },
+    };
+    const html = generateConnectorHtml(reportWithXss);
+    const scriptMatch = html.match(/<script[^>]*id="report-data"[^>]*>([\s\S]*?)<\/script>/);
+    expect(scriptMatch).toBeTruthy();
+    if (scriptMatch) {
+      expect(scriptMatch[1]).not.toContain('</script>');
+    }
+  });
+
+  it('Connector report JSON should be parseable', () => {
+    const html = generateConnectorHtml(baseConnectorReport);
+
+    // Extract JSON from script tag
+    const match = html.match(/<script[^>]*id="report-data"[^>]*>([\s\S]*?)<\/script>/);
+    expect(match).toBeTruthy();
+
+    if (match) {
+      const unescaped = match[1].replace(/<\\/g, '</');
+      expect(() => JSON.parse(unescaped)).not.toThrow();
+      const parsed = JSON.parse(unescaped);
+      expect(parsed.meta.schemaVersion).toBe(HTML_REPORT_SCHEMA_VERSION);
+      expect(parsed.connector.connector_id).toBe('test-connector');
+      expect(parsed.sessions).toHaveLength(2);
+      expect(parsed.session_reports).toBeDefined();
+    }
+  });
+
+  it('should show pagination with offset', () => {
+    const offsetReport: HtmlConnectorReportV1 = {
+      ...baseConnectorReport,
+      connector: {
+        ...baseConnectorReport.connector,
+        session_count: 100,
+        displayed_sessions: 50,
+        offset: 50,
+      },
+    };
+    const html = generateConnectorHtml(offsetReport);
+    expect(html).toContain('Showing 51-100 of 100 sessions');
   });
 });
