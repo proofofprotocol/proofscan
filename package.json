@@ -1,6 +1,6 @@
 {
   "name": "proofscan",
-  "version": "0.10.24",
+  "version": "0.10.25",
   "description": "MCP Server scanner - eliminate black boxes by capturing JSON-RPC from connection to tools/list",
   "type": "module",
   "main": "dist/index.js",
