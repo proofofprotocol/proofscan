@@ -259,6 +259,16 @@ export const ja: LocaleMessages = {
     },
   },
 
+  // html export output
+  html: {
+    exporting: 'HTMLレポートをエクスポート中...',
+    exported: '{path} にエクスポートしました',
+    opening: 'ブラウザで開いています...',
+    redactedNote: '一部の値がマスクされています',
+    truncatedPayload: 'ペイロード切り詰め（{size}バイト、先頭4096文字を表示）',
+    spillFileWritten: 'フルペイロードを {file} に出力しました',
+  },
+
   // Error messages
   errors: {
     connectorIdRequired: 'コネクタIDが必要です。',
@@ -282,6 +292,10 @@ export const ja: LocaleMessages = {
     unsafeChars: 'コマンドに安全でない文字が含まれています: {chars}',
     reviewClipboard: 'クリップボードの内容を確認してから追加してください。',
     unsafeArgsChars: '引数に安全でない文字が含まれています: {chars}',
+    invalidEmbedMaxBytes: '無効な embed-max-bytes 値: {value}。正の数を指定してください。',
+    createDirFailed: 'ディレクトリの作成に失敗しました {path}: {error}',
+    writeFileFailed: 'ファイルの書き込みに失敗しました {path}: {error}',
+    openBrowserFailed: 'ブラウザを開けませんでした。手動で開いてください: {path}',
   },
 
   // Hints and guidance

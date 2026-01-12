@@ -924,6 +924,26 @@ async function listRpcs(
 }
 
 /**
+ * Extract HTML export options from args
+ */
+function getHtmlOptions(args: string[]): string[] {
+  const options: string[] = [];
+  const outIdx = args.indexOf('--out');
+  if (outIdx !== -1 && args[outIdx + 1]) {
+    options.push('--out', args[outIdx + 1]);
+  }
+  const embedIdx = args.indexOf('--embed-max-bytes');
+  if (embedIdx !== -1 && args[embedIdx + 1]) {
+    options.push('--embed-max-bytes', args[embedIdx + 1]);
+  }
+  if (args.includes('--html')) options.push('--html');
+  if (args.includes('--open')) options.push('--open');
+  if (args.includes('--redact')) options.push('--redact');
+  if (args.includes('--spill')) options.push('--spill');
+  return options;
+}
+
+/**
  * Handle 'show' command - show details at current level
  *
  * Supports @ references:
@@ -938,6 +958,15 @@ async function listRpcs(
  * session level:
  *   show           - session details
  *   show <rpcId>   - rpc details
+ *
+ * HTML export options:
+ *   show --html                   - export current session to HTML
+ *   show --html --id <rpc>        - export specific RPC to HTML
+ *   show --html --out <dir>       - specify output directory
+ *   show --html --open            - open in browser after export
+ *   show --html --redact          - redact sensitive values
+ *   show --html --embed-max-bytes - max bytes per payload
+ *   show --html --spill           - write oversized payloads to separate files
  */
 export async function handleShow(
   args: string[],
@@ -947,7 +976,13 @@ export async function handleShow(
 ): Promise<void> {
   const level = getContextLevel(context);
   const isJson = args.includes('--json');
-  const target = args.find(a => !a.startsWith('-'));
+  const isHtml = args.includes('--html');
+  const htmlOptions = isHtml ? getHtmlOptions(args) : [];
+  // Get --id value if present (for show --html --id <rpc>)
+  const idIdx = args.indexOf('--id');
+  const idValue = idIdx !== -1 && args[idIdx + 1] ? args[idIdx + 1] : undefined;
+  // Target is non-option argument (excluding --id value)
+  const target = args.find((a, i) => !a.startsWith('-') && (idIdx === -1 || i !== idIdx + 1));
 
   const store = getStore(configPath);
 
@@ -972,7 +1007,7 @@ export async function handleShow(
         printError(`Invalid RPC reference: missing session/rpc ID`);
         return;
       }
-      await executeCommand(['rpc', 'show', '--session', ref.session, '--id', ref.rpc, ...(isJson ? ['--json'] : [])]);
+      await executeCommand(['rpc', 'show', '--session', ref.session, '--id', ref.rpc, ...(isJson ? ['--json'] : []), ...htmlOptions]);
       return;
     }
 
@@ -981,7 +1016,7 @@ export async function handleShow(
         printError(`Invalid session reference: missing session ID`);
         return;
       }
-      await executeCommand(['sessions', 'show', '--id', ref.session, ...(isJson ? ['--json'] : [])]);
+      await executeCommand(['sessions', 'show', '--id', ref.session, ...(isJson ? ['--json'] : []), ...htmlOptions]);
       return;
     }
 
@@ -990,6 +1025,7 @@ export async function handleShow(
         printError(`Invalid connector reference: missing connector ID`);
         return;
       }
+      // Connectors don't support HTML export
       await executeCommand(['connectors', 'show', '--id', ref.connector, ...(isJson ? ['--json'] : [])]);
       return;
     }
@@ -1005,7 +1041,7 @@ export async function handleShow(
 
   if (level === 'root') {
     if (target) {
-      // Show connector details
+      // Show connector details (no HTML support for connectors)
       await executeCommand(['connectors', 'show', '--id', target, ...(isJson ? ['--json'] : [])]);
     } else {
       printInfo('At root level. Use: show <connector> or cc <connector>');
@@ -1038,9 +1074,9 @@ export async function handleShow(
         return;
       }
 
-      await executeCommand(['sessions', 'show', '--id', matches[0].session_id, ...(isJson ? ['--json'] : [])]);
+      await executeCommand(['sessions', 'show', '--id', matches[0].session_id, ...(isJson ? ['--json'] : []), ...htmlOptions]);
     } else {
-      // Show connector details
+      // Show connector details (no HTML support for connectors)
       await executeCommand(['connectors', 'show', '--id', context.connector, ...(isJson ? ['--json'] : [])]);
     }
     return;
@@ -1052,12 +1088,15 @@ export async function handleShow(
     return;
   }
 
-  if (target) {
+  // Handle --id option for specific RPC (e.g., show --html --id 1)
+  const rpcTarget = idValue || target;
+
+  if (rpcTarget) {
     // Show RPC details
-    await executeCommand(['rpc', 'show', '--session', context.session, '--id', target, ...(isJson ? ['--json'] : [])]);
+    await executeCommand(['rpc', 'show', '--session', context.session, '--id', rpcTarget, ...(isJson ? ['--json'] : []), ...htmlOptions]);
   } else {
     // Show session details
-    await executeCommand(['sessions', 'show', '--id', context.session, ...(isJson ? ['--json'] : [])]);
+    await executeCommand(['sessions', 'show', '--id', context.session, ...(isJson ? ['--json'] : []), ...htmlOptions]);
   }
 }
 

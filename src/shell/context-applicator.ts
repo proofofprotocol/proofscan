@@ -41,6 +41,11 @@ const BOOLEAN_FLAGS = new Set([
   '-f',
   '--follow',
   '-l',
+  // HTML export options
+  '--html',
+  '--open',
+  '--redact',
+  '--spill',
 ]);
 
 /**

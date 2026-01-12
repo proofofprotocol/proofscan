@@ -11,6 +11,8 @@
  */
 
 import { Command } from 'commander';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ConfigManager } from '../config/index.js';
 import { getEventsDb } from '../db/connection.js';
 import {
@@ -24,6 +26,23 @@ import {
   isSessionError,
   formatSessionError,
 } from '../utils/session-resolver.js';
+import { redactDeep } from '../secrets/redaction.js';
+import { t } from '../i18n/index.js';
+import {
+  DEFAULT_EMBED_MAX_BYTES,
+  toRpcStatus,
+  createPayloadData,
+  getRpcHtmlFilename,
+  getSpillFilename,
+  generateRpcHtml,
+  openInBrowser,
+  getPackageVersion,
+  validateOutputPath,
+  validateEmbedMaxBytes,
+  ensureOutputDir,
+  safeWriteFile,
+} from '../html/index.js';
+import type { HtmlRpcReportV1 } from '../html/index.js';
 import type { RpcCall, Event } from '../db/types.js';
 
 interface RpcListItem {
@@ -50,6 +69,9 @@ interface RpcDetail {
   response_ts: string | null;
   request_json: unknown | null;
   response_json: unknown | null;
+  // Raw JSON strings for HTML export (needed for size calculation and spill)
+  request_raw?: string | null;
+  response_raw?: string | null;
 }
 
 /**
@@ -183,6 +205,8 @@ function getRpcDetail(configDir: string, sessionId: string, rpcId: string): RpcD
     response_ts: rpc.response_ts,
     request_json: requestJson,
     response_json: responseJson,
+    request_raw: requestEvent?.raw_json ?? null,
+    response_raw: responseEvent?.raw_json ?? null,
   };
 }
 
@@ -270,6 +294,123 @@ function renderRpcDetail(detail: RpcDetail): void {
     console.log(JSON.stringify(detail.response_json, null, 2));
   } else {
     console.log('  (no response data)');
+  }
+}
+
+/**
+ * Export RPC detail as HTML file
+ */
+async function exportRpcHtml(
+  detail: RpcDetail,
+  options: {
+    outDir: string;
+    open: boolean;
+    redact: boolean;
+    embedMaxBytes: number;
+    spill: boolean;
+  }
+): Promise<void> {
+  console.log(t('html.exporting'));
+
+  // Validate and create output directory
+  const validatedOutDir = validateOutputPath(options.outDir);
+  ensureOutputDir(validatedOutDir);
+
+  // Apply redaction if requested
+  let requestJson = detail.request_json;
+  let responseJson = detail.response_json;
+  let requestRaw = detail.request_raw ?? null;
+  let responseRaw = detail.response_raw ?? null;
+
+  if (options.redact) {
+    if (requestJson) {
+      const result = redactDeep(requestJson);
+      requestJson = result.value;
+      requestRaw = requestJson ? JSON.stringify(requestJson) : null;
+    }
+    if (responseJson) {
+      const result = redactDeep(responseJson);
+      responseJson = result.value;
+      responseRaw = responseJson ? JSON.stringify(responseJson) : null;
+    }
+    console.log(t('html.redactedNote'));
+  }
+
+  // Handle spill files for oversized payloads
+  let requestSpillFile: string | undefined;
+  let responseSpillFile: string | undefined;
+
+  const requestSize = requestRaw ? Buffer.byteLength(requestRaw, 'utf8') : 0;
+  const responseSize = responseRaw ? Buffer.byteLength(responseRaw, 'utf8') : 0;
+
+  if (options.spill) {
+    if (requestSize > options.embedMaxBytes && requestRaw) {
+      requestSpillFile = getSpillFilename(detail.session_id, detail.rpc_id, 'req');
+      const spillPath = path.join(validatedOutDir, requestSpillFile);
+      safeWriteFile(spillPath, requestRaw);
+      console.log(t('html.spillFileWritten', { file: requestSpillFile }));
+    }
+    if (responseSize > options.embedMaxBytes && responseRaw) {
+      responseSpillFile = getSpillFilename(detail.session_id, detail.rpc_id, 'res');
+      const spillPath = path.join(validatedOutDir, responseSpillFile);
+      safeWriteFile(spillPath, responseRaw);
+      console.log(t('html.spillFileWritten', { file: responseSpillFile }));
+    }
+  }
+
+  // Create payload data with truncation handling
+  const requestPayload = createPayloadData(
+    requestJson,
+    requestRaw,
+    options.embedMaxBytes,
+    requestSpillFile
+  );
+  const responsePayload = createPayloadData(
+    responseJson,
+    responseRaw,
+    options.embedMaxBytes,
+    responseSpillFile
+  );
+
+  // Build report
+  const report: HtmlRpcReportV1 = {
+    meta: {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      generatedBy: `proofscan v${getPackageVersion()}`,
+      redacted: options.redact,
+    },
+    rpc: {
+      rpc_id: detail.rpc_id,
+      session_id: detail.session_id,
+      connector_id: detail.connector_id,
+      method: detail.method,
+      status: toRpcStatus(detail.status === 'OK' ? 1 : detail.status === 'ERR' ? 0 : null),
+      latency_ms: detail.latency_ms,
+      error_code: detail.error_code,
+      request_ts: detail.request_ts,
+      response_ts: detail.response_ts,
+      request: requestPayload,
+      response: responsePayload,
+    },
+  };
+
+  // Generate and write HTML
+  const html = generateRpcHtml(report);
+  const filename = getRpcHtmlFilename(detail.rpc_id);
+  const outputPath = path.join(validatedOutDir, filename);
+  safeWriteFile(outputPath, html);
+
+  console.log(t('html.exported', { path: outputPath }));
+
+  // Open in browser if requested
+  if (options.open) {
+    console.log(t('html.opening'));
+    try {
+      await openInBrowser(outputPath);
+    } catch {
+      console.error(t('errors.openBrowserFailed', { path: outputPath }));
+    }
   }
 }
 
@@ -373,7 +514,7 @@ export function createRpcCommand(getConfigPath: () => string): Command {
     .option('--limit <n>', 'Number of RPCs to show', '20')
     .action(listAction);
 
-  // rpc show [--session <sid>] --id <rpc_id>
+  // rpc show [--session <sid>] --id <rpc_id> [--html] [--out <dir>] [--open] [--redact] [--embed-max-bytes <n>] [--spill]
   cmd
     .command('show')
     .description('Show RPC call details with request/response JSON')
@@ -381,6 +522,12 @@ export function createRpcCommand(getConfigPath: () => string): Command {
     .option('--latest', 'Use the latest session')
     .option('--connector <id>', 'Filter by connector (with --latest)')
     .requiredOption('--id <rpc_id>', 'RPC ID')
+    .option('--html', 'Export as standalone HTML file')
+    .option('--out <dir>', 'Output directory for HTML', './pfscan_reports')
+    .option('--open', 'Open HTML in default browser')
+    .option('--redact', 'Redact sensitive values')
+    .option('--embed-max-bytes <n>', 'Max bytes per payload before truncation', String(DEFAULT_EMBED_MAX_BYTES))
+    .option('--spill', 'Write oversized payloads to separate files')
     .action(async (options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
@@ -405,6 +552,19 @@ export function createRpcCommand(getConfigPath: () => string): Command {
           console.log('RPC call not found.');
           console.log(`Session: ${shortenId(result.sessionId, 8)}... (${result.resolvedBy})`);
           console.log('hint: Use `pfscan rpc list` to see available RPCs');
+          return;
+        }
+
+        // HTML export mode
+        if (options.html) {
+          const embedMaxBytes = validateEmbedMaxBytes(options.embedMaxBytes);
+          await exportRpcHtml(detail, {
+            outDir: options.out,
+            open: options.open,
+            redact: options.redact,
+            embedMaxBytes,
+            spill: options.spill,
+          });
           return;
         }
 
