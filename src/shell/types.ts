@@ -115,11 +115,12 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'scan start': ['--id', '--timeout', '--dry-run'],
   rpc: ['--session', '--id', '--format', '--copy'],
   'rpc list': ['--session', '--format'],
-  'rpc show': ['--session', '--id', '--format', '--copy'],
+  'rpc show': ['--session', '--id', '--format', '--copy', '--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill'],
   summary: ['--session', '--format'],
   analyze: ['--session', '--latest', '--connector'],
   connectors: ['--id', '--from', '--file', '--stdin', '--name'],
   sessions: ['--limit'],
+  'sessions show': ['--id', '--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill'],
   archive: ['--older-than', '--dry-run'],
   record: ['--output'],
   secrets: ['--orphans', '--clip', '--dry-run', '--older-than', '-o', '--output', '--overwrite'],
@@ -155,6 +156,8 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'plans run': ['--connector', '--out', '--timeout', '--dry-run', '--json'],
   'plans runs': ['--plan', '--limit'],
   'plans run-show': ['--json'],
+  // Shell router commands
+  show: ['--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill', '--json', '--id'],
 };
 
 /**

@@ -3,11 +3,39 @@
  */
 
 import { Command } from 'commander';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ConfigManager } from '../config/index.js';
 import { EventsStore } from '../db/events-store.js';
 import { ProofsStore } from '../db/proofs-store.js';
+import { getEventsDb } from '../db/connection.js';
 import { output, outputSuccess, outputError, outputTable, getOutputOptions } from '../utils/output.js';
-import type { SessionWithStats } from '../db/types.js';
+import { redactDeep } from '../secrets/redaction.js';
+import { t } from '../i18n/index.js';
+import {
+  DEFAULT_EMBED_MAX_BYTES,
+  toRpcStatus,
+  createPayloadData,
+  getSessionHtmlFilename,
+  getSpillFilename,
+  generateSessionHtml,
+  openInBrowser,
+} from '../html/index.js';
+import type { HtmlSessionReportV1, SessionRpcDetail } from '../html/index.js';
+import type { SessionWithStats, RpcCall, Event } from '../db/types.js';
+
+// Get package version for HTML reports
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+let packageVersion = '0.0.0';
+try {
+  const pkgPath = path.resolve(__dirname, '../../package.json');
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+  packageVersion = pkg.version || '0.0.0';
+} catch {
+  // Fallback version
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '-';
@@ -22,6 +50,209 @@ function formatDuration(startedAt: string, endedAt: string | null): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${(ms / 60000).toFixed(1)}m`;
+}
+
+/**
+ * Get RPC event data for HTML export
+ */
+function getRpcEventData(
+  configDir: string,
+  sessionId: string,
+  rpcId: string
+): { requestRaw: string | null; responseRaw: string | null; requestJson: unknown; responseJson: unknown } {
+  const db = getEventsDb(configDir);
+
+  const requestEvent = db.prepare(`
+    SELECT raw_json FROM events
+    WHERE session_id = ? AND rpc_id = ? AND kind = 'request'
+  `).get(sessionId, rpcId) as { raw_json: string | null } | undefined;
+
+  const responseEvent = db.prepare(`
+    SELECT raw_json FROM events
+    WHERE session_id = ? AND rpc_id = ? AND kind = 'response'
+  `).get(sessionId, rpcId) as { raw_json: string | null } | undefined;
+
+  const requestRaw = requestEvent?.raw_json ?? null;
+  const responseRaw = responseEvent?.raw_json ?? null;
+
+  let requestJson: unknown = null;
+  let responseJson: unknown = null;
+
+  if (requestRaw) {
+    try {
+      requestJson = JSON.parse(requestRaw);
+    } catch {
+      requestJson = requestRaw;
+    }
+  }
+
+  if (responseRaw) {
+    try {
+      responseJson = JSON.parse(responseRaw);
+    } catch {
+      responseJson = responseRaw;
+    }
+  }
+
+  return { requestRaw, responseRaw, requestJson, responseJson };
+}
+
+/**
+ * Export session as HTML file
+ */
+async function exportSessionHtml(
+  session: SessionWithStats,
+  rpcCalls: RpcCall[],
+  eventCount: number,
+  configDir: string,
+  options: {
+    outDir: string;
+    open: boolean;
+    redact: boolean;
+    embedMaxBytes: number;
+    spill: boolean;
+  }
+): Promise<void> {
+  console.log(t('html.exporting'));
+
+  // Create output directory if needed
+  if (!fs.existsSync(options.outDir)) {
+    fs.mkdirSync(options.outDir, { recursive: true });
+  }
+
+  // Build RPC details with payloads
+  const rpcs: SessionRpcDetail[] = [];
+
+  for (const rpc of rpcCalls) {
+    let { requestRaw, responseRaw, requestJson, responseJson } = getRpcEventData(
+      configDir,
+      session.session_id,
+      rpc.rpc_id
+    );
+
+    // Apply redaction if requested
+    if (options.redact) {
+      if (requestJson) {
+        const result = redactDeep(requestJson);
+        requestJson = result.value;
+        requestRaw = requestJson ? JSON.stringify(requestJson) : null;
+      }
+      if (responseJson) {
+        const result = redactDeep(responseJson);
+        responseJson = result.value;
+        responseRaw = responseJson ? JSON.stringify(responseJson) : null;
+      }
+    }
+
+    // Handle spill files for oversized payloads
+    let requestSpillFile: string | undefined;
+    let responseSpillFile: string | undefined;
+
+    const requestSize = requestRaw ? Buffer.byteLength(requestRaw, 'utf8') : 0;
+    const responseSize = responseRaw ? Buffer.byteLength(responseRaw, 'utf8') : 0;
+
+    if (options.spill) {
+      if (requestSize > options.embedMaxBytes && requestRaw) {
+        requestSpillFile = getSpillFilename(session.session_id, rpc.rpc_id, 'req');
+        const spillPath = path.join(options.outDir, requestSpillFile);
+        fs.writeFileSync(spillPath, requestRaw, 'utf8');
+      }
+      if (responseSize > options.embedMaxBytes && responseRaw) {
+        responseSpillFile = getSpillFilename(session.session_id, rpc.rpc_id, 'res');
+        const spillPath = path.join(options.outDir, responseSpillFile);
+        fs.writeFileSync(spillPath, responseRaw, 'utf8');
+      }
+    }
+
+    // Create payload data with truncation handling
+    const requestPayload = createPayloadData(
+      requestJson,
+      requestRaw,
+      options.embedMaxBytes,
+      requestSpillFile
+    );
+    const responsePayload = createPayloadData(
+      responseJson,
+      responseRaw,
+      options.embedMaxBytes,
+      responseSpillFile
+    );
+
+    // Calculate latency
+    let latency_ms: number | null = null;
+    if (rpc.response_ts) {
+      latency_ms = new Date(rpc.response_ts).getTime() - new Date(rpc.request_ts).getTime();
+    }
+
+    rpcs.push({
+      rpc_id: rpc.rpc_id,
+      method: rpc.method,
+      status: toRpcStatus(rpc.success),
+      latency_ms,
+      request_ts: rpc.request_ts,
+      response_ts: rpc.response_ts,
+      error_code: rpc.error_code,
+      request: requestPayload,
+      response: responsePayload,
+    });
+  }
+
+  if (options.redact) {
+    console.log(t('html.redactedNote'));
+  }
+
+  // Calculate total latency across all RPCs
+  const totalLatencyMs = rpcs.reduce((sum, rpc) => {
+    if (rpc.latency_ms !== null) {
+      return sum + rpc.latency_ms;
+    }
+    return sum;
+  }, 0);
+
+  // Build report
+  const report: HtmlSessionReportV1 = {
+    meta: {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      generatedBy: `proofscan v${packageVersion}`,
+      redacted: options.redact,
+    },
+    session: {
+      session_id: session.session_id,
+      connector_id: session.connector_id,
+      started_at: session.started_at,
+      ended_at: session.ended_at,
+      exit_reason: session.exit_reason,
+      rpc_count: rpcCalls.length,
+      event_count: eventCount,
+      total_latency_ms: rpcs.length > 0 ? totalLatencyMs : null,
+    },
+    rpcs,
+  };
+
+  // Generate and write HTML
+  const html = generateSessionHtml(report);
+  const filename = getSessionHtmlFilename(session.session_id);
+  const outputPath = path.join(options.outDir, filename);
+  fs.writeFileSync(outputPath, html, 'utf8');
+
+  console.log(t('html.exported', { path: outputPath }));
+
+  // Count spill files
+  const spillCount = rpcs.filter(r => r.request.spillFile || r.response.spillFile).length;
+  if (spillCount > 0) {
+    console.log(`  (${spillCount} RPC(s) with spill files)`);
+  }
+
+  // Open in browser if requested
+  if (options.open) {
+    console.log(t('html.opening'));
+    try {
+      await openInBrowser(outputPath);
+    } catch (error) {
+      console.error('Failed to open browser:', error);
+    }
+  }
 }
 
 export function createSessionsCommand(getConfigPath: () => string): Command {
@@ -76,6 +307,12 @@ export function createSessionsCommand(getConfigPath: () => string): Command {
     .command('show')
     .description('Show session details')
     .requiredOption('--id <session_id>', 'Session ID (can be partial)')
+    .option('--html', 'Export as standalone HTML file')
+    .option('--out <dir>', 'Output directory for HTML', './pfscan_reports')
+    .option('--open', 'Open HTML in default browser')
+    .option('--redact', 'Redact sensitive values')
+    .option('--embed-max-bytes <n>', 'Max bytes per payload before truncation', String(DEFAULT_EMBED_MAX_BYTES))
+    .option('--spill', 'Write oversized payloads to separate files')
     .action(async (options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
@@ -96,6 +333,18 @@ export function createSessionsCommand(getConfigPath: () => string): Command {
         const events = eventsStore.getEventsBySession(session.session_id);
         const rpcCalls = eventsStore.getRpcCallsBySession(session.session_id);
         const proofs = proofsStore.getProofsBySession(session.session_id);
+
+        // HTML export mode
+        if (options.html) {
+          await exportSessionHtml(session, rpcCalls, events.length, manager.getConfigDir(), {
+            outDir: options.out,
+            open: options.open,
+            redact: options.redact,
+            embedMaxBytes: parseInt(options.embedMaxBytes, 10),
+            spill: options.spill,
+          });
+          return;
+        }
 
         const result = {
           ...session,

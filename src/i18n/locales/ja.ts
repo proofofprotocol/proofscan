@@ -259,6 +259,16 @@ export const ja: LocaleMessages = {
     },
   },
 
+  // html export output
+  html: {
+    exporting: 'HTMLレポートをエクスポート中...',
+    exported: '{path} にエクスポートしました',
+    opening: 'ブラウザで開いています...',
+    redactedNote: '一部の値がマスクされています',
+    truncatedPayload: 'ペイロード切り詰め（{size}バイト、先頭4096文字を表示）',
+    spillFileWritten: 'フルペイロードを {file} に出力しました',
+  },
+
   // Error messages
   errors: {
     connectorIdRequired: 'コネクタIDが必要です。',

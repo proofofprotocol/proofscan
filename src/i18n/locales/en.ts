@@ -259,6 +259,16 @@ export const en = {
     },
   },
 
+  // html export output
+  html: {
+    exporting: 'Exporting HTML report...',
+    exported: 'Exported to {path}',
+    opening: 'Opening in browser...',
+    redactedNote: 'Some values have been redacted',
+    truncatedPayload: 'Payload truncated ({size} bytes, showing first 4096 chars)',
+    spillFileWritten: 'Full payload written to {file}',
+  },
+
   // Error messages
   errors: {
     connectorIdRequired: 'Connector ID is required.',
