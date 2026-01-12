@@ -865,7 +865,7 @@ function getConnectorReportStyles(): string {
     .badge.status-OK { border-color: var(--status-ok); color: var(--status-ok); }
     .badge.status-ERR { border-color: var(--status-err); color: var(--status-err); }
     .badge.status-PENDING { border-color: var(--status-pending); color: var(--status-pending); }
-    .badge.cap-enabled { border-color: var(--status-ok); color: var(--status-ok); background: rgba(63, 185, 80, 0.1); }
+    .badge.cap-enabled { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(0, 212, 255, 0.1); }
 
     /* Connector info section (collapsible) */
     .connector-info {
