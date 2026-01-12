@@ -14,6 +14,7 @@ import { getEventsDb } from '../db/connection.js';
 import { t } from '../i18n/index.js';
 import {
   DEFAULT_EMBED_MAX_BYTES,
+  SHORT_ID_LENGTH,
   toRpcStatus,
   createPayloadData,
   getConnectorHtmlFilename,
@@ -378,7 +379,7 @@ async function exportConnectorHtml(
     },
     sessions: displayedSessions.map(s => ({
       session_id: s.session_id,
-      short_id: s.session_id.slice(0, 8),
+      short_id: s.session_id.slice(0, SHORT_ID_LENGTH),
       started_at: s.started_at,
       ended_at: s.ended_at,
       rpc_count: s.rpc_count ?? 0,
@@ -483,6 +484,16 @@ export function createConnectorsCommand(getConfigPath: () => string): Command {
           const embedMaxBytes = validateEmbedMaxBytes(options.embedMaxBytes);
           const maxSessions = parseInt(options.maxSessions, 10);
           const offset = parseInt(options.offset, 10);
+
+          // Validate numeric inputs
+          if (isNaN(maxSessions) || maxSessions < 1) {
+            outputError('--max-sessions must be a positive integer');
+            process.exit(1);
+          }
+          if (isNaN(offset) || offset < 0) {
+            outputError('--offset must be a non-negative integer');
+            process.exit(1);
+          }
 
           await exportConnectorHtml(options.id, connector, manager.getConfigDir(), {
             outDir: options.out,

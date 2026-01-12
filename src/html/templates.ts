@@ -15,7 +15,7 @@ import type {
   RpcStatus,
   SessionRpcDetail,
 } from './types.js';
-import { getStatusSymbol } from './types.js';
+import { getStatusSymbol, SHORT_ID_LENGTH } from './types.js';
 
 /**
  * Escape HTML special characters to prevent XSS
@@ -1416,7 +1416,7 @@ function renderSessionDetailContent(
   const rpcRows = rpcs.map((rpc, idx) => {
     const statusClass = `status-${rpc.status}`;
     const statusSymbol = getStatusSymbol(rpc.status);
-    const rpcIdShort = rpc.rpc_id.slice(0, 8);
+    const rpcIdShort = rpc.rpc_id.slice(0, SHORT_ID_LENGTH);
     const timeShort = formatTimestamp(rpc.request_ts).split(' ')[1]?.slice(0, 12) || '-';
     const latency = rpc.latency_ms !== null ? `${rpc.latency_ms}ms` : '-';
 

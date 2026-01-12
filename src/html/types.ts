@@ -21,6 +21,11 @@ export const DEFAULT_EMBED_MAX_BYTES = 262144;
 export const TRUNCATION_PREVIEW_LENGTH = 4096;
 
 /**
+ * Short ID length for display (e.g., session IDs, RPC IDs)
+ */
+export const SHORT_ID_LENGTH = 8;
+
+/**
  * Report metadata
  */
 export interface HtmlReportMeta {
