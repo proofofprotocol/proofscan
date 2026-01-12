@@ -88,10 +88,11 @@ export function createSpinner(options: SpinnerOptions): Ora | null {
     },
   });
 
-  // SIGINT handling (graceful termination)
+  // SIGINT handling (graceful termination with exit code 130)
+  // Exit code 130 = 128 + 2 (SIGINT signal number)
   const cleanup = () => {
     spinner.stop();
-    process.exit(0);
+    process.exit(130);
   };
 
   process.once('SIGINT', cleanup);

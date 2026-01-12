@@ -7,14 +7,9 @@ import { ConfigManager } from '../config/index.js';
 import { EventsStore, getDbSizes } from '../db/index.js';
 import { ProofsStore } from '../db/proofs-store.js';
 import { output, outputSuccess, outputError, outputTable, getOutputOptions } from '../utils/output.js';
+import { formatBytes } from '../utils/formatters.js';
 import type { RetentionConfig } from '../types/config.js';
 import type { PruneCandidate, ArchivePlan } from '../db/types.js';
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 async function computeArchivePlan(
   eventsStore: EventsStore,

@@ -8,6 +8,8 @@
  * - Size formatting
  */
 
+import { isInteractiveTTY } from './platform.js';
+
 /**
  * Terminal width for formatting (fallback to 80)
  */
@@ -15,9 +17,10 @@ export const TERM_WIDTH = process.stdout.columns || 80;
 
 /**
  * Check if output is a TTY (for color support)
+ * Uses unified isInteractiveTTY for consistency
  */
 export function isTTY(): boolean {
-  return process.stdout.isTTY === true;
+  return isInteractiveTTY();
 }
 
 /**
