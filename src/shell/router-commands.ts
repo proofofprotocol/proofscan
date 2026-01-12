@@ -296,10 +296,10 @@ export async function handleCc(
     if (sessions.length === 0) {
       if (context.connector) {
         printError(`No sessions for connector: ${context.connector}`);
-        printInfo('Run: scan start');
+        printInfo('Run: plans run basic-mcp');
       } else {
         printError('No sessions yet');
-        printInfo('Run: scan start --id <connector>');
+        printInfo('Run: plans run basic-mcp --connector <id>');
       }
       return;
     }
@@ -509,21 +509,47 @@ export async function handleCc(
   const level = getContextLevel(context);
 
   if (level === 'root') {
-    // Treat as connector
-    const connectors = store.getConnectors();
-    const match = connectors.find(c => c.id === arg || c.id.startsWith(arg));
-    if (!match) {
+    // Treat as connector - search both history and config
+    const historyConnectors = store.getConnectors();
+    const manager = new ConfigManager(configPath);
+    const configuredConnectors = await manager.getConnectors();
+
+    // Merge IDs from both sources (deduplicated)
+    const allConnectorIds = new Set([
+      ...historyConnectors.map(c => c.id),
+      ...configuredConnectors.map(c => c.id),
+    ]);
+
+    // Find matching connector (exact match first, then prefix)
+    let matchId: string | undefined;
+    for (const id of allConnectorIds) {
+      if (id === arg) {
+        matchId = id;
+        break;
+      }
+    }
+    if (!matchId) {
+      for (const id of allConnectorIds) {
+        if (id.startsWith(arg)) {
+          matchId = id;
+          break;
+        }
+      }
+    }
+
+    if (!matchId) {
       printError(`Connector not found: ${arg}`);
-      printInfo('Available: ' + connectors.map(c => c.id).join(', '));
+      printInfo('Available: ' + [...allConnectorIds].join(', '));
       return;
     }
 
     savePreviousLocation(context);
-    context.connector = match.id;
+    context.connector = matchId;
     context.session = undefined;
-    context.proto = detectConnectorProto(store, match.id);
-    setCurrentSession('', match.id);
-    printSuccess(`→ /${match.id}`);
+    // Proto detection will return '?' for connectors with no history (config-only)
+    context.proto = detectConnectorProto(store, matchId);
+    setCurrentSession('', matchId);
+    printSuccess(`→ /${matchId}`);
     return;
   }
 
@@ -646,7 +672,7 @@ export async function handleLs(
 
   if (level === 'root') {
     // List connectors with proto
-    await listConnectors(store, isLong, isJson, idsOnly);
+    await listConnectors(store, configPath, isLong, isJson, idsOnly);
     return;
   }
 
@@ -670,47 +696,98 @@ export async function handleLs(
 
 /**
  * List connectors at root level (router-style table)
+ * Merges connectors from both config.json and events.db (scan history)
  */
 async function listConnectors(
   store: EventLineStore,
+  configPath: string,
   _isLong: boolean,
   isJson: boolean,
   idsOnly: boolean
 ): Promise<void> {
-  const connectors = store.getConnectors();
+  // Get connectors from history (events.db)
+  const historyConnectors = store.getConnectors();
+  const historyMap = new Map(historyConnectors.map(c => [c.id, c]));
 
-  if (connectors.length === 0) {
-    printInfo('No connectors found. Run: scan start --id <connector>');
+  // Get configured connectors (config.json)
+  const manager = new ConfigManager(configPath);
+  const configuredConnectors = await manager.getConnectors();
+  const configuredIds = new Set(configuredConnectors.map(c => c.id));
+
+  // Build merged connector list:
+  // - All connectors from history (with configured flag)
+  // - Plus config-only connectors that have no history yet
+  interface MergedConnector {
+    id: string;
+    session_count: number;
+    latest_session: string | null;
+    configured: boolean;
+    hasHistory: boolean;
+  }
+
+  const mergedConnectors: MergedConnector[] = [];
+
+  // Add all history connectors
+  for (const c of historyConnectors) {
+    mergedConnectors.push({
+      id: c.id,
+      session_count: c.session_count,
+      latest_session: c.latest_session ?? null,
+      configured: configuredIds.has(c.id),
+      hasHistory: true,
+    });
+  }
+
+  // Add config-only connectors (not in history)
+  for (const c of configuredConnectors) {
+    if (!historyMap.has(c.id)) {
+      mergedConnectors.push({
+        id: c.id,
+        session_count: 0,
+        latest_session: null,
+        configured: true,
+        hasHistory: false,
+      });
+    }
+  }
+
+  if (mergedConnectors.length === 0) {
+    printInfo('No connectors found. Add one with: connectors add --id <id> --command <cmd>');
     return;
   }
 
   if (isJson) {
-    const data = connectors.map(c => ({
+    const data = mergedConnectors.map(c => ({
       id: c.id,
-      proto: detectConnectorProto(store, c.id),
+      proto: c.hasHistory ? detectConnectorProto(store, c.id) : '?',
       sessions: c.session_count,
       latest: c.latest_session,
+      configured: c.configured,
+      hasHistory: c.hasHistory,
     }));
     console.log(JSON.stringify(data, null, 2));
     return;
   }
 
   if (idsOnly) {
-    connectors.forEach(c => console.log(c.id));
+    mergedConnectors.forEach(c => console.log(c.id));
     return;
   }
 
   // Router-style table format
   const isTTY = process.stdout.isTTY;
-  const data = connectors.map(c => ({
+  const data = mergedConnectors.map(c => ({
     id: c.id,
-    proto: detectConnectorProto(store, c.id),
+    proto: c.hasHistory ? detectConnectorProto(store, c.id) : '?',
     sessions: c.session_count,
     latest: c.latest_session ? formatRelativeTime(c.latest_session) : '-',
+    configured: c.configured,
+    hasHistory: c.hasHistory,
   }));
 
-  // Calculate column widths
-  const maxId = Math.max(12, ...data.map(d => d.id.length));
+  // Calculate column widths (account for markers)
+  // Markers: ' *' for history-only, ' +' for config-only (no history)
+  const maxId = Math.max(12, ...data.map(d => d.id.length + 2));
 
   console.log();
 
@@ -727,13 +804,38 @@ async function listConnectors(
   data.forEach(d => {
     const protoColor = getProtoColor(d.proto, isTTY);
 
+    // Determine marker:
+    // - No marker if configured + has history (normal state)
+    // - ' *' if history-only (not in config)
+    // - ' +' if config-only (no history yet, ready for scan)
+    let marker = '';
+    if (!d.configured) {
+      marker = isTTY ? ' \x1b[2m*\x1b[0m' : ' *';
+    } else if (!d.hasHistory) {
+      marker = isTTY ? ' \x1b[33m+\x1b[0m' : ' +';
+    }
+    const idDisplay = d.id + marker;
+
     console.log(
-      d.id.padEnd(maxId) + '  ' +
+      idDisplay.padEnd(isTTY ? maxId + (marker ? 7 : 0) : maxId) + '  ' +
       protoColor.padEnd(isTTY ? 14 : 5) + '  ' +
       String(d.sessions).padEnd(8) + '  ' +
       d.latest
     );
   });
+
+  // Show legend
+  const hasHistoryOnly = data.some(d => !d.configured);
+  const hasConfigOnly = data.some(d => !d.hasHistory);
+  if (hasHistoryOnly || hasConfigOnly) {
+    console.log();
+    if (hasConfigOnly) {
+      printInfo('+ = ready (run: plans run basic-mcp)');
+    }
+    if (hasHistoryOnly) {
+      printInfo('* = history only (not in config)');
+    }
+  }
 
   console.log();
   printInfo(`Hint: cd <connector> to enter, show <connector> for details`);
@@ -752,7 +854,8 @@ async function listSessions(
   const sessions = store.getSessions(connectorId, 50);
 
   if (sessions.length === 0) {
-    printInfo(`No sessions for connector: ${connectorId}. Run: scan start`);
+    printInfo(`No sessions for connector: ${connectorId}`);
+    printInfo('Run: plans run basic-mcp');
     return;
   }
 

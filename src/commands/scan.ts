@@ -10,16 +10,22 @@ import { setCurrentSession } from '../utils/state.js';
 
 export function createScanCommand(getConfigPath: () => string): Command {
   const cmd = new Command('scan')
-    .description('Scan MCP servers (use: scan start --id <connector>)');
+    .description('[DEPRECATED] Use "plans run" instead. Scan MCP servers.');
 
   cmd
     .command('start')
-    .description('Start scanning a connector')
+    .description('[DEPRECATED] Use "plans run <plan> --connector <id>" instead')
     .argument('[connectorId]', 'Connector ID (alternative to --id)')
     .option('--id <id>', 'Connector ID')
     .option('--timeout <seconds>', 'Timeout in seconds', '30')
     .option('--dry-run', 'Run scan without saving to database')
     .action(async (connectorIdArg, options) => {
+      // Show deprecation warning
+      console.warn('\x1b[33m[DEPRECATED]\x1b[0m "scan start" is deprecated.');
+      console.warn('  Use: pfscan plans run basic-mcp --connector <id>');
+      console.warn('  Or:  pfscan plans run minimal-mcp --connector <id>');
+      console.warn();
+
       // Support both positional argument and --id option
       const connectorId = options.id || connectorIdArg;
 

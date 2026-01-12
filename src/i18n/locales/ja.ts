@@ -226,6 +226,39 @@ export const ja: LocaleMessages = {
     toInstall: 'インストールするには:',
   },
 
+  // plans command output
+  plans: {
+    noPlans: 'プランがありません。',
+    noRuns: '実行履歴がありません。',
+    planAdded: 'プラン \'{name}\' を追加しました (digest: {digest}...)',
+    planDeleted: 'プラン \'{name}\' を削除しました',
+    planNotFound: 'プランが見つかりません: {name}',
+    runNotFound: '実行履歴が見つかりません: {id}',
+    connectorNotFound: 'コネクタが見つかりません: {id}',
+    invalidPlanName: '無効なプラン名です。小文字、数字、ハイフン、アンダースコアのみ使用できます。',
+    planExists: 'プラン \'{name}\' は既に存在します。置き換えるには先に \'plans delete\' を実行してください。',
+    runWarning: '警告: プラン \'{name}\' には関連する実行履歴があります。',
+    useForce: '強制削除するには --force を使用してください (実行履歴はダイジェストで参照を保持します)。',
+    running: 'プラン \'{name}\' をコネクタ \'{connector}\' で実行中...',
+    runId: '実行ID: {id}',
+    status: 'ステータス: {status}',
+    duration: '実行時間: {ms}ms',
+    steps: 'ステップ:',
+    inventory: 'インベントリ:',
+    capabilities: 'ケイパビリティ: {list}',
+    tools: 'ツール: {count}',
+    resources: 'リソース: {count}',
+    prompts: 'プロンプト: {count}',
+    artifacts: '成果物: {path}',
+    imported: '{count} 件のプランをインポートしました: {names}',
+    exported: 'プラン \'{name}\' を {file} にエクスポートしました',
+    dryRun: {
+      plan: 'プラン: {name}',
+      connector: 'コネクタ: {id}',
+      steps: 'ステップ ({count}):',
+    },
+  },
+
   // Error messages
   errors: {
     connectorIdRequired: 'コネクタIDが必要です。',

@@ -7,7 +7,7 @@
  */
 
 export const EVENTS_DB_VERSION = 5;
-export const PROOFS_DB_VERSION = 1;
+export const PROOFS_DB_VERSION = 2;
 
 // events.db schema (version 3)
 export const EVENTS_DB_SCHEMA = `
@@ -81,9 +81,10 @@ CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
 
 -- User refs table (Phase 4.1: named references)
 -- Note: 'popl' kind uses connector column for entry_id and session column for target
+-- Note: 'plan' kind stores plan name, 'run' kind stores run_id
 CREATE TABLE IF NOT EXISTS user_refs (
   name TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl', 'plan', 'run')),
   connector TEXT,
   session TEXT,
   rpc TEXT,
@@ -153,9 +154,10 @@ CREATE INDEX IF NOT EXISTS idx_actors_revoked ON actors(revoked_at);
 export const EVENTS_DB_MIGRATION_3_TO_4 = `
 -- Create user_refs table for named references
 -- Note: 'popl' kind uses connector column for entry_id and session column for target
+-- Note: 'plan' kind stores plan name, 'run' kind stores run_id
 CREATE TABLE IF NOT EXISTS user_refs (
   name TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl', 'plan', 'run')),
   connector TEXT,
   session TEXT,
   rpc TEXT,
@@ -175,13 +177,13 @@ CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
  * Adds 'popl' to user_refs kind CHECK constraint
  */
 export const EVENTS_DB_MIGRATION_4_TO_5 = `
--- Add 'popl' to user_refs kind constraint
+-- Add 'popl', 'plan', 'run' to user_refs kind constraint
 -- SQLite doesn't support ALTER CONSTRAINT, so we recreate the table
 
 -- Create new table with updated constraint
 CREATE TABLE user_refs_new (
   name TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl')),
+  kind TEXT NOT NULL CHECK(kind IN ('connector', 'session', 'rpc', 'tool_call', 'context', 'popl', 'plan', 'run')),
   connector TEXT,
   session TEXT,
   rpc TEXT,
@@ -205,7 +207,7 @@ CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
 CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
 `;
 
-// proofs.db schema
+// proofs.db schema (version 2: added plans and runs tables)
 export const PROOFS_DB_SCHEMA = `
 -- Proofs table (immutable, never pruned)
 CREATE TABLE IF NOT EXISTS proofs (
@@ -225,4 +227,82 @@ CREATE TABLE IF NOT EXISTS proofs (
 CREATE INDEX IF NOT EXISTS idx_proofs_connector ON proofs(connector_id);
 CREATE INDEX IF NOT EXISTS idx_proofs_session ON proofs(session_id);
 CREATE INDEX IF NOT EXISTS idx_proofs_created ON proofs(created_at);
+
+-- Plans table (Phase 5.2: validation plans, never pruned)
+CREATE TABLE IF NOT EXISTS plans (
+  name TEXT PRIMARY KEY CHECK(length(name) > 0 AND name GLOB '[a-z0-9_-]*'),
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  content_yaml TEXT NOT NULL,
+  content_normalized TEXT NOT NULL,
+  digest_sha256 TEXT NOT NULL,
+  description TEXT,
+  default_connector TEXT,
+  source TEXT NOT NULL CHECK(source IN ('manual', 'import', 'builtin')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_plans_created ON plans(created_at);
+CREATE INDEX IF NOT EXISTS idx_plans_source ON plans(source);
+
+-- Runs table (Phase 5.2: plan execution records, never pruned)
+CREATE TABLE IF NOT EXISTS runs (
+  run_id TEXT PRIMARY KEY,
+  plan_name TEXT,
+  plan_digest TEXT NOT NULL,
+  connector_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'partial', 'crashed')),
+  artifact_path TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (plan_name) REFERENCES plans(name) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_plan ON runs(plan_name);
+CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+CREATE INDEX IF NOT EXISTS idx_runs_digest ON runs(plan_digest);
+`;
+
+/**
+ * Migration from proofs.db version 1 to version 2
+ * Phase 5.2: Adds plans and runs tables for validation scenarios
+ */
+export const PROOFS_DB_MIGRATION_1_TO_2 = `
+-- Plans table (Phase 5.2: validation plans, never pruned)
+CREATE TABLE IF NOT EXISTS plans (
+  name TEXT PRIMARY KEY CHECK(length(name) > 0 AND name GLOB '[a-z0-9_-]*'),
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  content_yaml TEXT NOT NULL,
+  content_normalized TEXT NOT NULL,
+  digest_sha256 TEXT NOT NULL,
+  description TEXT,
+  default_connector TEXT,
+  source TEXT NOT NULL CHECK(source IN ('manual', 'import', 'builtin')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_plans_created ON plans(created_at);
+CREATE INDEX IF NOT EXISTS idx_plans_source ON plans(source);
+
+-- Runs table (Phase 5.2: plan execution records, never pruned)
+CREATE TABLE IF NOT EXISTS runs (
+  run_id TEXT PRIMARY KEY,
+  plan_name TEXT,
+  plan_digest TEXT NOT NULL,
+  connector_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed', 'partial', 'crashed')),
+  artifact_path TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (plan_name) REFERENCES plans(name) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_plan ON runs(plan_name);
+CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+CREATE INDEX IF NOT EXISTS idx_runs_digest ON runs(plan_digest);
 `;

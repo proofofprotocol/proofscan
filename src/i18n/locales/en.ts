@@ -226,6 +226,39 @@ export const en = {
     toInstall: 'To install:',
   },
 
+  // plans command output
+  plans: {
+    noPlans: 'No plans found.',
+    noRuns: 'No runs found.',
+    planAdded: 'Plan \'{name}\' added (digest: {digest}...)',
+    planDeleted: 'Plan \'{name}\' deleted',
+    planNotFound: 'Plan not found: {name}',
+    runNotFound: 'Run not found: {id}',
+    connectorNotFound: 'Connector not found: {id}',
+    invalidPlanName: 'Invalid plan name. Use lowercase letters, numbers, hyphens, and underscores only.',
+    planExists: 'Plan \'{name}\' already exists. Use \'plans delete\' first to replace.',
+    runWarning: 'Warning: Plan \'{name}\' has associated runs.',
+    useForce: 'Use --force to delete anyway (runs will keep reference by digest).',
+    running: 'Running plan \'{name}\' against connector \'{connector}\'...',
+    runId: 'Run ID: {id}',
+    status: 'Status: {status}',
+    duration: 'Duration: {ms}ms',
+    steps: 'Steps:',
+    inventory: 'Inventory:',
+    capabilities: 'Capabilities: {list}',
+    tools: 'Tools: {count}',
+    resources: 'Resources: {count}',
+    prompts: 'Prompts: {count}',
+    artifacts: 'Artifacts: {path}',
+    imported: 'Imported {count} plan(s): {names}',
+    exported: 'Plan \'{name}\' exported to {file}',
+    dryRun: {
+      plan: 'Plan: {name}',
+      connector: 'Connector: {id}',
+      steps: 'Steps ({count}):',
+    },
+  },
+
   // Error messages
   errors: {
     connectorIdRequired: 'Connector ID is required.',

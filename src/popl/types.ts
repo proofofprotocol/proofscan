@@ -24,7 +24,7 @@ export const TRUST_LABELS: Record<TrustLevel, string> = {
 };
 
 /** Target kinds for POPL entries */
-export type TargetKind = 'session' | 'connector' | 'proxy';
+export type TargetKind = 'session' | 'connector' | 'proxy' | 'plan' | 'run';
 
 /** Redaction policy */
 export type RedactionPolicy = 'default' | 'strict' | 'none';
@@ -53,6 +53,10 @@ export interface PoplTargetIds {
   connector_id?: string;
   /** Session ID (required for session-level entries) */
   session_id?: string;
+  /** Plan name (required for plan-level entries) */
+  plan_name?: string;
+  /** Run ID (required for run-level entries) */
+  run_id?: string;
 }
 
 /** Target specification */

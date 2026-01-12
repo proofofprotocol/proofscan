@@ -229,6 +229,21 @@ export const ANCILLARY_COMMANDS: CommandEntry[] = [
     description: 'View proxy logs',
   },
   {
+    name: 'plans',
+    description: 'Manage validation plans',
+    subcommands: [
+      { name: 'ls', description: 'List all plans' },
+      { name: 'show', description: 'Show plan details' },
+      { name: 'add', description: 'Add a new plan from YAML' },
+      { name: 'delete', description: 'Delete a plan' },
+      { name: 'import', description: 'Import plans from file' },
+      { name: 'export', description: 'Export a plan to file' },
+      { name: 'run', description: 'Run a plan against a connector' },
+      { name: 'runs', description: 'List plan execution runs' },
+      { name: 'run-show', description: 'Show run details' },
+    ],
+  },
+  {
     name: 'popl',
     description: 'Public Observable Proof Ledger management',
     subcommands: [

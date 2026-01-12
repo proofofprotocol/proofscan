@@ -233,6 +233,14 @@ export function applyContext(
     }
   }
 
+  // === PLANS RUN ===
+  // - `plans run <name>` needs --connector from context
+  if (command === 'plans' && subcommand === 'run') {
+    if (!hasOption(args, '--connector') && context.connector) {
+      args.push('--connector', context.connector);
+    }
+  }
+
   return { args, warnings };
 }
 

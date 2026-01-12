@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -266,7 +266,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
 }
 
 /**
- * Initialize proofs.db
+ * Initialize proofs.db with migrations
  */
 function initProofsDb(dir: string): Database.Database {
   const dbPath = join(dir, 'proofs.db');
@@ -275,13 +275,68 @@ function initProofsDb(dir: string): Database.Database {
   // Check version
   const currentVersion = db.pragma('user_version', { simple: true }) as number;
 
-  if (currentVersion < PROOFS_DB_VERSION) {
-    // Run migrations
+  if (currentVersion === 0) {
+    // Fresh database - create full schema
     db.exec(PROOFS_DB_SCHEMA);
+    db.pragma(`user_version = ${PROOFS_DB_VERSION}`);
+  } else if (currentVersion < PROOFS_DB_VERSION) {
+    // Run incremental migrations
+    runProofsMigrations(db, currentVersion);
     db.pragma(`user_version = ${PROOFS_DB_VERSION}`);
   }
 
   return db;
+}
+
+/**
+ * Remove SQL comments from a string
+ * Handles both single-line (--) and preserves content after comments
+ */
+function removeComments(sql: string): string {
+  return sql
+    .split('\n')
+    .map(line => {
+      const commentIndex = line.indexOf('--');
+      if (commentIndex === -1) return line;
+      return line.substring(0, commentIndex);
+    })
+    .join('\n')
+    .trim();
+}
+
+/**
+ * Run incremental migrations for proofs.db
+ */
+function runProofsMigrations(db: Database.Database, fromVersion: number): void {
+  // Migration 1 → 2: Add plans and runs tables (Phase 5.2)
+  if (fromVersion < 2) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      // Remove comments first, then split by semicolon
+      const cleanedSql = removeComments(PROOFS_DB_MIGRATION_1_TO_2);
+      const statements = cleanedSql
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Ignore "table already exists" errors
+          if (err instanceof Error && !err.message.includes('already exists')) {
+            throw err;
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
 }
 
 /**
@@ -486,6 +541,117 @@ const VALID_SESSION_COLUMNS = new Map<string, string>([
  * @param configDir - Optional config directory path
  * @returns Object with success status, list of fixed items, and optional error
  */
+export interface ProofsDbDiagnostic {
+  path: string;
+  exists: boolean;
+  readable: boolean;
+  userVersion: number | null;
+  expectedVersion: number;
+  tables: string[];
+  missingTables: string[];
+  error?: string;
+}
+
+/**
+ * Run diagnostics on proofs.db without modifying it
+ */
+export function diagnoseProofsDb(configDir?: string): ProofsDbDiagnostic {
+  const dir = getDbDir(configDir);
+  const dbPath = join(dir, 'proofs.db');
+
+  const result: ProofsDbDiagnostic = {
+    path: dbPath,
+    exists: false,
+    readable: false,
+    userVersion: null,
+    expectedVersion: PROOFS_DB_VERSION,
+    tables: [],
+    missingTables: [],
+  };
+
+  // Check if file exists
+  try {
+    statSync(dbPath);
+    result.exists = true;
+  } catch {
+    return result;
+  }
+
+  // Try to open and read
+  let db: Database.Database | undefined;
+  try {
+    db = new Database(dbPath, { readonly: true });
+    result.readable = true;
+
+    // Get user_version
+    result.userVersion = db.pragma('user_version', { simple: true }) as number;
+
+    // Get existing tables
+    const tablesResult = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    ).all() as { name: string }[];
+    result.tables = tablesResult.map(t => t.name).sort();
+
+    // Check for required tables (Phase 5.2: added plans and runs)
+    const requiredTables = ['proofs', 'plans', 'runs'];
+    result.missingTables = requiredTables.filter(t => !result.tables.includes(t));
+
+  } catch (err) {
+    result.error = err instanceof Error ? err.message : String(err);
+  } finally {
+    db?.close();
+  }
+
+  return result;
+}
+
+/**
+ * Attempt to fix missing tables in proofs.db by running migrations
+ */
+export function fixProofsDb(configDir?: string): { success: boolean; fixed: string[]; error?: string } {
+  const dir = getDbDir(configDir);
+  const dbPath = join(dir, 'proofs.db');
+  const fixed: string[] = [];
+
+  let db: Database.Database | undefined;
+  try {
+    db = new Database(dbPath);
+
+    // Get current version
+    const currentVersion = db.pragma('user_version', { simple: true }) as number;
+
+    // Run migrations if needed
+    if (currentVersion < PROOFS_DB_VERSION) {
+      runProofsMigrations(db, currentVersion);
+      db.pragma(`user_version = ${PROOFS_DB_VERSION}`);
+      fixed.push(`migration:${currentVersion}->${PROOFS_DB_VERSION}`);
+    }
+
+    // Verify tables exist after migration
+    const tablesResult = db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    ).all() as { name: string }[];
+    const existingTables = new Set(tablesResult.map(t => t.name));
+
+    if (existingTables.has('plans')) {
+      fixed.push('table:plans');
+    }
+    if (existingTables.has('runs')) {
+      fixed.push('table:runs');
+    }
+
+    return { success: true, fixed };
+  } catch (err) {
+    return {
+      success: false,
+      fixed: [],
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    db?.close();
+  }
+}
+
 export function fixEventsDb(configDir?: string): { success: boolean; fixed: string[]; error?: string } {
   const dir = getDbDir(configDir);
   const dbPath = join(dir, 'events.db');

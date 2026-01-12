@@ -44,3 +44,6 @@ export * from './catalog.js';
 
 // Phase 7.x: Package Runners
 export * from './runners.js';
+
+// Phase 5.2: Plans (validation scenarios)
+export * from './plans.js';

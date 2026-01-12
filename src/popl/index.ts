@@ -64,6 +64,8 @@ export {
   initPoplDir,
   loadPoplConfig,
   createSessionPoplEntry,
+  createPlanPoplEntry,
+  createRunPoplEntry,
   listPoplEntries,
   readPoplEntry,
 } from './service.js';
