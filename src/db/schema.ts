@@ -230,7 +230,7 @@ CREATE INDEX IF NOT EXISTS idx_proofs_created ON proofs(created_at);
 
 -- Plans table (Phase 5.2: validation plans, never pruned)
 CREATE TABLE IF NOT EXISTS plans (
-  name TEXT PRIMARY KEY CHECK(name GLOB '[a-z0-9_-]*'),
+  name TEXT PRIMARY KEY CHECK(length(name) > 0 AND name GLOB '[a-z0-9_-]*'),
   schema_version INTEGER NOT NULL DEFAULT 1,
   content_yaml TEXT NOT NULL,
   content_normalized TEXT NOT NULL,
@@ -262,6 +262,7 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_plan ON runs(plan_name);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+CREATE INDEX IF NOT EXISTS idx_runs_digest ON runs(plan_digest);
 `;
 
 /**
@@ -271,7 +272,7 @@ CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 export const PROOFS_DB_MIGRATION_1_TO_2 = `
 -- Plans table (Phase 5.2: validation plans, never pruned)
 CREATE TABLE IF NOT EXISTS plans (
-  name TEXT PRIMARY KEY CHECK(name GLOB '[a-z0-9_-]*'),
+  name TEXT PRIMARY KEY CHECK(length(name) > 0 AND name GLOB '[a-z0-9_-]*'),
   schema_version INTEGER NOT NULL DEFAULT 1,
   content_yaml TEXT NOT NULL,
   content_normalized TEXT NOT NULL,
@@ -303,4 +304,5 @@ CREATE TABLE IF NOT EXISTS runs (
 CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_plan ON runs(plan_name);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+CREATE INDEX IF NOT EXISTS idx_runs_digest ON runs(plan_digest);
 `;

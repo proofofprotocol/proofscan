@@ -25,14 +25,45 @@ function getConfigDir(configPath: string): string {
 }
 
 /**
- * Read from stdin
+ * Maximum input size for plan YAML (10MB)
  */
-async function readStdin(): Promise<string> {
+const MAX_STDIN_SIZE = 10 * 1024 * 1024;
+
+/**
+ * Maximum timeout in seconds
+ */
+const MAX_TIMEOUT_SECONDS = 300;
+
+/**
+ * Minimum timeout in seconds
+ */
+const MIN_TIMEOUT_SECONDS = 1;
+
+/**
+ * Read from stdin with size limit
+ */
+async function readStdin(maxBytes = MAX_STDIN_SIZE): Promise<string> {
   const chunks: Buffer[] = [];
+  let totalSize = 0;
   for await (const chunk of process.stdin) {
+    totalSize += chunk.length;
+    if (totalSize > maxBytes) {
+      throw new Error(`Input exceeds maximum size of ${maxBytes} bytes`);
+    }
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString('utf-8');
+}
+
+/**
+ * Validate and parse timeout value
+ */
+function parseTimeout(value: string): number {
+  const timeout = parseInt(value, 10);
+  if (isNaN(timeout) || timeout < MIN_TIMEOUT_SECONDS || timeout > MAX_TIMEOUT_SECONDS) {
+    throw new Error(`Timeout must be between ${MIN_TIMEOUT_SECONDS} and ${MAX_TIMEOUT_SECONDS} seconds`);
+  }
+  return timeout;
 }
 
 export function createPlansCommand(getConfigPath: () => string): Command {
@@ -291,11 +322,20 @@ export function createPlansCommand(getConfigPath: () => string): Command {
     .argument('<name>', 'Plan name')
     .requiredOption('--connector <id>', 'Connector ID')
     .option('--out <dir>', 'Custom output directory for artifacts')
-    .option('--timeout <seconds>', 'Timeout per step in seconds', '30')
+    .option('--timeout <seconds>', 'Timeout per step in seconds (1-300)', '30')
     .option('--dry-run', 'Show steps without executing')
     .option('--json', 'Output result as JSON')
     .action(async (name, options) => {
       try {
+        // Validate timeout
+        let timeout: number;
+        try {
+          timeout = parseTimeout(options.timeout);
+        } catch (e) {
+          outputError(e instanceof Error ? e.message : String(e));
+          process.exit(1);
+        }
+
         const store = new PlansStore(getConfigDir(getConfigPath()));
         const plan = store.getPlan(name);
 
@@ -344,7 +384,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
 
         const runner = new PlanRunner(getConfigDir(getConfigPath()));
         const result = await runner.run(plan, connector, {
-          timeout: parseInt(options.timeout, 10),
+          timeout,
           outDir: options.out,
           dryRun: false,
         });
