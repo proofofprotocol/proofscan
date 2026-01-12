@@ -11,6 +11,7 @@ The interactive shell provides a powerful REPL (Read-Eval-Print Loop) for workin
 - [Router Commands](#router-commands)
 - [Tool Commands](#tool-commands)
 - [POPL Commands](#popl-commands)
+- [Plans Commands](#plans-commands)
 - [Pipe Support](#pipe-support)
 - [TAB Completion](#tab-completion)
 - [Tips and Tricks](#tips-and-tricks)
@@ -118,6 +119,8 @@ The shell supports a powerful @reference syntax for accessing data without typin
 | `@session:<id>` | Specific session by ID (partial OK) |
 | `@ref:<name>` | User-defined named reference |
 | `@popl:<id>` | POPL entry by entry ID |
+| `@plan:<name>` | Validation plan by name |
+| `@run:<id>` | Plan run by ID (`@run:last` for latest run) |
 
 ### Using References
 
@@ -135,6 +138,12 @@ proofscan> tool call @rpc:2
 
 # Show details of named reference
 proofscan> ref @ref:mytask
+
+# Reference a validation plan
+proofscan> plans show @plan:basic-mcp
+
+# Reference the latest plan run
+proofscan> plans run-show @run:last
 ```
 
 ## Router Commands
@@ -492,6 +501,50 @@ Files:
   validation-run.log
 ```
 
+## Plans Commands
+
+Manage and execute validation plans from the shell.
+
+### List Plans
+
+```bash
+proofscan> plans ls
+Name           Source   Description                Created
+----------------------------------------------------------------
+basic-mcp      manual   Basic MCP validation       2026-01-04
+```
+
+### Run a Plan
+
+```bash
+# Run plan against current connector context
+proofscan> cc time
+proofscan> plans run basic-mcp --connector @this
+
+# Run with specific connector
+proofscan> plans run basic-mcp --connector time
+
+# Dry run (show steps without executing)
+proofscan> plans run basic-mcp --connector time --dry-run
+```
+
+### Using @plan and @run References
+
+```bash
+# Show plan details using reference
+proofscan> plans show @plan:basic-mcp
+
+# Show the latest run
+proofscan> plans run-show @run:last
+
+# Create POPL entry for a run
+proofscan> popl @run:last --title "Validation Run"
+
+# Save run reference for later
+proofscan> ref add myrun @run:last
+proofscan> plans run-show @ref:myrun
+```
+
 ## Pipe Support
 
 The shell supports piping data between commands, enabling powerful workflows for saving references and automating tasks.
@@ -592,6 +645,8 @@ The ref system supports different kinds of references:
 | `session` | `@this` (at session), `@last` | connector, session |
 | `rpc` | `@rpc:<id>`, `@last` (at session) | connector, session, rpc |
 | `popl` | `popl @... --json` | entry_id, target |
+| `plan` | `@plan:<name>` | plan_name |
+| `run` | `@run:<id>`, `@run:last` | run_id, plan_name |
 
 ### @popl Reference Syntax
 

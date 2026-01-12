@@ -17,6 +17,7 @@ Complete command reference for proofscan CLI. For interactive shell mode, see [S
 - [Archive Commands](#archive-commands)
 - [Secret Management](#secret-management)
 - [Tool Commands](#tool-commands)
+- [Plans Commands](#plans-commands)
 - [Doctor Command](#doctor-command)
 - [Summary and Permissions](#summary-and-permissions)
 - [Events Export](#events-export)
@@ -640,6 +641,142 @@ pfscan tool call time get_current_time --args '{"timezone":"UTC"}' --dry-run
   "timezone": "America/New_York",
   "format": "iso"
 }
+```
+
+## Plans Commands
+
+Manage and run validation plans for MCP servers. Plans are YAML-defined validation scenarios that can be executed against connectors.
+
+### List Plans
+
+```bash
+pfscan plans ls
+pfscan plans list
+```
+
+**Output:**
+```
+Name           Source   Description                Created
+----------------------------------------------------------------
+basic-mcp      manual   Basic MCP validation       2026-01-04
+full-scan      import   Full server scan           2026-01-03
+```
+
+### Show Plan Details
+
+```bash
+pfscan plans show <name>
+pfscan plans show basic-mcp
+pfscan plans show basic-mcp --raw     # Show raw YAML
+pfscan plans show basic-mcp --json    # JSON output
+```
+
+### Add a Plan
+
+```bash
+# From file
+pfscan plans add myplan --file plan.yaml
+
+# From stdin
+cat plan.yaml | pfscan plans add myplan --stdin
+```
+
+**Plan YAML format:**
+```yaml
+version: 1
+name: basic-mcp-validation
+description: Basic MCP server validation
+steps:
+  - mcp: initialize
+  - mcp: tools/list
+  - when: capabilities.resources
+    mcp: resources/list
+  - when: capabilities.prompts
+    mcp: prompts/list
+```
+
+### Delete a Plan
+
+```bash
+pfscan plans delete <name>
+pfscan plans delete myplan --force    # Also delete associated runs
+```
+
+### Import/Export Plans
+
+```bash
+# Import from file (supports multi-document YAML)
+pfscan plans import --file plans.yaml
+
+# Export a plan
+pfscan plans export myplan --file myplan.yaml
+pfscan plans export myplan --stdout   # Output to stdout
+```
+
+### Run a Plan
+
+```bash
+# Run against a connector
+pfscan plans run <plan-name> --connector <connector-id>
+pfscan plans run basic-mcp --connector time
+
+# With options
+pfscan plans run basic-mcp --connector time --timeout 60
+pfscan plans run basic-mcp --connector time --out ./results
+pfscan plans run basic-mcp --connector time --json
+
+# Dry run (show steps without executing)
+pfscan plans run basic-mcp --connector time --dry-run
+```
+
+**Output:**
+```
+Running plan 'basic-mcp' against connector 'time'...
+
+Run ID: 01KE4ABCD1234
+Status: completed
+Duration: 523ms
+
+Steps:
+  1. [OK] initialize (269ms)
+  2. [OK] tools/list (12ms)
+  3. [SKIP] resources/list (when: capabilities.resources)
+  4. [SKIP] prompts/list (when: capabilities.prompts)
+
+Inventory:
+  Capabilities: tools
+  Tools: 2
+
+Artifacts: ~/.config/proofscan/artifacts/01KE4ABCD1234
+```
+
+### List Runs
+
+```bash
+pfscan plans runs
+pfscan plans runs --plan basic-mcp    # Filter by plan
+pfscan plans runs --limit 50
+```
+
+### Show Run Details
+
+```bash
+pfscan plans run-show <run-id>
+pfscan plans run-show 01KE4ABCD1234
+pfscan plans run-show 01KE4 --json    # Partial ID works
+```
+
+### Run Artifacts
+
+Each plan run creates artifacts in `~/.config/proofscan/artifacts/<run-id>/`:
+
+```
+meta.json          # Run metadata
+plan.yaml          # Normalized plan definition
+plan.original.yaml # Original YAML as submitted
+run.log            # Human-readable execution log
+results.json       # Step-by-step results
+inventory.json     # Discovered capabilities/tools/resources/prompts
 ```
 
 ## Doctor Command
