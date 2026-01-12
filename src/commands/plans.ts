@@ -8,6 +8,7 @@ import { promises as fs } from 'fs';
 import { resolve, dirname } from 'path';
 import { PlansStore } from '../plans/store.js';
 import { PlanRunner } from '../plans/runner.js';
+import { DEFAULT_PLAN_NAME } from '../plans/builtin.js';
 import { validatePlanDefinition, isValidPlanName } from '../plans/schema.js';
 import { ConfigManager } from '../config/index.js';
 import { EventLineStore } from '../eventline/store.js';
@@ -318,15 +319,18 @@ export function createPlansCommand(getConfigPath: () => string): Command {
 
   cmd
     .command('run')
-    .description('Run a plan against a connector')
-    .argument('<name>', 'Plan name')
+    .description(`Run a plan against a connector (default: ${DEFAULT_PLAN_NAME})`)
+    .argument('[name]', 'Plan name', DEFAULT_PLAN_NAME)
     .requiredOption('--connector <id>', 'Connector ID')
     .option('--out <dir>', 'Custom output directory for artifacts')
     .option('--timeout <seconds>', 'Timeout per step in seconds (1-300)', '30')
     .option('--dry-run', 'Show steps without executing')
     .option('--json', 'Output result as JSON')
-    .action(async (name, options) => {
+    .action(async (nameArg, options) => {
       try {
+        // Use default plan if not specified
+        const name = nameArg || DEFAULT_PLAN_NAME;
+
         // Validate timeout
         let timeout: number;
         try {

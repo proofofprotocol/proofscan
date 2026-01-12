@@ -69,6 +69,18 @@ export const BUILTIN_PLANS: BuiltinPlan[] = [
 ];
 
 /**
+ * Built-in plan names (for deletion protection)
+ */
+export const BUILTIN_PLAN_NAMES = new Set(BUILTIN_PLANS.map(p => p.name));
+
+/**
+ * Check if a plan name is a built-in plan
+ */
+export function isBuiltinPlan(name: string): boolean {
+  return BUILTIN_PLAN_NAMES.has(name);
+}
+
+/**
  * Default plan name for quick validation
  */
 export const DEFAULT_PLAN_NAME = 'basic-mcp';

@@ -136,6 +136,18 @@ steps:
       expect(result.success).toBe(false);
       expect(result.error).toContain('not found');
     });
+
+    it('should fail for built-in plans', () => {
+      // Built-in plans are auto-installed on first access
+      const plan = store.getPlan('basic-mcp');
+      expect(plan).not.toBeNull();
+
+      // Try to delete it
+      const result = store.deletePlan('basic-mcp');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Cannot delete built-in plan');
+    });
   });
 
   describe('updatePlan', () => {

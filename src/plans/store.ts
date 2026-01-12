@@ -8,7 +8,7 @@ import { getProofsDb } from '../db/connection.js';
 import { calculatePlanDigest, normalizePlanForDigest } from './digest.js';
 import type { Plan, Run, RunStatus, PlanDefinition } from './schema.js';
 import { validatePlanDefinition, isValidPlanName } from './schema.js';
-import { BUILTIN_PLANS } from './builtin.js';
+import { BUILTIN_PLANS, isBuiltinPlan } from './builtin.js';
 
 export class PlansStore {
   private configDir?: string;
@@ -210,10 +210,16 @@ export class PlansStore {
   /**
    * Delete a plan
    * @param force If true, also delete associated runs
+   * Note: Built-in plans cannot be deleted
    */
   deletePlan(name: string, force = false): { success: boolean; error?: string } {
     if (!this.planExists(name)) {
       return { success: false, error: `Plan '${name}' not found` };
+    }
+
+    // Prevent deletion of built-in plans
+    if (isBuiltinPlan(name)) {
+      return { success: false, error: `Cannot delete built-in plan '${name}'` };
     }
 
     try {
