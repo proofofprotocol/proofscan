@@ -227,3 +227,84 @@ export function getSpillFilename(
   const sessionShort = sessionId.slice(0, 8);
   return `payload_${sessionShort}_${rpcId}_${type}.json`;
 }
+
+// ============================================================================
+// Connector HTML Report Types (Phase 5.1)
+// ============================================================================
+
+/**
+ * MCP Server capabilities from initialize response
+ */
+export interface HtmlMcpCapabilities {
+  tools: boolean;       // capabilities.tools is present
+  resources: boolean;   // capabilities.resources is present
+  prompts: boolean;     // capabilities.prompts is present
+}
+
+/**
+ * MCP Server info extracted from initialize response
+ */
+export interface HtmlMcpServerInfo {
+  name: string | null;          // serverInfo.name from initialize response
+  version: string | null;       // serverInfo.version
+  protocolVersion: string | null; // protocolVersion from initialize response
+  capabilities: HtmlMcpCapabilities;  // supported capabilities
+}
+
+/**
+ * Connector configuration info for HTML display
+ */
+export interface HtmlConnectorInfo {
+  connector_id: string;
+  enabled: boolean;
+  transport: {
+    type: 'stdio' | 'rpc-http' | 'rpc-sse';
+    /** For stdio: command + args joined */
+    command?: string;
+    /** For http/sse: URL */
+    url?: string;
+  };
+  /** MCP server info from latest initialize response (if available) */
+  server?: HtmlMcpServerInfo;
+  /** Total session count in DB */
+  session_count: number;
+  /** Sessions included in this export */
+  displayed_sessions: number;
+  /** Pagination offset */
+  offset: number;
+}
+
+/**
+ * Connector session row for left pane list
+ */
+export interface HtmlConnectorSessionRow {
+  session_id: string;
+  short_id: string;         // 8文字プレフィックス
+  started_at: string;
+  ended_at: string | null;
+  rpc_count: number;
+  event_count: number;
+  error_count: number;      // For ERR badge (success=0 count)
+  total_latency_ms: number | null;
+}
+
+/**
+ * Connector Report V1 - embeds multiple session reports
+ */
+export interface HtmlConnectorReportV1 {
+  meta: HtmlReportMeta;
+  connector: HtmlConnectorInfo;
+  /** セッション一覧（左ペイン用） */
+  sessions: HtmlConnectorSessionRow[];
+  /** セッション詳細（右ペイン用）- session_id をキーとするマップ */
+  session_reports: Record<string, HtmlSessionReportV1>;
+}
+
+/**
+ * Generate output filename for Connector HTML
+ * Sanitizes connector ID (replaces non-alphanumeric with hyphen)
+ */
+export function getConnectorHtmlFilename(connectorId: string): string {
+  const sanitized = connectorId.replace(/[^a-zA-Z0-9-_]/g, '-');
+  return `connector_${sanitized}.html`;
+}

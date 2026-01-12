@@ -936,6 +936,14 @@ function getHtmlOptions(args: string[]): string[] {
   if (embedIdx !== -1 && args[embedIdx + 1]) {
     options.push('--embed-max-bytes', args[embedIdx + 1]);
   }
+  const maxSessionsIdx = args.indexOf('--max-sessions');
+  if (maxSessionsIdx !== -1 && args[maxSessionsIdx + 1]) {
+    options.push('--max-sessions', args[maxSessionsIdx + 1]);
+  }
+  const offsetIdx = args.indexOf('--offset');
+  if (offsetIdx !== -1 && args[offsetIdx + 1]) {
+    options.push('--offset', args[offsetIdx + 1]);
+  }
   if (args.includes('--html')) options.push('--html');
   if (args.includes('--open')) options.push('--open');
   if (args.includes('--redact')) options.push('--redact');
@@ -1025,8 +1033,7 @@ export async function handleShow(
         printError(`Invalid connector reference: missing connector ID`);
         return;
       }
-      // Connectors don't support HTML export
-      await executeCommand(['connectors', 'show', '--id', ref.connector, ...(isJson ? ['--json'] : [])]);
+      await executeCommand(['connectors', 'show', '--id', ref.connector, ...(isJson ? ['--json'] : []), ...htmlOptions]);
       return;
     }
 
@@ -1041,8 +1048,8 @@ export async function handleShow(
 
   if (level === 'root') {
     if (target) {
-      // Show connector details (no HTML support for connectors)
-      await executeCommand(['connectors', 'show', '--id', target, ...(isJson ? ['--json'] : [])]);
+      // Show connector details with HTML support
+      await executeCommand(['connectors', 'show', '--id', target, ...(isJson ? ['--json'] : []), ...htmlOptions]);
     } else {
       printInfo('At root level. Use: show <connector> or cc <connector>');
     }
@@ -1076,8 +1083,8 @@ export async function handleShow(
 
       await executeCommand(['sessions', 'show', '--id', matches[0].session_id, ...(isJson ? ['--json'] : []), ...htmlOptions]);
     } else {
-      // Show connector details (no HTML support for connectors)
-      await executeCommand(['connectors', 'show', '--id', context.connector, ...(isJson ? ['--json'] : [])]);
+      // Show connector details with HTML support (connector-level)
+      await executeCommand(['connectors', 'show', '--id', context.connector, ...(isJson ? ['--json'] : []), ...htmlOptions]);
     }
     return;
   }

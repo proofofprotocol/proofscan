@@ -267,6 +267,9 @@ export const ja: LocaleMessages = {
     redactedNote: '一部の値がマスクされています',
     truncatedPayload: 'ペイロード切り詰め（{size}バイト、先頭4096文字を表示）',
     spillFileWritten: 'フルペイロードを {file} に出力しました',
+    connectorExporting: 'コネクタHTMLレポートをエクスポート中 ({count} セッション)...',
+    connectorExported: 'コネクタを {path} にエクスポートしました',
+    paginationNote: '{total} 中 {from}-{to} を表示',
   },
 
   // Error messages

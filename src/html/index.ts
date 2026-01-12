@@ -16,6 +16,7 @@ export {
   getRpcHtmlFilename,
   getSessionHtmlFilename,
   getSpillFilename,
+  getConnectorHtmlFilename,
 } from './types.js';
 
 export type {
@@ -28,6 +29,12 @@ export type {
   SessionRpcDetail,
   HtmlSessionData,
   HtmlSessionReportV1,
+  // Connector HTML types (Phase 5.1)
+  HtmlMcpCapabilities,
+  HtmlMcpServerInfo,
+  HtmlConnectorInfo,
+  HtmlConnectorSessionRow,
+  HtmlConnectorReportV1,
 } from './types.js';
 
 // Templates
@@ -36,6 +43,7 @@ export {
   escapeJsonForScript,
   generateRpcHtml,
   generateSessionHtml,
+  generateConnectorHtml,
 } from './templates.js';
 
 // Browser

@@ -7,6 +7,8 @@
 
 import { formatBytes } from '../eventline/types.js';
 import type {
+  HtmlConnectorReportV1,
+  HtmlConnectorSessionRow,
   HtmlRpcReportV1,
   HtmlSessionReportV1,
   PayloadData,
@@ -779,6 +781,809 @@ ${rpcRows}
 
   <script type="application/json" id="report-data">${embeddedJson}</script>
   <script>${getSessionReportScript()}</script>
+</body>
+</html>`;
+}
+
+// ============================================================================
+// Connector HTML Report (Phase 5.1)
+// ============================================================================
+
+/**
+ * Get CSS styles for Connector HTML (3-hierarchy: Connector -> Sessions -> RPCs)
+ */
+function getConnectorReportStyles(): string {
+  return `
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --bg-tertiary: #21262d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --accent-blue: #00d4ff;
+      --status-ok: #3fb950;
+      --status-err: #f85149;
+      --status-pending: #d29922;
+      --border-color: #30363d;
+      --link-color: #58a6ff;
+      --sessions-pane-width: 280px;
+      --left-pane-width: 420px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 1.3em;
+      font-weight: 600;
+    }
+    h2 {
+      margin: 0 0 8px 0;
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 6px;
+    }
+    h3 {
+      margin: 12px 0 6px 0;
+      font-size: 0.9em;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    h3:first-child { margin-top: 0; }
+    a { color: var(--link-color); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .meta { color: var(--text-secondary); margin: 0; font-size: 0.8em; }
+    .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border: 1px solid var(--accent-blue);
+      border-radius: 4px;
+      color: var(--accent-blue);
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 0.8em;
+      background: transparent;
+    }
+    .badge.status-OK { border-color: var(--status-ok); color: var(--status-ok); }
+    .badge.status-ERR { border-color: var(--status-err); color: var(--status-err); }
+    .badge.status-PENDING { border-color: var(--status-pending); color: var(--status-pending); }
+    .badge.cap-enabled { border-color: var(--status-ok); color: var(--status-ok); background: rgba(63, 185, 80, 0.1); }
+
+    /* Connector info section (collapsible) */
+    .connector-info {
+      background: var(--bg-secondary);
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+    .connector-info-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+    }
+    .connector-info-toggle h2 {
+      margin: 0;
+      border: none;
+      padding: 0;
+    }
+    .connector-info-toggle .toggle-icon {
+      color: var(--text-secondary);
+      font-size: 0.85em;
+      transition: transform 0.2s;
+    }
+    .connector-info-content {
+      display: none;
+      margin-top: 12px;
+    }
+    .connector-info.expanded .connector-info-content {
+      display: block;
+    }
+    .connector-info.expanded .toggle-icon {
+      transform: rotate(180deg);
+    }
+    .connector-info dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 16px;
+      margin: 0;
+      font-size: 0.85em;
+    }
+    .connector-info dt { color: var(--text-secondary); }
+    .connector-info dd { margin: 0; }
+    .capabilities {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    /* Main 3-pane container */
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sessions pane (leftmost) */
+    .sessions-pane {
+      width: var(--sessions-pane-width);
+      flex-shrink: 0;
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-secondary);
+    }
+    .sessions-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-tertiary);
+      flex-shrink: 0;
+    }
+    .sessions-header h2 {
+      margin: 0;
+      border: none;
+      padding: 0;
+      font-size: 0.9em;
+    }
+    .sessions-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+    .session-item {
+      padding: 10px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-bottom: 6px;
+      border: 1px solid transparent;
+      background: var(--bg-primary);
+    }
+    .session-item:hover {
+      background: rgba(0, 212, 255, 0.1);
+      border-color: rgba(0, 212, 255, 0.3);
+    }
+    .session-item.selected {
+      border-color: var(--accent-blue);
+      background: rgba(0, 212, 255, 0.15);
+    }
+    .session-item-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .session-item .session-id {
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      color: var(--accent-blue);
+      font-size: 0.85em;
+    }
+    .session-item .session-meta {
+      font-size: 0.75em;
+      color: var(--text-secondary);
+    }
+    .session-item .session-stats {
+      display: flex;
+      gap: 8px;
+      font-size: 0.75em;
+      color: var(--text-secondary);
+    }
+
+    /* Session detail pane (middle) */
+    .session-detail-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .session-detail-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+    }
+
+    /* Re-use session HTML styles for the detail view */
+    .session-content {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+    .session-content.active {
+      display: flex;
+    }
+    .inner-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .left-pane {
+      width: var(--left-pane-width);
+      min-width: 300px;
+      max-width: 600px;
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .right-pane {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .session-info {
+      background: var(--bg-secondary);
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+    .session-info dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 12px;
+      margin: 0;
+      font-size: 0.85em;
+    }
+    .session-info dt { color: var(--text-secondary); }
+    .session-info dd { margin: 0; }
+    .rpc-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .rpc-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85em;
+    }
+    .rpc-table th {
+      text-align: left;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 6px 8px;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      background: var(--bg-primary);
+      z-index: 1;
+    }
+    .rpc-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+    .rpc-row {
+      cursor: pointer;
+    }
+    .rpc-row:hover {
+      background: rgba(0, 212, 255, 0.1);
+    }
+    .rpc-row.selected {
+      background: rgba(0, 212, 255, 0.2);
+    }
+    .detail-placeholder {
+      color: var(--text-secondary);
+      text-align: center;
+      padding: 40px;
+    }
+    .detail-section {
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    pre {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      overflow-x: auto;
+      margin: 8px 0;
+      font-size: 0.85em;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    code {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      color: var(--text-primary);
+    }
+    .copy-btn {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 3px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75em;
+      margin-left: 8px;
+    }
+    .copy-btn:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+    .truncated-note {
+      color: var(--status-pending);
+      font-size: 0.8em;
+      margin: 4px 0;
+    }
+    .spill-link {
+      color: var(--link-color);
+      font-size: 0.8em;
+    }
+    .resize-handle {
+      width: 4px;
+      background: var(--border-color);
+      cursor: col-resize;
+      transition: background 0.2s;
+    }
+    .resize-handle:hover {
+      background: var(--accent-blue);
+    }
+  `;
+}
+
+/**
+ * Get JavaScript for Connector HTML (3-hierarchy navigation)
+ */
+function getConnectorReportScript(): string {
+  return `
+    // Report data
+    const reportData = JSON.parse(document.getElementById('report-data').textContent);
+    const sessions = reportData.sessions;
+    const sessionReports = reportData.session_reports;
+
+    let currentSessionId = null;
+    let currentRpcIdx = null;
+
+    // Connector info toggle
+    const connectorInfo = document.querySelector('.connector-info');
+    const connectorToggle = document.querySelector('.connector-info-toggle');
+    if (connectorToggle) {
+      connectorToggle.addEventListener('click', () => {
+        connectorInfo.classList.toggle('expanded');
+      });
+    }
+
+    // Format JSON for display
+    function formatJson(data) {
+      if (data === null || data === undefined) return '(no data)';
+      try {
+        return JSON.stringify(data, null, 2);
+      } catch {
+        return String(data);
+      }
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Format bytes
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // Show session detail
+    function showSession(sessionId) {
+      if (currentSessionId === sessionId) return;
+      currentSessionId = sessionId;
+      currentRpcIdx = null;
+
+      // Update session list selection
+      document.querySelectorAll('.session-item').forEach(item => {
+        item.classList.toggle('selected', item.dataset.sessionId === sessionId);
+      });
+
+      // Hide all session contents, show selected
+      document.querySelectorAll('.session-content').forEach(content => {
+        content.classList.toggle('active', content.dataset.sessionId === sessionId);
+      });
+
+      // Select first RPC in the newly shown session
+      const sessionContent = document.querySelector('.session-content[data-session-id="' + sessionId + '"]');
+      if (sessionContent) {
+        const firstRpcRow = sessionContent.querySelector('.rpc-row');
+        if (firstRpcRow) {
+          const idx = parseInt(firstRpcRow.dataset.rpcIdx);
+          showRpcDetail(sessionId, idx);
+        }
+      }
+    }
+
+    // Show RPC detail in right pane
+    function showRpcDetail(sessionId, idx) {
+      const report = sessionReports[sessionId];
+      if (!report || idx < 0 || idx >= report.rpcs.length) return;
+
+      const rpc = report.rpcs[idx];
+      const sessionContent = document.querySelector('.session-content[data-session-id="' + sessionId + '"]');
+      if (!sessionContent) return;
+
+      const rightPane = sessionContent.querySelector('.right-pane');
+      if (!rightPane) return;
+
+      // Update RPC row selection
+      sessionContent.querySelectorAll('.rpc-row').forEach((r, i) => {
+        r.classList.toggle('selected', i === idx);
+      });
+      currentRpcIdx = idx;
+
+      const statusClass = 'status-' + rpc.status;
+      const statusSymbol = rpc.status === 'OK' ? '\\u2713' : rpc.status === 'ERR' ? '\\u2717' : '?';
+      const latency = rpc.latency_ms !== null ? rpc.latency_ms + 'ms' : '(pending)';
+
+      function renderPayload(payload, elementId) {
+        let content, notes = '';
+
+        if (payload.truncated) {
+          notes = '<p class="truncated-note">Payload truncated (' + formatBytes(payload.size) + ', showing first 4096 chars)</p>';
+          if (payload.spillFile) {
+            notes += '<p class="spill-link">Full payload: <a href="' + escapeHtml(payload.spillFile) + '">' + escapeHtml(payload.spillFile) + '</a></p>';
+          }
+          content = payload.preview ? escapeHtml(payload.preview) + '\\n... (truncated)' : '(no data)';
+        } else if (payload.json !== null) {
+          content = escapeHtml(formatJson(payload.json));
+        } else {
+          content = '(no data)';
+        }
+
+        return notes + '<pre id="' + elementId + '"><code>' + content + '</code></pre>';
+      }
+
+      rightPane.innerHTML =
+        '<div class="detail-section">' +
+        '  <h2>RPC Info</h2>' +
+        '  <dl class="session-info">' +
+        '    <dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd>' +
+        '    <dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd>' +
+        '    <dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd>' +
+        '    <dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd>' +
+        '    <dt>Request Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd>' +
+        '    <dt>Response Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd>' +
+        '  </dl>' +
+        '</div>' +
+        '<div class="detail-section">' +
+        '  <h2>Request <button class="copy-btn" onclick="copyToClipboard(\\'req-' + sessionId + '-' + idx + '\\', this)">Copy</button></h2>' +
+        '  ' + renderPayload(rpc.request, 'req-' + sessionId + '-' + idx) +
+        '</div>' +
+        '<div class="detail-section">' +
+        '  <h2>Response <button class="copy-btn" onclick="copyToClipboard(\\'res-' + sessionId + '-' + idx + '\\', this)">Copy</button></h2>' +
+        '  ' + renderPayload(rpc.response, 'res-' + sessionId + '-' + idx) +
+        '</div>';
+    }
+
+    // Copy to clipboard
+    async function copyToClipboard(elementId, btn) {
+      const target = document.getElementById(elementId);
+      if (target) {
+        try {
+          await navigator.clipboard.writeText(target.textContent || '');
+          const originalText = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = originalText; }, 1500);
+        } catch (err) {
+          console.error('Copy failed:', err);
+        }
+      }
+    }
+
+    // Session item click handlers
+    document.querySelectorAll('.session-item').forEach(item => {
+      item.addEventListener('click', () => {
+        showSession(item.dataset.sessionId);
+      });
+    });
+
+    // RPC row click handlers (delegated)
+    document.querySelectorAll('.session-content').forEach(content => {
+      content.addEventListener('click', (e) => {
+        const row = e.target.closest('.rpc-row');
+        if (row) {
+          const idx = parseInt(row.dataset.rpcIdx);
+          showRpcDetail(content.dataset.sessionId, idx);
+        }
+      });
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (!currentSessionId) return;
+
+      const report = sessionReports[currentSessionId];
+      if (!report) return;
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const rpcs = report.rpcs;
+        if (currentRpcIdx === null && rpcs.length > 0) {
+          showRpcDetail(currentSessionId, 0);
+          return;
+        }
+        if (e.key === 'ArrowDown' && currentRpcIdx < rpcs.length - 1) {
+          showRpcDetail(currentSessionId, currentRpcIdx + 1);
+        } else if (e.key === 'ArrowUp' && currentRpcIdx > 0) {
+          showRpcDetail(currentSessionId, currentRpcIdx - 1);
+        }
+        // Scroll selected row into view
+        const sessionContent = document.querySelector('.session-content[data-session-id="' + currentSessionId + '"]');
+        if (sessionContent) {
+          const row = sessionContent.querySelector('.rpc-row.selected');
+          if (row) row.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    });
+
+    // Resize handle for inner left pane
+    document.querySelectorAll('.session-content').forEach(content => {
+      const resizeHandle = content.querySelector('.resize-handle');
+      const leftPane = content.querySelector('.left-pane');
+      if (resizeHandle && leftPane) {
+        let startX, startWidth;
+
+        resizeHandle.addEventListener('mousedown', (e) => {
+          startX = e.clientX;
+          startWidth = leftPane.offsetWidth;
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+          e.preventDefault();
+        });
+
+        function onMouseMove(e) {
+          const diff = e.clientX - startX;
+          const newWidth = Math.max(300, Math.min(600, startWidth + diff));
+          leftPane.style.width = newWidth + 'px';
+        }
+
+        function onMouseUp() {
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        }
+      }
+    });
+
+    // Select first session by default
+    if (sessions.length > 0) {
+      showSession(sessions[0].session_id);
+    }
+  `;
+}
+
+/**
+ * Render a session item for the sessions pane
+ */
+function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
+  const timeStr = formatTimestamp(session.started_at).split(' ')[1]?.slice(0, 8) || '-';
+  const dateStr = formatTimestamp(session.started_at).split(' ')[0] || '-';
+  const statusBadge = session.error_count > 0
+    ? '<span class="badge status-ERR">ERR</span>'
+    : '<span class="badge status-OK">OK</span>';
+
+  return `
+    <div class="session-item" data-session-id="${escapeHtml(session.session_id)}">
+      <div class="session-item-header">
+        <span class="session-id">[${escapeHtml(session.short_id)}]</span>
+        ${statusBadge}
+      </div>
+      <div class="session-meta">${dateStr} ${timeStr}</div>
+      <div class="session-stats">
+        <span>${session.rpc_count} RPCs</span>
+        ${session.error_count > 0 ? `<span style="color: var(--status-err)">${session.error_count} errors</span>` : ''}
+      </div>
+    </div>`;
+}
+
+/**
+ * Render session detail content (reuses session HTML layout)
+ */
+function renderSessionDetailContent(
+  sessionId: string,
+  report: HtmlSessionReportV1
+): string {
+  const { session, rpcs } = report;
+
+  const totalLatencyDisplay = session.total_latency_ms !== null
+    ? `${session.total_latency_ms}ms`
+    : '-';
+
+  const rpcRows = rpcs.map((rpc, idx) => {
+    const statusClass = `status-${rpc.status}`;
+    const statusSymbol = getStatusSymbol(rpc.status);
+    const rpcIdShort = rpc.rpc_id.slice(0, 8);
+    const timeShort = formatTimestamp(rpc.request_ts).split(' ')[1]?.slice(0, 12) || '-';
+    const latency = rpc.latency_ms !== null ? `${rpc.latency_ms}ms` : '-';
+
+    return `
+      <tr class="rpc-row" data-rpc-idx="${idx}">
+        <td>${timeShort}</td>
+        <td><span class="badge ${statusClass}">${statusSymbol}</span></td>
+        <td><span class="badge">${escapeHtml(rpcIdShort)}</span></td>
+        <td>${escapeHtml(rpc.method)}</td>
+        <td>${latency}</td>
+      </tr>`;
+  }).join('\n');
+
+  return `
+    <div class="session-content" data-session-id="${escapeHtml(sessionId)}">
+      <div class="inner-container">
+        <div class="left-pane">
+          <div class="session-info">
+            <h2>Session Info</h2>
+            <dl>
+              <dt>Session ID</dt>
+              <dd><span class="badge">${escapeHtml(session.session_id)}</span></dd>
+              <dt>Started</dt>
+              <dd>${formatTimestamp(session.started_at)}</dd>
+              <dt>Ended</dt>
+              <dd>${session.ended_at ? formatTimestamp(session.ended_at) : '(active)'}</dd>
+              <dt>Exit Reason</dt>
+              <dd>${session.exit_reason || '(none)'}</dd>
+              <dt>RPC Count</dt>
+              <dd><span class="badge">${session.rpc_count}</span></dd>
+              <dt>Event Count</dt>
+              <dd><span class="badge">${session.event_count}</span></dd>
+              <dt>Total Latency</dt>
+              <dd><span class="badge">${totalLatencyDisplay}</span></dd>
+            </dl>
+          </div>
+          <div class="rpc-list">
+            <table class="rpc-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>St</th>
+                  <th>ID</th>
+                  <th>Method</th>
+                  <th>Latency</th>
+                </tr>
+              </thead>
+              <tbody>
+${rpcRows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="resize-handle"></div>
+        <div class="right-pane">
+          <div class="detail-placeholder">
+            ${rpcs.length > 0 ? 'Select an RPC call from the list to view details' : 'No RPC calls in this session'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/**
+ * Generate Connector HTML report (3-hierarchy: Connector -> Sessions -> RPCs)
+ */
+export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
+  const { meta, connector, sessions, session_reports } = report;
+
+  // Pagination info
+  const fromNum = connector.offset + 1;
+  const toNum = connector.offset + connector.displayed_sessions;
+  const paginationInfo = connector.session_count > 0
+    ? `Showing ${fromNum}-${toNum} of ${connector.session_count} sessions`
+    : 'No sessions';
+
+  // Connector info section
+  const transportDisplay = connector.transport.type === 'stdio'
+    ? connector.transport.command || '(unknown command)'
+    : connector.transport.url || '(unknown URL)';
+
+  // Server info (if available)
+  let serverInfoHtml = '';
+  if (connector.server) {
+    const { name, version, protocolVersion, capabilities } = connector.server;
+    const serverName = name || '(unknown)';
+    const serverVersion = version ? `v${version}` : '';
+    const protocolDisplay = protocolVersion ? `MCP ${protocolVersion}` : '';
+
+    // Capabilities badges
+    const capBadges: string[] = [];
+    if (capabilities.tools) capBadges.push('<span class="badge cap-enabled">tools</span>');
+    if (capabilities.resources) capBadges.push('<span class="badge cap-enabled">resources</span>');
+    if (capabilities.prompts) capBadges.push('<span class="badge cap-enabled">prompts</span>');
+    const capsDisplay = capBadges.length > 0 ? capBadges.join(' ') : '<span style="color: var(--text-secondary)">(none)</span>';
+
+    serverInfoHtml = `
+        <dt>Server</dt>
+        <dd>${escapeHtml(serverName)} ${escapeHtml(serverVersion)}</dd>
+        <dt>Protocol</dt>
+        <dd>${escapeHtml(protocolDisplay)}</dd>
+        <dt>Capabilities</dt>
+        <dd class="capabilities">${capsDisplay}</dd>`;
+  }
+
+  // Session items
+  const sessionItems = sessions.map(s => renderConnectorSessionItem(s)).join('\n');
+
+  // Session contents (pre-rendered, hidden by default)
+  const sessionContents = sessions.map(s => {
+    const sessionReport = session_reports[s.session_id];
+    if (!sessionReport) return '';
+    return renderSessionDetailContent(s.session_id, sessionReport);
+  }).join('\n');
+
+  const embeddedJson = escapeJsonForScript(JSON.stringify(report));
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connector: ${escapeHtml(connector.connector_id)} - proofscan</title>
+  <style>${getConnectorReportStyles()}</style>
+</head>
+<body>
+  <header>
+    <h1>Connector: <span class="badge">${escapeHtml(connector.connector_id)}</span></h1>
+    <p class="meta">Generated by ${escapeHtml(meta.generatedBy)} at ${formatTimestamp(meta.generatedAt)}${meta.redacted ? ' (redacted)' : ''} | ${paginationInfo}</p>
+  </header>
+
+  <div class="connector-info expanded">
+    <div class="connector-info-toggle">
+      <h2>Connector Info</h2>
+      <span class="toggle-icon">▼</span>
+    </div>
+    <div class="connector-info-content">
+      <dl>
+        <dt>Transport</dt>
+        <dd><span class="badge">${escapeHtml(connector.transport.type)}</span></dd>
+        <dt>${connector.transport.type === 'stdio' ? 'Command' : 'URL'}</dt>
+        <dd><code>${escapeHtml(transportDisplay)}</code></dd>
+        <dt>Enabled</dt>
+        <dd>${connector.enabled ? '<span class="badge status-OK">yes</span>' : '<span class="badge status-ERR">no</span>'}</dd>
+${serverInfoHtml}
+      </dl>
+    </div>
+  </div>
+
+  <div class="main-container">
+    <div class="sessions-pane">
+      <div class="sessions-header">
+        <h2>Sessions</h2>
+      </div>
+      <div class="sessions-list">
+${sessionItems}
+      </div>
+    </div>
+
+    <div class="session-detail-pane">
+      ${sessions.length === 0 ? '<div class="session-detail-empty">No sessions available</div>' : ''}
+${sessionContents}
+    </div>
+  </div>
+
+  <script type="application/json" id="report-data">${embeddedJson}</script>
+  <script>${getConnectorReportScript()}</script>
 </body>
 </html>`;
 }
