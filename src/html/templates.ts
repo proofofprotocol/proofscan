@@ -64,7 +64,7 @@ function getRpcReportStyles(): string {
       --bg-secondary: #161b22;
       --text-primary: #e6edf3;
       --text-secondary: #8b949e;
-      --accent-green: #3fb950;
+      --accent-blue: #58a6ff;
       --status-ok: #3fb950;
       --status-err: #f85149;
       --status-pending: #d29922;
@@ -106,9 +106,9 @@ function getRpcReportStyles(): string {
     .badge {
       display: inline-block;
       padding: 2px 8px;
-      border: 1px solid var(--accent-green);
+      border: 1px solid var(--accent-blue);
       border-radius: 4px;
-      color: var(--accent-green);
+      color: var(--accent-blue);
       font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
       font-size: 0.85em;
       background: transparent;
@@ -154,8 +154,8 @@ function getRpcReportStyles(): string {
       margin-left: 8px;
     }
     .copy-btn:hover {
-      border-color: var(--accent-green);
-      color: var(--accent-green);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
     }
     .truncated-note {
       color: var(--status-pending);
@@ -179,7 +179,7 @@ function getSessionReportStyles(): string {
       --bg-secondary: #161b22;
       --text-primary: #e6edf3;
       --text-secondary: #8b949e;
-      --accent-green: #3fb950;
+      --accent-blue: #58a6ff;
       --status-ok: #3fb950;
       --status-err: #f85149;
       --status-pending: #d29922;
@@ -233,9 +233,9 @@ function getSessionReportStyles(): string {
     .badge {
       display: inline-block;
       padding: 1px 6px;
-      border: 1px solid var(--accent-green);
+      border: 1px solid var(--accent-blue);
       border-radius: 4px;
-      color: var(--accent-green);
+      color: var(--accent-blue);
       font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
       font-size: 0.8em;
       background: transparent;
@@ -350,8 +350,8 @@ function getSessionReportStyles(): string {
       margin-left: 8px;
     }
     .copy-btn:hover {
-      border-color: var(--accent-green);
-      color: var(--accent-green);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
     }
     .truncated-note {
       color: var(--status-pending);
@@ -370,7 +370,7 @@ function getSessionReportStyles(): string {
       transition: background 0.2s;
     }
     .resize-handle:hover {
-      background: var(--accent-green);
+      background: var(--accent-blue);
     }
   `;
 }

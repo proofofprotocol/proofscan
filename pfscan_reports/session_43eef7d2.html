@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Session: 43eef7d2-f78... - proofscan</title>
+  <style>
+    :root {
+      --bg-primary: #0d1117;
+      --bg-secondary: #161b22;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --accent-green: #3fb950;
+      --status-ok: #3fb950;
+      --status-err: #f85149;
+      --status-pending: #d29922;
+      --border-color: #30363d;
+      --link-color: #58a6ff;
+      --left-pane-width: 420px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+    h1 {
+      margin: 0 0 4px 0;
+      font-size: 1.3em;
+      font-weight: 600;
+    }
+    h2 {
+      margin: 0 0 8px 0;
+      font-size: 1em;
+      font-weight: 600;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 6px;
+    }
+    h3 {
+      margin: 12px 0 6px 0;
+      font-size: 0.9em;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    h3:first-child { margin-top: 0; }
+    a { color: var(--link-color); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .meta { color: var(--text-secondary); margin: 0; font-size: 0.8em; }
+    .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border: 1px solid var(--accent-green);
+      border-radius: 4px;
+      color: var(--accent-green);
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 0.8em;
+      background: transparent;
+    }
+    .badge.status-OK { border-color: var(--status-ok); color: var(--status-ok); }
+    .badge.status-ERR { border-color: var(--status-err); color: var(--status-err); }
+    .badge.status-PENDING { border-color: var(--status-pending); color: var(--status-pending); }
+    /* Two-pane layout */
+    .container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    .left-pane {
+      width: var(--left-pane-width);
+      min-width: 300px;
+      max-width: 600px;
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .right-pane {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .session-info {
+      background: var(--bg-secondary);
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+    }
+    .session-info dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 12px;
+      margin: 0;
+      font-size: 0.85em;
+    }
+    .session-info dt { color: var(--text-secondary); }
+    .session-info dd { margin: 0; }
+    .rpc-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .rpc-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85em;
+    }
+    .rpc-table th {
+      text-align: left;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 6px 8px;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      background: var(--bg-primary);
+      z-index: 1;
+    }
+    .rpc-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+    .rpc-row {
+      cursor: pointer;
+    }
+    .rpc-row:hover {
+      background: rgba(63, 185, 80, 0.1);
+    }
+    .rpc-row.selected {
+      background: rgba(63, 185, 80, 0.2);
+    }
+    /* Right pane detail */
+    .detail-placeholder {
+      color: var(--text-secondary);
+      text-align: center;
+      padding: 40px;
+    }
+    .detail-section {
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    pre {
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      overflow-x: auto;
+      margin: 8px 0;
+      font-size: 0.85em;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    code {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      color: var(--text-primary);
+    }
+    .copy-btn {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 3px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75em;
+      margin-left: 8px;
+    }
+    .copy-btn:hover {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+    .truncated-note {
+      color: var(--status-pending);
+      font-size: 0.8em;
+      margin: 4px 0;
+    }
+    .spill-link {
+      color: var(--link-color);
+      font-size: 0.8em;
+    }
+    /* Resize handle */
+    .resize-handle {
+      width: 4px;
+      background: var(--border-color);
+      cursor: col-resize;
+      transition: background 0.2s;
+    }
+    .resize-handle:hover {
+      background: var(--accent-green);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Session: <span class="badge">43eef7d2-f78...</span></h1>
+    <p class="meta">Generated by proofscan v0.10.24 at 2026-01-12 08:56:14.992 UTC</p>
+  </header>
+
+  <div class="container">
+    <div class="left-pane">
+      <div class="session-info">
+        <h2>Session Info</h2>
+        <dl>
+          <dt>Session ID</dt>
+          <dd><span class="badge">43eef7d2-f782-4cb9-b6d9-97150157a958</span></dd>
+          <dt>Connector</dt>
+          <dd><span class="badge">yfinance</span></dd>
+          <dt>Started</dt>
+          <dd>2025-12-30 15:35:35.002 UTC</dd>
+          <dt>Ended</dt>
+          <dd>2025-12-30 15:35:38.188 UTC</dd>
+          <dt>RPC Count</dt>
+          <dd><span class="badge">2</span></dd>
+          <dt>Event Count</dt>
+          <dd><span class="badge">16</span></dd>
+          <dt>Total Latency</dt>
+          <dd><span class="badge">2969ms</span></dd>
+        </dl>
+      </div>
+      <div class="rpc-list">
+        <table class="rpc-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>St</th>
+              <th>ID</th>
+              <th>Method</th>
+              <th>Latency</th>
+            </tr>
+          </thead>
+          <tbody>
+
+      <tr class="rpc-row">
+        <td>15:35:35.148</td>
+        <td><span class="badge status-OK">✓</span></td>
+        <td><span class="badge">1</span></td>
+        <td>initialize</td>
+        <td>2945ms</td>
+      </tr>
+
+      <tr class="rpc-row">
+        <td>15:35:38.129</td>
+        <td><span class="badge status-OK">✓</span></td>
+        <td><span class="badge">2</span></td>
+        <td>tools/list</td>
+        <td>24ms</td>
+      </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="resize-handle"></div>
+    <div class="right-pane" id="right-pane">
+      <div class="detail-placeholder">
+        Select an RPC call from the list to view details
+      </div>
+    </div>
+  </div>
+
+  <script type="application/json" id="report-data">{"meta":{"schemaVersion":1,"generatedAt":"2026-01-12T08:56:14.992Z","generatedBy":"proofscan v0.10.24"},"session":{"session_id":"43eef7d2-f782-4cb9-b6d9-97150157a958","connector_id":"yfinance","started_at":"2025-12-30T15:35:35.002Z","ended_at":"2025-12-30T15:35:38.188Z","exit_reason":"normal","rpc_count":2,"event_count":16,"total_latency_ms":2969},"rpcs":[{"rpc_id":"1","method":"initialize","status":"OK","latency_ms":2945,"request_ts":"2025-12-30T15:35:35.148Z","response_ts":"2025-12-30T15:35:38.093Z","error_code":null,"request":{"json":{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"proofscan","version":"0.3.0"}}},"size":158,"truncated":false,"preview":null},"response":{"json":{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{"experimental":{},"prompts":{"listChanged":false},"resources":{"subscribe":false,"listChanged":false},"tools":{"listChanged":false}},"serverInfo":{"name":"Open Markets Server","version":"1.25.0"},"instructions":"This server allows for the integration of various market data tools."}},"size":364,"truncated":false,"preview":null}},{"rpc_id":"2","method":"tools/list","status":"OK","latency_ms":24,"request_ts":"2025-12-30T15:35:38.129Z","response_ts":"2025-12-30T15:35:38.153Z","error_code":null,"request":{"json":{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}},"size":58,"truncated":false,"preview":null},"response":{"json":{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"get_analyst_price_targets","description":"Get analyst price targets and estimates.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing price targets\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_analyst_price_targetsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_analyst_price_targetsOutput","type":"object"}},{"name":"get_recommendations","description":"Get analyst recommendations for a stock.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing analyst recommendations\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_recommendationsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_recommendationsOutput","type":"object"}},{"name":"get_earnings_calendar","description":"Get earnings calendar information.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing earnings calendar data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_earnings_calendarArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_earnings_calendarOutput","type":"object"}},{"name":"get_earnings_dates","description":"Get upcoming and past earnings dates.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing earnings dates\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_earnings_datesArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_earnings_datesOutput","type":"object"}},{"name":"get_market_calendar_info","description":"Get market calendar information for a stock.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing market calendar info\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_market_calendar_infoArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_market_calendar_infoOutput","type":"object"}},{"name":"get_actions","description":"Get all corporate actions (dividends and splits) for a stock.\n\n    Args:\n        symbol: Stock symbol (e.g., 'AAPL', 'GOOGL')\n        period: Time period ('1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max')\n\n    Returns:\n        Dictionary containing all corporate actions\n    ","inputSchema":{"properties":{"symbol":{"title":"Symbol","type":"string"},"period":{"default":"1y","title":"Period","type":"string"}},"required":["symbol"],"title":"get_actionsArguments","type":"object"}},{"name":"get_dividend_yield","description":"Calculate dividend yield and related metrics.\n\n    Args:\n        symbol: Stock symbol (e.g., 'AAPL', 'GOOGL')\n\n    Returns:\n        Dictionary containing dividend yield metrics\n    ","inputSchema":{"properties":{"symbol":{"title":"Symbol","type":"string"}},"required":["symbol"],"title":"get_dividend_yieldArguments","type":"object"}},{"name":"get_dividends_summary","description":"Get dividend history for a stock.\n\n    Args:\n        symbol: Stock symbol (e.g., 'AAPL', 'GOOGL')\n        period: Time period ('1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max')\n        start_date: Start date in YYYY-MM-DD format (optional)\n        end_date: End date in YYYY-MM-DD format (optional)\n\n    Returns:\n        Dictionary containing dividend data\n    ","inputSchema":{"properties":{"symbol":{"title":"Symbol","type":"string"},"period":{"default":"1y","title":"Period","type":"string"},"start_date":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Start Date"},"end_date":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"End Date"}},"required":["symbol"],"title":"get_dividends_summaryArguments","type":"object"}},{"name":"get_splits_summary","description":"Get stock split history.\n\n    Args:\n        symbol: Stock symbol (e.g., 'AAPL', 'GOOGL')\n        period: Time period ('1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max')\n\n    Returns:\n        Dictionary containing stock split data\n    ","inputSchema":{"properties":{"symbol":{"title":"Symbol","type":"string"},"period":{"default":"20y","title":"Period","type":"string"}},"required":["symbol"],"title":"get_splits_summaryArguments","type":"object"}},{"name":"get_crypto_fear_greed_proxy","description":"Get a proxy for crypto market sentiment using price movements.\n\n    Args:\n        crypto_symbols: List of crypto symbols to analyze (default: major cryptos)\n\n    Returns:\n        JSON string containing market sentiment proxy data\n    ","inputSchema":{"properties":{"crypto_symbols":{"default":null,"items":{"type":"string"},"title":"Crypto Symbols","type":"array"}},"title":"get_crypto_fear_greed_proxyArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_crypto_fear_greed_proxyOutput","type":"object"}},{"name":"get_crypto_historical_data","description":"Get historical cryptocurrency data.\n\n    Args:\n        crypto_symbol: Crypto symbol with -USD suffix (e.g., 'BTC-USD')\n        period: Data period (1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max)\n        interval: Data interval (1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo)\n\n    Returns:\n        JSON string containing historical crypto data\n    ","inputSchema":{"properties":{"crypto_symbol":{"title":"Crypto Symbol","type":"string"},"period":{"default":"1mo","title":"Period","type":"string"},"interval":{"default":"1d","title":"Interval","type":"string"}},"required":["crypto_symbol"],"title":"get_crypto_historical_dataArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_crypto_historical_dataOutput","type":"object"}},{"name":"get_crypto_info","description":"Get cryptocurrency information.\n\n    Args:\n        crypto_symbol: Crypto symbol with -USD suffix (e.g., 'BTC-USD', 'ETH-USD')\n\n    Returns:\n        JSON string containing crypto information\n    ","inputSchema":{"properties":{"crypto_symbol":{"title":"Crypto Symbol","type":"string"}},"required":["crypto_symbol"],"title":"get_crypto_infoArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_crypto_infoOutput","type":"object"}},{"name":"get_top_cryptocurrencies","description":"Get data for top cryptocurrencies by market cap.\n\n    Args:\n        count: Number of top cryptocurrencies to return (max 20)\n\n    Returns:\n        JSON string containing top crypto data\n    ","inputSchema":{"properties":{"count":{"default":10,"title":"Count","type":"integer"}},"title":"get_top_cryptocurrenciesArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_top_cryptocurrenciesOutput","type":"object"}},{"name":"download_bulk_data","description":"Download bulk historical data for multiple tickers efficiently.\n\n    Args:\n        tickers: List of ticker symbols\n        period: Data period (1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max)\n        interval: Data interval (1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo)\n        group_by: Group by 'ticker' or 'column'\n        auto_adjust: Auto-adjust prices for dividends and splits\n        prepost: Include pre and post market data\n        threads: Use threading for faster downloads\n\n    Returns:\n        JSON string containing bulk historical data\n    ","inputSchema":{"properties":{"tickers":{"items":{"type":"string"},"title":"Tickers","type":"array"},"period":{"default":"1mo","title":"Period","type":"string"},"interval":{"default":"1d","title":"Interval","type":"string"},"group_by":{"default":"ticker","title":"Group By","type":"string"},"auto_adjust":{"default":true,"title":"Auto Adjust","type":"boolean"},"prepost":{"default":false,"title":"Prepost","type":"boolean"},"threads":{"default":true,"title":"Threads","type":"boolean"}},"required":["tickers"],"title":"download_bulk_dataArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"download_bulk_dataOutput","type":"object"}},{"name":"get_currency_data","description":"Get currency exchange rate data.\n\n    Args:\n        base_currency: Base currency code (e.g., 'USD')\n        target_currencies: List of target currency codes (default: major currencies)\n\n    Returns:\n        JSON string containing currency data\n    ","inputSchema":{"properties":{"base_currency":{"default":"USD","title":"Base Currency","type":"string"},"target_currencies":{"anyOf":[{"items":{"type":"string"},"type":"array"},{"type":"null"}],"default":null,"title":"Target Currencies"}},"title":"get_currency_dataArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_currency_dataOutput","type":"object"}},{"name":"get_exchange_info","description":"Get detailed exchange and trading information.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing exchange information\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_exchange_infoArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_exchange_infoOutput","type":"object"}},{"name":"get_market_hours","description":"Get market hours and session information.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing market hours data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_market_hoursArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_market_hoursOutput","type":"object"}},{"name":"get_ticker_history_metadata","description":"Get comprehensive ticker history metadata.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing history metadata\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_ticker_history_metadataArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_ticker_history_metadataOutput","type":"object"}},{"name":"validate_tickers","description":"Validate a list of ticker symbols.\n\n    Args:\n        tickers: List of ticker symbols to validate\n\n    Returns:\n        JSON string containing validation results\n    ","inputSchema":{"properties":{"tickers":{"items":{"type":"string"},"title":"Tickers","type":"array"}},"required":["tickers"],"title":"validate_tickersArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"validate_tickersOutput","type":"object"}},{"name":"get_balance_sheet","description":"Get balance sheet data.\n\n    Args:\n        ticker: Stock ticker symbol\n        quarterly: If True, get quarterly data; if False, get annual data\n\n    Returns:\n        JSON string containing balance sheet data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"quarterly":{"default":false,"title":"Quarterly","type":"boolean"}},"required":["ticker"],"title":"get_balance_sheetArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_balance_sheetOutput","type":"object"}},{"name":"get_cash_flow","description":"Get cash flow statement data.\n\n    Args:\n        ticker: Stock ticker symbol\n        quarterly: If True, get quarterly data; if False, get annual data\n\n    Returns:\n        JSON string containing cash flow data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"quarterly":{"default":false,"title":"Quarterly","type":"boolean"}},"required":["ticker"],"title":"get_cash_flowArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_cash_flowOutput","type":"object"}},{"name":"get_financials_summary","description":"Get key financial metrics summary.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing financial summary\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_financials_summaryArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_financials_summaryOutput","type":"object"}},{"name":"get_income_statement","description":"Get income statement data.\n\n    Args:\n        ticker: Stock ticker symbol\n        quarterly: If True, get quarterly data; if False, get annual data\n\n    Returns:\n        JSON string containing income statement data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"quarterly":{"default":false,"title":"Quarterly","type":"boolean"}},"required":["ticker"],"title":"get_income_statementArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_income_statementOutput","type":"object"}},{"name":"compare_funds","description":"Compare multiple funds side by side.\n\n    Args:\n        tickers: List of fund ticker symbols\n\n    Returns:\n        JSON string containing comparison data\n    ","inputSchema":{"properties":{"tickers":{"items":{"type":"string"},"title":"Tickers","type":"array"}},"required":["tickers"],"title":"compare_fundsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"compare_fundsOutput","type":"object"}},{"name":"get_fund_holdings","description":"Get fund top holdings.\n\n    Args:\n        ticker: Fund ticker symbol\n        count: Number of top holdings to return\n\n    Returns:\n        JSON string containing fund holdings data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"count":{"default":20,"title":"Count","type":"integer"}},"required":["ticker"],"title":"get_fund_holdingsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_fund_holdingsOutput","type":"object"}},{"name":"get_fund_performance","description":"Get fund performance metrics.\n\n    Args:\n        ticker: Fund ticker symbol\n\n    Returns:\n        JSON string containing performance data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_fund_performanceArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_fund_performanceOutput","type":"object"}},{"name":"get_fund_profile","description":"Get mutual fund or ETF profile information.\n\n    Args:\n        ticker: Fund ticker symbol\n\n    Returns:\n        JSON string containing fund profile data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_fund_profileArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_fund_profileOutput","type":"object"}},{"name":"get_fund_sector_allocation","description":"Get fund sector allocation.\n\n    Args:\n        ticker: Fund ticker symbol\n\n    Returns:\n        JSON string containing sector allocation data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_fund_sector_allocationArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_fund_sector_allocationOutput","type":"object"}},{"name":"get_capital_gains","description":"Get capital gains history (mainly for mutual funds).\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing capital gains history\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_capital_gainsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_capital_gainsOutput","type":"object"}},{"name":"get_dividends","description":"Get dividend history for a stock.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing dividend history\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_dividendsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_dividendsOutput","type":"object"}},{"name":"get_historical_data","description":"Get historical price data for a stock.\n\n    Args:\n        ticker: Stock ticker symbol\n        period: Data period (1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max)\n        interval: Data interval (1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo)\n\n    Returns:\n        JSON string containing historical price data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"period":{"default":"1mo","title":"Period","type":"string"},"interval":{"default":"1d","title":"Interval","type":"string"}},"required":["ticker"],"title":"get_historical_dataArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_historical_dataOutput","type":"object"}},{"name":"get_intraday_data","description":"Get intraday historical data with short intervals.\n\n    Args:\n        ticker: Stock ticker symbol\n        period: Data period (1d,5d for intraday data)\n        interval: Data interval (1m,2m,5m,15m,30m,60m,90m)\n\n    Returns:\n        JSON string containing intraday historical data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"period":{"default":"1d","title":"Period","type":"string"},"interval":{"default":"5m","title":"Interval","type":"string"}},"required":["ticker"],"title":"get_intraday_dataArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_intraday_dataOutput","type":"object"}},{"name":"get_prepost_market_data","description":"Get pre and post market data.\n\n    Args:\n        ticker: Stock ticker symbol\n        period: Data period\n\n    Returns:\n        JSON string containing pre/post market data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"period":{"default":"1d","title":"Period","type":"string"}},"required":["ticker"],"title":"get_prepost_market_dataArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_prepost_market_dataOutput","type":"object"}},{"name":"get_splits","description":"Get stock split history.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing stock split history\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_splitsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_splitsOutput","type":"object"}},{"name":"get_available_markets","description":"Get a list of available markets.\n\n    Returns:\n        List of market names\n    ","inputSchema":{"properties":{},"title":"get_available_marketsArguments","type":"object"}},{"name":"get_index_data","description":"Get major market indices data.\n\n    Args:\n        indices: List of index symbols (default: major US indices)\n\n    Returns:\n        JSON string containing index data\n    ","inputSchema":{"properties":{"indices":{"default":null,"items":{"type":"string"},"title":"Indices","type":"array"}},"title":"get_index_dataArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_index_dataOutput","type":"object"}},{"name":"get_market_status","description":"Get current market status and trading hours.\n\n    Returns:\n        JSON string containing market status information\n    ","inputSchema":{"properties":{"market":{"title":"Market","type":"string"}},"required":["market"],"title":"get_market_statusArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_market_statusOutput","type":"object"}},{"name":"get_market_summary","description":"Get current market summary information.\n\n    Returns:\n        JSON string containing market summary information\n    ","inputSchema":{"properties":{"market":{"title":"Market","type":"string"}},"required":["market"],"title":"get_market_summaryArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_market_summaryOutput","type":"object"}},{"name":"get_sector_performance","description":"Get sector performance using sector ETFs.\n\n    Returns:\n        JSON string containing sector performance data\n    ","inputSchema":{"properties":{},"title":"get_sector_performanceArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_sector_performanceOutput","type":"object"}},{"name":"get_fast_info","description":"Get fast info (quick basic data) for a stock.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing fast info data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_fast_infoArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_fast_infoOutput","type":"object"}},{"name":"get_insider_purchases","description":"Get insider purchase data.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing insider purchase data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_insider_purchasesArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_insider_purchasesOutput","type":"object"}},{"name":"get_insider_roster_holders","description":"Get insider roster holders data.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing insider roster data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_insider_roster_holdersArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_insider_roster_holdersOutput","type":"object"}},{"name":"get_insider_transactions","description":"Get insider transaction data.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing insider transaction data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_insider_transactionsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_insider_transactionsOutput","type":"object"}},{"name":"get_news","description":"Get latest news for a stock.\n\n    Args:\n        ticker: Stock ticker symbol\n        count: Number of news articles to return (max 50)\n\n    Returns:\n        JSON string containing news articles\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"count":{"default":10,"title":"Count","type":"integer"}},"required":["ticker"],"title":"get_newsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_newsOutput","type":"object"}},{"name":"get_shares_outstanding","description":"Get shares outstanding data over time.\n\n    Args:\n        ticker: Stock ticker symbol\n        start_date: Start date in YYYY-MM-DD format (optional)\n        end_date: End date in YYYY-MM-DD format (optional)\n\n    Returns:\n        JSON string containing shares outstanding data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"start_date":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Start Date"},"end_date":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"End Date"}},"required":["ticker"],"title":"get_shares_outstandingArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_shares_outstandingOutput","type":"object"}},{"name":"get_option_chain","description":"Get options chain data for a specific expiration date.\n\n    Args:\n        ticker: Stock ticker symbol\n        expiration_date: Expiration date in YYYY-MM-DD format (if None, uses nearest expiration)\n\n    Returns:\n        JSON string containing options chain data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"expiration_date":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Expiration Date"}},"required":["ticker"],"title":"get_option_chainArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_option_chainOutput","type":"object"}},{"name":"get_options_by_moneyness","description":"Get options filtered by moneyness (proximity to current stock price).\n\n    Args:\n        ticker: Stock ticker symbol\n        expiration_date: Expiration date in YYYY-MM-DD format (if None, uses nearest expiration)\n        moneyness_range: Range around current price (e.g., 0.1 for ±10%)\n\n    Returns:\n        JSON string containing filtered options data\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"expiration_date":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Expiration Date"},"moneyness_range":{"default":0.1,"title":"Moneyness Range","type":"number"}},"required":["ticker"],"title":"get_options_by_moneynessArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_options_by_moneynessOutput","type":"object"}},{"name":"get_options_expiration_dates","description":"Get available options expiration dates.\n\n    Args:\n        ticker: Stock ticker symbol\n\n    Returns:\n        JSON string containing expiration dates\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_options_expiration_datesArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_options_expiration_datesOutput","type":"object"}},{"name":"get_options_skew","description":"Analyze and return the volatility skew for call and put options.\n\n    This function retrieves the implied volatility for each strike price of both call and put options\n    for a given stock ticker and expiration date. If no expiration date is provided, the nearest available\n    expiration is used. The result is a JSON string containing lists of strike/implied volatility pairs\n    for calls and puts, which can be used to visualize or analyze the volatility skew.\n\n    Args:\n        ticker: Stock ticker symbol (e.g., 'AAPL').\n        expiration_date: Expiration date in 'YYYY-MM-DD' format. If None, uses the nearest expiration.\n\n    Returns:\n        JSON string with two keys:\n            - \"call_skew\": List of dicts with 'strike' and 'impliedVolatility' for call options.\n            - \"put_skew\": List of dicts with 'strike' and 'impliedVolatility' for put options.\n        If data is unavailable or an error occurs, returns a JSON string with an \"error\" key.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"expiration_date":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Expiration Date"}},"required":["ticker"],"title":"get_options_skewArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_options_skewOutput","type":"object"}},{"name":"get_options_volume_analysis","description":"Get options volume and open interest analysis.\n\n    Args:\n        ticker: Stock ticker symbol\n        expiration_date: Expiration date in YYYY-MM-DD format (if None, uses nearest expiration)\n\n    Returns:\n        JSON string containing volume analysis\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"expiration_date":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Expiration Date"}},"required":["ticker"],"title":"get_options_volume_analysisArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_options_volume_analysisOutput","type":"object"}},{"name":"get_similar_stocks","description":"Find stocks similar to the given ticker based on sector and market cap.\n\n    Args:\n        ticker: Reference stock ticker symbol\n        count: Number of similar stocks to return\n\n    Returns:\n        JSON string containing similar stocks\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"count":{"default":5,"title":"Count","type":"integer"}},"required":["ticker"],"title":"get_similar_stocksArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_similar_stocksOutput","type":"object"}},{"name":"get_top_performers","description":"Get top performing stocks over a specified period.\n\n    Args:\n        period: Time period for performance calculation (1d, 5d, 1mo, 3mo, 6mo, 1y)\n        sector: Filter by specific sector (optional)\n        count: Number of top performers to return\n\n    Returns:\n        JSON string containing top performing stocks\n    ","inputSchema":{"properties":{"period":{"default":"1mo","title":"Period","type":"string"},"sector":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Sector"},"count":{"default":10,"title":"Count","type":"integer"}},"title":"get_top_performersArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_top_performersOutput","type":"object"}},{"name":"screen_stocks_by_criteria","description":"Screen stocks based on financial criteria.\n\n    Args:\n        min_market_cap: Minimum market cap in dollars\n        max_market_cap: Maximum market cap in dollars\n        min_pe_ratio: Minimum P/E ratio\n        max_pe_ratio: Maximum P/E ratio\n        min_dividend_yield: Minimum dividend yield (as decimal, e.g., 0.02 for 2%)\n        sector: Filter by sector\n        tickers: List of specific tickers to screen (if None, uses popular stocks)\n\n    Returns:\n        JSON string containing filtered stocks\n    ","inputSchema":{"properties":{"min_market_cap":{"anyOf":[{"type":"number"},{"type":"null"}],"default":null,"title":"Min Market Cap"},"max_market_cap":{"anyOf":[{"type":"number"},{"type":"null"}],"default":null,"title":"Max Market Cap"},"min_pe_ratio":{"anyOf":[{"type":"number"},{"type":"null"}],"default":null,"title":"Min Pe Ratio"},"max_pe_ratio":{"anyOf":[{"type":"number"},{"type":"null"}],"default":null,"title":"Max Pe Ratio"},"min_dividend_yield":{"anyOf":[{"type":"number"},{"type":"null"}],"default":null,"title":"Min Dividend Yield"},"sector":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null,"title":"Sector"},"tickers":{"anyOf":[{"items":{"type":"string"},"type":"array"},{"type":"null"}],"default":null,"title":"Tickers"}},"title":"screen_stocks_by_criteriaArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"screen_stocks_by_criteriaOutput","type":"object"}},{"name":"get_analyst_recommendation","description":"Fetches analyst recommendation and rating for a company.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string with recommendation mean, key, and average analyst rating. Example keys: recommendationMean, recommendationKey, averageAnalystRating.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_analyst_recommendationArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_analyst_recommendationOutput","type":"object"}},{"name":"get_company_officers","description":"Fetches company officers and key personnel information.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string containing a list of officer dictionaries, each with name, title, and other details. Returns empty list if unavailable.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_company_officersArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_company_officersOutput","type":"object"}},{"name":"get_dividend_info","description":"Fetches dividend information for a company.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string with dividend rate, yield, payout ratio, ex-dividend date, and related fields. Example keys: dividendRate, dividendYield, exDividendDate, etc.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_dividend_infoArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_dividend_infoOutput","type":"object"}},{"name":"get_financial_summary","description":"Fetches key financial summary metrics for a company.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string with market cap, margins, cash flow, revenue, and other financial metrics. Example keys: marketCap, totalRevenue, grossMargins, operatingCashflow, etc.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_financial_summaryArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_financial_summaryOutput","type":"object"}},{"name":"get_institutional_holders","description":"Fetches institutional holders information for a company.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string containing institutional holders data as a table (JSON), or error message if unavailable.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_institutional_holdersArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_institutional_holdersOutput","type":"object"}},{"name":"get_major_holders","description":"Fetches major holders breakdown for a company.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string containing major holders breakdown as a table (JSON), or error message if unavailable.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_major_holdersArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_major_holdersOutput","type":"object"}},{"name":"get_multiple_tickers","description":"Fetches current price and volume data for multiple stock tickers over a specified period.\n\n    Args:\n        tickers: List of stock ticker symbols (e.g. ['AAPL', 'GOOGL']).\n        period: Data period (e.g. '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max').\n\n    Returns:\n        str: JSON string containing time series data for all requested tickers. Keys include price, volume, and date-indexed values. Returns error message if no data is available.\n    ","inputSchema":{"properties":{"tickers":{"items":{"type":"string"},"title":"Tickers","type":"array"},"period":{"default":"1d","title":"Period","type":"string"}},"required":["tickers"],"title":"get_multiple_tickersArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_multiple_tickersOutput","type":"object"}},{"name":"get_mutualfund_holders","description":"Fetches mutual fund holders information for a company.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string containing mutual fund holders data as a table (JSON), or error message if unavailable.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_mutualfund_holdersArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_mutualfund_holdersOutput","type":"object"}},{"name":"get_price_targets","description":"Fetches analyst price targets for a company.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string with analyst high, low, mean, and median price targets, plus number of analyst opinions. Example keys: targetHighPrice, targetMeanPrice, numberOfAnalystOpinions, etc.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_price_targetsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_price_targetsOutput","type":"object"}},{"name":"get_risk_metrics","description":"Fetches risk metrics for a company.\n\n    Args:\n        ticker: Stock ticker symbol.\n\n    Returns:\n        str: JSON string with audit, board, compensation, shareholder rights, and overall risk scores. Example keys: auditRisk, boardRisk, overallRisk, etc.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_risk_metricsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_risk_metricsOutput","type":"object"}},{"name":"get_stock_info","description":"Fetches basic company and price information for a stock ticker.\n\n    Args:\n        ticker: Stock ticker symbol (e.g. 'AAPL').\n\n    Returns:\n        str: JSON string containing company profile, sector, price, volume, and other key fields. Example keys: symbol, shortName, sector, currentPrice, marketCap, etc.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"}},"required":["ticker"],"title":"get_stock_infoArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_stock_infoOutput","type":"object"}},{"name":"get_support_resistance_levels","description":"Calculate support and resistance levels based on historical data.\n\n    Args:\n        ticker (str): The stock ticker symbol.\n        period (str): The historical data period (default is \"6mo\").\n\n    Returns:\n        str: JSON string containing support and resistance levels.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"period":{"default":"6mo","title":"Period","type":"string"}},"required":["ticker"],"title":"get_support_resistance_levelsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_support_resistance_levelsOutput","type":"object"}},{"name":"get_technical_indicators","description":"\n    Get technical indicators for a stock ticker.\n    Args:\n        ticker (str): The stock ticker symbol.\n        period (str): The historical data period (default is \"6mo\").\n    Returns:\n        str: JSON string containing technical indicators.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"period":{"default":"6mo","title":"Period","type":"string"}},"required":["ticker"],"title":"get_technical_indicatorsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_technical_indicatorsOutput","type":"object"}},{"name":"get_volatility_metrics","description":"Calculate volatility metrics for a stock ticker.\n\n    Args:\n        ticker (str): The stock ticker symbol.\n        period (str): The historical data period (default is \"1y\").\n    Returns:\n        str: JSON string containing volatility metrics.\n    ","inputSchema":{"properties":{"ticker":{"title":"Ticker","type":"string"},"period":{"default":"1y","title":"Period","type":"string"}},"required":["ticker"],"title":"get_volatility_metricsArguments","type":"object"},"outputSchema":{"properties":{"result":{"title":"Result","type":"string"}},"required":["result"],"title":"get_volatility_metricsOutput","type":"object"}}]}},"size":42643,"truncated":false,"preview":null}}]}</script>
+  <script>
+    // Report data
+    const reportData = JSON.parse(document.getElementById('report-data').textContent);
+    const rpcs = reportData.rpcs;
+    let selectedIdx = null;
+
+    // Format JSON for display
+    function formatJson(data) {
+      if (data === null || data === undefined) return '(no data)';
+      try {
+        return JSON.stringify(data, null, 2);
+      } catch {
+        return String(data);
+      }
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Format bytes
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // Render payload section
+    function renderPayload(title, payload, elementId) {
+      let content, notes = '';
+
+      if (payload.truncated) {
+        notes = '<p class="truncated-note">Payload truncated (' + formatBytes(payload.size) + ', showing first 4096 chars)</p>';
+        if (payload.spillFile) {
+          notes += '<p class="spill-link">Full payload: <a href="' + escapeHtml(payload.spillFile) + '">' + escapeHtml(payload.spillFile) + '</a></p>';
+        }
+        content = payload.preview ? escapeHtml(payload.preview) + '\n... (truncated)' : '(no data)';
+      } else if (payload.json !== null) {
+        content = escapeHtml(formatJson(payload.json));
+      } else {
+        content = '(no data)';
+      }
+
+      return '<h3>' + title + ' <button class="copy-btn" onclick="copyToClipboard(\'' + elementId + '\', this)">Copy</button></h3>' +
+             notes +
+             '<pre id="' + elementId + '"><code>' + content + '</code></pre>';
+    }
+
+    // Show RPC detail in right pane
+    function showRpcDetail(idx) {
+      if (idx < 0 || idx >= rpcs.length) return;
+
+      const rpc = rpcs[idx];
+      const rightPane = document.getElementById('right-pane');
+
+      // Update selection state
+      document.querySelectorAll('.rpc-row').forEach((r, i) => {
+        r.classList.toggle('selected', i === idx);
+      });
+      selectedIdx = idx;
+
+      const statusClass = 'status-' + rpc.status;
+      const statusSymbol = rpc.status === 'OK' ? '✓' : rpc.status === 'ERR' ? '✗' : '?';
+      const latency = rpc.latency_ms !== null ? rpc.latency_ms + 'ms' : '(pending)';
+
+      rightPane.innerHTML =
+        '<div class="detail-section">' +
+        '  <h2>RPC Info</h2>' +
+        '  <dl>' +
+        '    <dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd>' +
+        '    <dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd>' +
+        '    <dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd>' +
+        '    <dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd>' +
+        '    <dt>Request Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd>' +
+        '    <dt>Response Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd>' +
+        '  </dl>' +
+        '</div>' +
+        '<div class="detail-section">' +
+        '  <h2>Request</h2>' +
+        '  ' + renderPayload('', rpc.request, 'req-' + idx).replace('<h3> ', '').replace('</h3>', '') +
+        '</div>' +
+        '<div class="detail-section">' +
+        '  <h2>Response</h2>' +
+        '  ' + renderPayload('', rpc.response, 'res-' + idx).replace('<h3> ', '').replace('</h3>', '') +
+        '</div>';
+    }
+
+    // Copy to clipboard
+    async function copyToClipboard(elementId, btn) {
+      const target = document.getElementById(elementId);
+      if (target) {
+        try {
+          await navigator.clipboard.writeText(target.textContent || '');
+          const originalText = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = originalText; }, 1500);
+        } catch (err) {
+          console.error('Copy failed:', err);
+        }
+      }
+    }
+
+    // RPC row click handlers
+    document.querySelectorAll('.rpc-row').forEach((row, idx) => {
+      row.addEventListener('click', () => showRpcDetail(idx));
+    });
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (selectedIdx === null) return;
+      if (e.key === 'ArrowDown' && selectedIdx < rpcs.length - 1) {
+        e.preventDefault();
+        showRpcDetail(selectedIdx + 1);
+        // Scroll selected row into view
+        const row = document.querySelector('.rpc-row.selected');
+        if (row) row.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp' && selectedIdx > 0) {
+        e.preventDefault();
+        showRpcDetail(selectedIdx - 1);
+        const row = document.querySelector('.rpc-row.selected');
+        if (row) row.scrollIntoView({ block: 'nearest' });
+      }
+    });
+
+    // Resize handle drag
+    const resizeHandle = document.querySelector('.resize-handle');
+    const leftPane = document.querySelector('.left-pane');
+    if (resizeHandle && leftPane) {
+      let startX, startWidth;
+
+      resizeHandle.addEventListener('mousedown', (e) => {
+        startX = e.clientX;
+        startWidth = leftPane.offsetWidth;
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        e.preventDefault();
+      });
+
+      function onMouseMove(e) {
+        const diff = e.clientX - startX;
+        const newWidth = Math.max(300, Math.min(600, startWidth + diff));
+        leftPane.style.width = newWidth + 'px';
+      }
+
+      function onMouseUp() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+    }
+
+    // Select first RPC by default if any exist
+    if (rpcs.length > 0) {
+      showRpcDetail(0);
+    }
+  </script>
+</body>
+</html>

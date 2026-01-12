@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-01-12T08:43:31.580Z",
+  "sanitizer_version": 1,
+  "session": {
+    "session_id": "31f6b49f-a8eb-48b2-a9ae-1417ca8f5abb",
+    "connector_id": "yfinance",
+    "started_at": "2026-01-12T01:07:03.679Z",
+    "ended_at": "2026-01-12T01:07:06.283Z",
+    "exit_reason": "normal",
+    "rpc_count": 2,
+    "event_count": 11,
+    "duration_ms": 2604,
+    "actor_kind": null
+  },
+  "summary": {
+    "rpc_total": 2,
+    "errors": 0,
+    "latency_ms_p50": 2414,
+    "latency_ms_p95": 2414
+  },
+  "rpc_methods": [
+    "initialize",
+    "tools/list"
+  ]
+}

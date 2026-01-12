@@ -1,0 +1,42 @@
+popl: 1
+entry:
+  id: 01KERNZTC0CV24HNVKKPBRBDST
+  created_at: 2026-01-12T08:43:31.587Z
+  title: MCP Session POPL Entry yfinance 2026-01-12 08:43:31
+  author:
+    name: Unknown
+  trust:
+    level: 0
+    label: Recorded
+target:
+  kind: session
+  name: session
+  ids:
+    connector_id: yfinance
+    session_id: 31f6b49f-a8eb-48b2-a9ae-1417ca8f5abb
+capture:
+  window:
+    started_at: 2026-01-12T01:07:03.679Z
+    ended_at: 2026-01-12T01:07:06.283Z
+  summary:
+    rpc_total: 2
+    errors: 0
+    latency_ms_p50: 2414
+    latency_ms_p95: 2414
+  mcp:
+    servers:
+      - name: yfinance
+evidence:
+  policy:
+    redaction: default
+    ruleset_version: 1
+  artifacts:
+    - name: status.json
+      path: status.json
+      sha256: 80fd3cfecaad4ca9972cdb3ede5cb608bfe688a30de4ab474e5a0fbbb9b5b70e
+    - name: rpc.sanitized.jsonl
+      path: rpc.sanitized.jsonl
+      sha256: 6587e64837f12640e73db651b90927d7e24d10e226edff35a4a05980620a3e83
+    - name: validation-run.log
+      path: validation-run.log
+      sha256: 1365bbe322086e537d9354d13cf80d32c676c765046519c3f89d498dc52808ae

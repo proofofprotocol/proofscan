@@ -213,7 +213,7 @@ describe('generateRpcHtml', () => {
   it('should include badge styling', () => {
     const html = generateRpcHtml(baseReport);
     expect(html).toContain('.badge');
-    expect(html).toContain('--accent-green');
+    expect(html).toContain('--accent-blue');
   });
 
   it('should show truncation notice for large payloads', () => {
