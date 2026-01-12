@@ -4,7 +4,7 @@
 
 MCP Server scanner - eliminate black boxes by capturing JSON-RPC from connection to tools/list.
 
-**Version:** 0.10.14
+**Version:** 0.10.23
 
 ## Overview
 
@@ -17,6 +17,9 @@ proofscan provides complete visibility into MCP (Model Context Protocol) server 
 - 🎭 **Proxies** multiple MCP servers with unified tool namespace
 - 📊 **Generates** public-safe audit trails (POPL)
 - 🐚 **Interactive** shell mode with TAB completion
+- 📦 **Catalog** - Search and install MCP servers from registry
+- 📈 **Analyze** - Tool usage analysis across sessions
+- 🌍 **i18n** - Multi-language support (English, 日本語)
 
 ## Quick Links
 
@@ -141,6 +144,39 @@ pfscan tool show time get_current_time
 
 # Call tool
 pfscan tool call time get_current_time --args '{}'
+```
+
+### 📦 MCP Catalog (New in v0.10.23)
+
+Discover and install MCP servers from the registry:
+
+```bash
+# Search for servers
+pfscan catalog search time
+
+# View server details
+pfscan catalog view @modelcontextprotocol/server-time
+
+# Install directly to connectors
+pfscan catalog install @modelcontextprotocol/server-time --id time
+
+# Search across all sources
+pfscan catalog search database --all
+```
+
+### 📈 Tool Usage Analysis (New in v0.10.23)
+
+Analyze how tools are used across sessions:
+
+```bash
+# Analyze all tool usage
+pfscan analyze
+
+# Analyze specific connector
+pfscan analyze --connector time
+
+# Show detailed statistics
+pfscan analyze --verbose
 ```
 
 ## Command Overview
