@@ -2,7 +2,7 @@
  * HTML Templates (Phase 5.0)
  *
  * Generates standalone HTML files for RPC and Session reports.
- * Dark theme with green accent badges.
+ * Dark theme with neon blue accent badges.
  */
 
 import { formatBytes } from '../eventline/types.js';
@@ -64,8 +64,8 @@ function getRpcReportStyles(): string {
       --bg-secondary: #161b22;
       --text-primary: #e6edf3;
       --text-secondary: #8b949e;
-      --accent-blue: #58a6ff;
-      --status-ok: #3fb950;
+      --accent-blue: #00d4ff;
+      --status-ok: #00d4ff;
       --status-err: #f85149;
       --status-pending: #d29922;
       --border-color: #30363d;
@@ -179,8 +179,8 @@ function getSessionReportStyles(): string {
       --bg-secondary: #161b22;
       --text-primary: #e6edf3;
       --text-secondary: #8b949e;
-      --accent-blue: #58a6ff;
-      --status-ok: #3fb950;
+      --accent-blue: #00d4ff;
+      --status-ok: #00d4ff;
       --status-err: #f85149;
       --status-pending: #d29922;
       --border-color: #30363d;
@@ -307,10 +307,10 @@ function getSessionReportStyles(): string {
       cursor: pointer;
     }
     .rpc-row:hover {
-      background: rgba(63, 185, 80, 0.1);
+      background: rgba(0, 212, 255, 0.1);
     }
     .rpc-row.selected {
-      background: rgba(63, 185, 80, 0.2);
+      background: rgba(0, 212, 255, 0.2);
     }
     /* Right pane detail */
     .detail-placeholder {
