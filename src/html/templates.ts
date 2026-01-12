@@ -7,10 +7,16 @@
 
 import { formatBytes } from '../eventline/types.js';
 import type {
+  HtmlConnectorAnalyticsV1,
+  HtmlConnectorKpis,
   HtmlConnectorReportV1,
   HtmlConnectorSessionRow,
+  HtmlHeatmapData,
+  HtmlLatencyHistogram,
+  HtmlMethodDistribution,
   HtmlRpcReportV1,
   HtmlSessionReportV1,
+  HtmlTopToolsData,
   PayloadData,
   RpcStatus,
   SessionRpcDetail,
@@ -1140,6 +1146,226 @@ function getConnectorReportStyles(): string {
     .resize-handle:hover {
       background: var(--accent-blue);
     }
+
+    /* Analytics Panel (Phase 5.2) - Revised Layout */
+
+    /* Header with KPI stats inline */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .header-left {
+      flex-shrink: 0;
+    }
+    .header-server-row {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .header-caps {
+      display: flex;
+      gap: 4px;
+    }
+    .header-server-info {
+      display: flex;
+      gap: 12px;
+      font-size: 0.75em;
+      color: var(--text-secondary);
+    }
+    .header-server-info .server-name {
+      color: var(--text-primary);
+    }
+    .header-label {
+      color: var(--text-secondary);
+      font-size: 0.9em;
+    }
+    .no-caps {
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+    .kpi-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: baseline;
+    }
+    .kpi-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0;
+      background: transparent;
+      min-width: 50px;
+    }
+    .kpi-item .kpi-value {
+      font-size: 0.95em;
+      font-weight: 600;
+      color: var(--accent-blue);
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      line-height: 1.2;
+    }
+    .kpi-item .kpi-label {
+      font-size: 0.55em;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    /* All KPI values use accent-blue for unified appearance */
+
+    /* Connector top section: info + charts row */
+    .connector-top {
+      display: flex;
+      gap: 16px;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+    .connector-top .connector-info {
+      flex: 0 0 360px;
+      max-width: 360px;
+      border-bottom: none;
+      padding: 0;
+    }
+    .analytics-panel {
+      flex: 1;
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    /* Charts row - 4 items horizontal with custom flex ratios */
+    .heatmap-container {
+      flex: 0.8;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px;
+      min-width: 0;
+    }
+    .latency-histogram {
+      flex: 1.4;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px;
+      min-width: 0;
+    }
+    .top-tools, .method-distribution {
+      flex: 1;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px;
+      min-width: 0;
+    }
+    .chart-title {
+      font-size: 0.75em;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    /* Heatmap - using neon blue gradient for consistency with theme */
+    .heatmap-title {
+      font-size: 0.75em;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+    .heatmap-level-0 { fill: var(--bg-tertiary); }
+    .heatmap-level-1 { fill: #0a3d4d; }
+    .heatmap-level-2 { fill: #0d5c73; }
+    .heatmap-level-3 { fill: #0097b2; }
+    .heatmap-level-4 { fill: #00d4ff; }
+
+    /* Histogram */
+    .histogram-bar { fill: var(--accent-blue); }
+    .histogram-label { fill: var(--text-secondary); font-size: 9px; }
+
+    /* Top Tools */
+    .top-tool-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+      font-size: 0.75em;
+    }
+    .top-tool-rank {
+      color: var(--text-secondary);
+      width: 14px;
+      flex-shrink: 0;
+    }
+    .top-tool-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+    .top-tool-bar-container {
+      width: 50px;
+      height: 6px;
+      background: var(--bg-tertiary);
+      border-radius: 3px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .top-tool-bar {
+      height: 100%;
+      background: var(--accent-blue);
+      border-radius: 3px;
+    }
+    .top-tool-pct {
+      color: var(--text-secondary);
+      width: 28px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .no-data-message {
+      color: var(--text-secondary);
+      font-size: 0.75em;
+      text-align: center;
+      padding: 8px;
+    }
+
+    /* Method Distribution Donut Chart */
+    .donut-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .donut-legend {
+      flex: 1;
+      font-size: 0.7em;
+      min-width: 0;
+    }
+    .donut-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .donut-legend-color {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .donut-legend-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
+    }
+    .donut-legend-pct {
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
   `;
 }
 
@@ -1376,6 +1602,321 @@ function getConnectorReportScript(): string {
   `;
 }
 
+// ============================================================================
+// Analytics Panel Rendering (Phase 5.2)
+// ============================================================================
+
+/**
+ * Render KPI stats row for header (inline compact display)
+ */
+function renderKpiRow(kpis: HtmlConnectorKpis): string {
+  // Format large numbers with K/M suffix
+  const formatNumber = (n: number): string => {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return String(n);
+  };
+
+  // Format bytes for display
+  const formatBytesCompact = (bytes: number): string => {
+    if (bytes === 0) return '0';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + sizes[i];
+  };
+
+  return `
+    <div class="kpi-row">
+      <div class="kpi-item">
+        <div class="kpi-value">${formatNumber(kpis.sessions_displayed)}</div>
+        <div class="kpi-label">Sessions</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-value">${formatNumber(kpis.rpc_total)}</div>
+        <div class="kpi-label">RPCs</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-value">${formatNumber(kpis.rpc_err)}</div>
+        <div class="kpi-label">Error</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-value">${kpis.avg_latency_ms !== null ? kpis.avg_latency_ms : '-'}</div>
+        <div class="kpi-label">Avg Latency</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-value">${kpis.p95_latency_ms !== null ? kpis.p95_latency_ms : '-'}</div>
+        <div class="kpi-label">P95 Latency</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-value">${formatBytesCompact(kpis.total_request_bytes)}</div>
+        <div class="kpi-label">Req Size</div>
+      </div>
+      <div class="kpi-item">
+        <div class="kpi-value">${formatBytesCompact(kpis.total_response_bytes)}</div>
+        <div class="kpi-label">Res Size</div>
+      </div>
+    </div>`;
+}
+
+/**
+ * Get intensity level (0-4) for heatmap cell based on count and max
+ */
+function getHeatmapLevel(count: number, maxCount: number): number {
+  if (count === 0 || maxCount === 0) return 0;
+  const ratio = count / maxCount;
+  if (ratio <= 0.25) return 1;
+  if (ratio <= 0.5) return 2;
+  if (ratio <= 0.75) return 3;
+  return 4;
+}
+
+/**
+ * Render activity heatmap (GitHub contributions style, SVG)
+ */
+function renderHeatmap(heatmap: HtmlHeatmapData): string {
+  const cellSize = 10;
+  const cellGap = 2;
+  const cellTotal = cellSize + cellGap;
+
+  // Group cells by week (7 days per column)
+  const weeks: Array<typeof heatmap.cells> = [];
+  let currentWeek: typeof heatmap.cells = [];
+
+  // Find the day of week for the start date (0 = Sunday)
+  const startDow = new Date(heatmap.start_date + 'T00:00:00Z').getUTCDay();
+
+  // Add empty cells for days before start_date
+  for (let i = 0; i < startDow; i++) {
+    currentWeek.push({ date: '', count: -1 }); // -1 indicates empty
+  }
+
+  for (const cell of heatmap.cells) {
+    currentWeek.push(cell);
+    if (currentWeek.length === 7) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  }
+  if (currentWeek.length > 0) {
+    weeks.push(currentWeek);
+  }
+
+  // Calculate SVG dimensions
+  const svgWidth = weeks.length * cellTotal;
+  const svgHeight = 7 * cellTotal;
+
+  // Generate SVG rects
+  let rects = '';
+  weeks.forEach((week, weekIdx) => {
+    week.forEach((cell, dayIdx) => {
+      if (cell.count < 0) return; // Skip empty cells
+      const level = getHeatmapLevel(cell.count, heatmap.max_count);
+      const x = weekIdx * cellTotal;
+      const y = dayIdx * cellTotal;
+      const title = cell.date ? `${cell.date}: ${cell.count} RPCs` : '';
+      rects += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" rx="2" class="heatmap-level-${level}"><title>${escapeHtml(title)}</title></rect>`;
+    });
+  });
+
+  return `
+    <div class="heatmap-container">
+      <div class="heatmap-title">Activity (${escapeHtml(heatmap.start_date)} to ${escapeHtml(heatmap.end_date)})</div>
+      <svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
+        ${rects}
+      </svg>
+    </div>`;
+}
+
+/**
+ * Render latency histogram (SVG bar chart)
+ */
+function renderLatencyHistogram(latency: HtmlLatencyHistogram): string {
+  if (latency.sample_size === 0) {
+    return `
+      <div class="latency-histogram">
+        <div class="chart-title">Latency Distribution</div>
+        <div class="no-data-message">No latency data</div>
+      </div>`;
+  }
+
+  const maxCount = Math.max(...latency.buckets.map((b) => b.count), 1);
+  const barWidth = 30;
+  const barGap = 4;
+  const chartWidth = latency.buckets.length * (barWidth + barGap);
+  const chartHeight = 60;
+  const labelHeight = 16;
+
+  let bars = '';
+  latency.buckets.forEach((bucket, idx) => {
+    const barHeight = maxCount > 0 ? (bucket.count / maxCount) * chartHeight : 0;
+    const x = idx * (barWidth + barGap);
+    const y = chartHeight - barHeight;
+    const title = `${bucket.label}ms: ${bucket.count} RPCs`;
+
+    bars += `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" class="histogram-bar"><title>${escapeHtml(title)}</title></rect>`;
+    bars += `<text x="${x + barWidth / 2}" y="${chartHeight + labelHeight - 4}" text-anchor="middle" class="histogram-label">${escapeHtml(bucket.label)}</text>`;
+  });
+
+  return `
+    <div class="latency-histogram">
+      <div class="chart-title">Latency Distribution (${latency.sample_size} samples)</div>
+      <svg width="${chartWidth}" height="${chartHeight + labelHeight}" viewBox="0 0 ${chartWidth} ${chartHeight + labelHeight}">
+        ${bars}
+      </svg>
+    </div>`;
+}
+
+/**
+ * Render top 5 tools
+ */
+function renderTopTools(topTools: HtmlTopToolsData): string {
+  if (topTools.items.length === 0) {
+    return `
+      <div class="top-tools">
+        <div class="chart-title">Top Tools</div>
+        <div class="no-data-message">No tool calls</div>
+      </div>`;
+  }
+
+  const rows = topTools.items
+    .map((tool, idx) => {
+      return `
+      <div class="top-tool-row">
+        <span class="top-tool-rank">${idx + 1}.</span>
+        <span class="top-tool-name" title="${escapeHtml(tool.name)}">${escapeHtml(tool.name)}</span>
+        <div class="top-tool-bar-container">
+          <div class="top-tool-bar" style="width: ${tool.pct}%"></div>
+        </div>
+        <span class="top-tool-pct">${tool.pct}%</span>
+      </div>`;
+    })
+    .join('');
+
+  return `
+    <div class="top-tools">
+      <div class="chart-title">Top Tools (${topTools.total_calls} calls)</div>
+      ${rows}
+    </div>`;
+}
+
+/**
+ * Donut chart colors (blue gradient palette)
+ */
+const DONUT_COLORS = [
+  '#00d4ff',  // Neon blue (brightest)
+  '#0097b2',  // Medium bright blue
+  '#0d5c73',  // Medium blue
+  '#0a4d5c',  // Darker blue
+  '#083d47',  // Dark blue
+  '#5a6a70',  // Blue-gray (for "Others")
+];
+
+/**
+ * Render method distribution donut chart (SVG)
+ */
+function renderMethodDistribution(methodDist: HtmlMethodDistribution): string {
+  if (methodDist.slices.length === 0) {
+    return `
+      <div class="method-distribution">
+        <div class="chart-title">Method Distribution</div>
+        <div class="no-data-message">No RPCs</div>
+      </div>`;
+  }
+
+  // SVG donut chart parameters
+  const size = 60;
+  const cx = size / 2;
+  const cy = size / 2;
+  const outerRadius = 26;
+  const innerRadius = 16; // Creates the donut hole
+
+  // Generate SVG path segments
+  let paths = '';
+  let currentAngle = -90; // Start from top (12 o'clock)
+
+  methodDist.slices.forEach((slice, idx) => {
+    const angle = (slice.pct / 100) * 360;
+    const startAngle = currentAngle;
+    const endAngle = currentAngle + angle;
+
+    // Convert angles to radians
+    const startRad = (startAngle * Math.PI) / 180;
+    const endRad = (endAngle * Math.PI) / 180;
+
+    // Calculate arc points for outer radius
+    const x1Outer = cx + outerRadius * Math.cos(startRad);
+    const y1Outer = cy + outerRadius * Math.sin(startRad);
+    const x2Outer = cx + outerRadius * Math.cos(endRad);
+    const y2Outer = cy + outerRadius * Math.sin(endRad);
+
+    // Calculate arc points for inner radius
+    const x1Inner = cx + innerRadius * Math.cos(endRad);
+    const y1Inner = cy + innerRadius * Math.sin(endRad);
+    const x2Inner = cx + innerRadius * Math.cos(startRad);
+    const y2Inner = cy + innerRadius * Math.sin(startRad);
+
+    // Large arc flag
+    const largeArc = angle > 180 ? 1 : 0;
+
+    // Color
+    const color = DONUT_COLORS[idx % DONUT_COLORS.length];
+
+    // SVG path for donut segment
+    const d = [
+      `M ${x1Outer} ${y1Outer}`,                                    // Start at outer edge
+      `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${x2Outer} ${y2Outer}`, // Outer arc
+      `L ${x1Inner} ${y1Inner}`,                                    // Line to inner edge
+      `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x2Inner} ${y2Inner}`, // Inner arc (reverse)
+      'Z',                                                          // Close path
+    ].join(' ');
+
+    const title = `${slice.method}: ${slice.count} (${slice.pct}%)`;
+    paths += `<path d="${d}" fill="${color}"><title>${escapeHtml(title)}</title></path>`;
+
+    currentAngle = endAngle;
+  });
+
+  // Generate legend
+  const legendItems = methodDist.slices
+    .map((slice, idx) => {
+      const color = DONUT_COLORS[idx % DONUT_COLORS.length];
+      return `
+      <div class="donut-legend-item">
+        <div class="donut-legend-color" style="background: ${color}"></div>
+        <span class="donut-legend-label" title="${escapeHtml(slice.method)}">${escapeHtml(slice.method)}</span>
+        <span class="donut-legend-pct">${slice.pct}%</span>
+      </div>`;
+    })
+    .join('');
+
+  return `
+    <div class="method-distribution">
+      <div class="chart-title">Methods (${methodDist.total_rpcs} RPCs)</div>
+      <div class="donut-container">
+        <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+          ${paths}
+        </svg>
+        <div class="donut-legend">
+          ${legendItems}
+        </div>
+      </div>
+    </div>`;
+}
+
+/**
+ * Render the analytics panel (4 charts horizontally)
+ */
+function renderAnalyticsPanel(analytics: HtmlConnectorAnalyticsV1): string {
+  return `
+    <div class="analytics-panel">
+      ${renderHeatmap(analytics.heatmap)}
+      ${renderLatencyHistogram(analytics.latency)}
+      ${renderTopTools(analytics.top_tools)}
+      ${renderMethodDistribution(analytics.method_distribution)}
+    </div>`;
+}
+
 /**
  * Render a session item for the sessions pane
  */
@@ -1484,7 +2025,7 @@ ${rpcRows}
  * Generate Connector HTML report (3-hierarchy: Connector -> Sessions -> RPCs)
  */
 export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
-  const { meta, connector, sessions, session_reports } = report;
+  const { meta, connector, sessions, session_reports, analytics } = report;
 
   // Pagination info
   const fromNum = connector.offset + 1;
@@ -1498,8 +2039,8 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
     ? connector.transport.command || '(unknown command)'
     : connector.transport.url || '(unknown URL)';
 
-  // Server info (if available)
-  let serverInfoHtml = '';
+  // Server info for header (if available)
+  let headerServerHtml = '';
   if (connector.server) {
     const { name, version, protocolVersion, capabilities } = connector.server;
     const serverName = name || '(unknown)';
@@ -1511,15 +2052,16 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
     if (capabilities.tools) capBadges.push('<span class="badge cap-enabled">tools</span>');
     if (capabilities.resources) capBadges.push('<span class="badge cap-enabled">resources</span>');
     if (capabilities.prompts) capBadges.push('<span class="badge cap-enabled">prompts</span>');
-    const capsDisplay = capBadges.length > 0 ? capBadges.join(' ') : '<span style="color: var(--text-secondary)">(none)</span>';
+    const capsDisplay = capBadges.length > 0 ? capBadges.join(' ') : '';
 
-    serverInfoHtml = `
-        <dt>Server</dt>
-        <dd>${escapeHtml(serverName)} ${escapeHtml(serverVersion)}</dd>
-        <dt>Protocol</dt>
-        <dd>${escapeHtml(protocolDisplay)}</dd>
-        <dt>Capabilities</dt>
-        <dd class="capabilities">${capsDisplay}</dd>`;
+    headerServerHtml = `
+    <div class="header-server-row">
+      <div class="header-caps"><span class="header-label">Capabilities:</span> ${capsDisplay || '<span class="no-caps">(none)</span>'}</div>
+      <div class="header-server-info">
+        <span class="server-name"><span class="header-label">Server:</span> ${escapeHtml(serverName)} ${escapeHtml(serverVersion)}</span>
+        <span class="server-protocol"><span class="header-label">Protocol:</span> ${escapeHtml(protocolDisplay)}</span>
+      </div>
+    </div>`;
   }
 
   // Session items
@@ -1544,26 +2086,32 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
 </head>
 <body>
   <header>
-    <h1>Connector: <span class="badge">${escapeHtml(connector.connector_id)}</span></h1>
-    <p class="meta">Generated by ${escapeHtml(meta.generatedBy)} at ${formatTimestamp(meta.generatedAt)}${meta.redacted ? ' (redacted)' : ''} | ${paginationInfo}</p>
+    <div class="header-left">
+      <h1>Connector: <span class="badge">${escapeHtml(connector.connector_id)}</span></h1>
+      <p class="meta">Generated by ${escapeHtml(meta.generatedBy)} at ${formatTimestamp(meta.generatedAt)}${meta.redacted ? ' (redacted)' : ''} | ${paginationInfo}</p>
+    </div>
+    ${headerServerHtml}
+    ${renderKpiRow(analytics.kpis)}
   </header>
 
-  <div class="connector-info expanded">
-    <div class="connector-info-toggle">
-      <h2>Connector Info</h2>
-      <span class="toggle-icon">▼</span>
+  <div class="connector-top">
+    <div class="connector-info expanded">
+      <div class="connector-info-toggle">
+        <h2>Connector Info</h2>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div class="connector-info-content">
+        <dl>
+          <dt>Transport</dt>
+          <dd><span class="badge">${escapeHtml(connector.transport.type)}</span></dd>
+          <dt>${connector.transport.type === 'stdio' ? 'Command' : 'URL'}</dt>
+          <dd><code>${escapeHtml(transportDisplay)}</code></dd>
+          <dt>Enabled</dt>
+          <dd>${connector.enabled ? '<span class="badge status-OK">yes</span>' : '<span class="badge status-ERR">no</span>'}</dd>
+        </dl>
+      </div>
     </div>
-    <div class="connector-info-content">
-      <dl>
-        <dt>Transport</dt>
-        <dd><span class="badge">${escapeHtml(connector.transport.type)}</span></dd>
-        <dt>${connector.transport.type === 'stdio' ? 'Command' : 'URL'}</dt>
-        <dd><code>${escapeHtml(transportDisplay)}</code></dd>
-        <dt>Enabled</dt>
-        <dd>${connector.enabled ? '<span class="badge status-OK">yes</span>' : '<span class="badge status-ERR">no</span>'}</dd>
-${serverInfoHtml}
-      </dl>
-    </div>
+    ${renderAnalyticsPanel(analytics)}
   </div>
 
   <div class="main-container">
