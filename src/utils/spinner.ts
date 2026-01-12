@@ -90,31 +90,41 @@ export function createSpinner(options: SpinnerOptions): Ora | null {
 
   // SIGINT handling (graceful termination with exit code 130)
   // Exit code 130 = 128 + 2 (SIGINT signal number)
+  // Note: Using 'on' instead of 'once' to properly handle cleanup
+  let cleanupCalled = false;
   const cleanup = () => {
+    if (cleanupCalled) return;
+    cleanupCalled = true;
     spinner.stop();
     process.exit(130);
   };
 
-  process.once('SIGINT', cleanup);
+  process.on('SIGINT', cleanup);
   spinner.start();
 
   // Remove SIGINT handler when spinner stops
+  const removeCleanup = () => {
+    if (!cleanupCalled) {
+      process.removeListener('SIGINT', cleanup);
+    }
+  };
+
   const originalStop = spinner.stop.bind(spinner);
   const originalSucceed = spinner.succeed.bind(spinner);
   const originalFail = spinner.fail.bind(spinner);
 
   spinner.stop = () => {
-    process.removeListener('SIGINT', cleanup);
+    removeCleanup();
     return originalStop();
   };
 
   spinner.succeed = (text?: string) => {
-    process.removeListener('SIGINT', cleanup);
+    removeCleanup();
     return originalSucceed(text);
   };
 
   spinner.fail = (text?: string) => {
-    process.removeListener('SIGINT', cleanup);
+    removeCleanup();
     return originalFail(text);
   };
 

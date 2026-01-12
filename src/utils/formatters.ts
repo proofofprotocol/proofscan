@@ -210,7 +210,11 @@ export function formatTable(
 
   // Header
   lines.push(tableHeader(headers, widths));
-  lines.push(hr(widths.reduce((sum, w) => sum + w + 2, -2)));
+  
+  // Horizontal rule: sum of column widths + 2-space gaps between columns
+  // For 3 columns [10, 10, 10]: total = 10 + 10 + 10 + 2 + 2 = 34
+  const totalWidth = widths.reduce((sum, w) => sum + w, 0) + (widths.length - 1) * 2;
+  lines.push(hr(totalWidth));
 
   // Rows
   for (const row of rows) {

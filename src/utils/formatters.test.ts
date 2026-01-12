@@ -166,6 +166,12 @@ describe('formatters utility', () => {
       expect(formatBytes(1024 * 1024 * 1024)).toBe('1.00 GB');
       expect(formatBytes(2.5 * 1024 * 1024 * 1024)).toBe('2.50 GB');
     });
+
+    it('should handle negative numbers (edge case)', () => {
+      // Negative bytes don't make sense, but function should not crash
+      const result = formatBytes(-100);
+      expect(typeof result).toBe('string');
+    });
   });
 
   describe('formatDuration', () => {
@@ -187,6 +193,20 @@ describe('formatters utility', () => {
     it('should format hours', () => {
       expect(formatDuration(60 * 60 * 1000)).toBe('1h 0m');
       expect(formatDuration(90 * 60 * 1000)).toBe('1h 30m');
+    });
+
+    it('should handle very large durations (days/weeks)', () => {
+      const oneDay = 24 * 60 * 60 * 1000;
+      const oneWeek = 7 * oneDay;
+      
+      // Just verify it returns a string and doesn't crash
+      const dayResult = formatDuration(oneDay);
+      const weekResult = formatDuration(oneWeek);
+      
+      expect(typeof dayResult).toBe('string');
+      expect(typeof weekResult).toBe('string');
+      expect(dayResult).toContain('h');
+      expect(weekResult).toContain('h');
     });
   });
 
@@ -279,6 +299,26 @@ describe('formatters utility', () => {
       expect(table).toContain('Alice');
       expect(table).toContain('Bob');
       expect(table.split('\n').length).toBeGreaterThan(3); // Header, separator, 2 rows
+    });
+
+    it('formatTable should handle empty rows', () => {
+      const table = formatTable(['Col1', 'Col2'], []);
+      expect(table).toContain('Col1');
+      expect(table).toContain('Col2');
+      // Should have header and separator, no data rows
+      expect(table.split('\n').length).toBe(2);
+    });
+
+    it('formatTable should handle single column', () => {
+      const table = formatTable(['Name'], [['Alice'], ['Bob']]);
+      expect(table).toContain('Name');
+      expect(table).toContain('Alice');
+      expect(table).toContain('Bob');
+    });
+
+    it('calculateColumnWidths should handle empty rows', () => {
+      const widths = calculateColumnWidths(['A', 'B'], []);
+      expect(widths).toEqual([1, 1]); // Just header lengths
     });
   });
 });

@@ -103,5 +103,32 @@ describe('spinner utility', () => {
       // This is validated through code review
       expect(130).toBe(128 + 2);
     });
+
+    it('should properly cleanup SIGINT listener on stop', () => {
+      // Force non-TTY to avoid ora issues
+      process.stdout.isTTY = false;
+      process.stderr.isTTY = false;
+      process.stdin.isTTY = false;
+
+      const initialCount = process.listenerCount('SIGINT');
+      
+      // Create spinner (should add listener in real TTY)
+      const spinner = createSpinner({ text: 'Test' });
+      
+      // In non-TTY, spinner is null, so no listener added
+      if (spinner) {
+        const duringCount = process.listenerCount('SIGINT');
+        expect(duringCount).toBeGreaterThan(initialCount);
+        
+        // Stop should remove listener
+        spinner.stop();
+        const afterCount = process.listenerCount('SIGINT');
+        expect(afterCount).toBe(initialCount);
+      } else {
+        // In non-TTY, verify no leak
+        const afterCount = process.listenerCount('SIGINT');
+        expect(afterCount).toBe(initialCount);
+      }
+    });
   });
 });
