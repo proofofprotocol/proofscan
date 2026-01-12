@@ -292,6 +292,10 @@ export const en = {
     unsafeChars: 'Command contains potentially unsafe characters: {chars}',
     reviewClipboard: 'Please review the clipboard content before adding.',
     unsafeArgsChars: 'Arguments contain potentially unsafe characters: {chars}',
+    invalidEmbedMaxBytes: 'Invalid embed-max-bytes value: {value}. Must be a positive number.',
+    createDirFailed: 'Failed to create directory {path}: {error}',
+    writeFileFailed: 'Failed to write file {path}: {error}',
+    openBrowserFailed: 'Failed to open browser. You can manually open: {path}',
   },
 
   // Hints and guidance

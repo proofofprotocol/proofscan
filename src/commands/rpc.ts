@@ -36,22 +36,14 @@ import {
   getSpillFilename,
   generateRpcHtml,
   openInBrowser,
+  getPackageVersion,
+  validateOutputPath,
+  validateEmbedMaxBytes,
+  ensureOutputDir,
+  safeWriteFile,
 } from '../html/index.js';
 import type { HtmlRpcReportV1 } from '../html/index.js';
 import type { RpcCall, Event } from '../db/types.js';
-
-// Get package version for HTML reports
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-let packageVersion = '0.0.0';
-try {
-  const pkgPath = path.resolve(__dirname, '../../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  packageVersion = pkg.version || '0.0.0';
-} catch {
-  // Fallback version
-}
 
 interface RpcListItem {
   rpc_id: string;
@@ -320,10 +312,9 @@ async function exportRpcHtml(
 ): Promise<void> {
   console.log(t('html.exporting'));
 
-  // Create output directory if needed
-  if (!fs.existsSync(options.outDir)) {
-    fs.mkdirSync(options.outDir, { recursive: true });
-  }
+  // Validate and create output directory
+  const validatedOutDir = validateOutputPath(options.outDir);
+  ensureOutputDir(validatedOutDir);
 
   // Apply redaction if requested
   let requestJson = detail.request_json;
@@ -355,14 +346,14 @@ async function exportRpcHtml(
   if (options.spill) {
     if (requestSize > options.embedMaxBytes && requestRaw) {
       requestSpillFile = getSpillFilename(detail.session_id, detail.rpc_id, 'req');
-      const spillPath = path.join(options.outDir, requestSpillFile);
-      fs.writeFileSync(spillPath, requestRaw, 'utf8');
+      const spillPath = path.join(validatedOutDir, requestSpillFile);
+      safeWriteFile(spillPath, requestRaw);
       console.log(t('html.spillFileWritten', { file: requestSpillFile }));
     }
     if (responseSize > options.embedMaxBytes && responseRaw) {
       responseSpillFile = getSpillFilename(detail.session_id, detail.rpc_id, 'res');
-      const spillPath = path.join(options.outDir, responseSpillFile);
-      fs.writeFileSync(spillPath, responseRaw, 'utf8');
+      const spillPath = path.join(validatedOutDir, responseSpillFile);
+      safeWriteFile(spillPath, responseRaw);
       console.log(t('html.spillFileWritten', { file: responseSpillFile }));
     }
   }
@@ -386,7 +377,7 @@ async function exportRpcHtml(
     meta: {
       schemaVersion: 1,
       generatedAt: new Date().toISOString(),
-      generatedBy: `proofscan v${packageVersion}`,
+      generatedBy: `proofscan v${getPackageVersion()}`,
       redacted: options.redact,
     },
     rpc: {
@@ -407,8 +398,8 @@ async function exportRpcHtml(
   // Generate and write HTML
   const html = generateRpcHtml(report);
   const filename = getRpcHtmlFilename(detail.rpc_id);
-  const outputPath = path.join(options.outDir, filename);
-  fs.writeFileSync(outputPath, html, 'utf8');
+  const outputPath = path.join(validatedOutDir, filename);
+  safeWriteFile(outputPath, html);
 
   console.log(t('html.exported', { path: outputPath }));
 
@@ -417,8 +408,8 @@ async function exportRpcHtml(
     console.log(t('html.opening'));
     try {
       await openInBrowser(outputPath);
-    } catch (error) {
-      console.error('Failed to open browser:', error);
+    } catch {
+      console.error(t('errors.openBrowserFailed', { path: outputPath }));
     }
   }
 }
@@ -566,11 +557,12 @@ export function createRpcCommand(getConfigPath: () => string): Command {
 
         // HTML export mode
         if (options.html) {
+          const embedMaxBytes = validateEmbedMaxBytes(options.embedMaxBytes);
           await exportRpcHtml(detail, {
             outDir: options.out,
             open: options.open,
             redact: options.redact,
-            embedMaxBytes: parseInt(options.embedMaxBytes, 10),
+            embedMaxBytes,
             spill: options.spill,
           });
           return;

@@ -292,6 +292,10 @@ export const ja: LocaleMessages = {
     unsafeChars: 'コマンドに安全でない文字が含まれています: {chars}',
     reviewClipboard: 'クリップボードの内容を確認してから追加してください。',
     unsafeArgsChars: '引数に安全でない文字が含まれています: {chars}',
+    invalidEmbedMaxBytes: '無効な embed-max-bytes 値: {value}。正の数を指定してください。',
+    createDirFailed: 'ディレクトリの作成に失敗しました {path}: {error}',
+    writeFileFailed: 'ファイルの書き込みに失敗しました {path}: {error}',
+    openBrowserFailed: 'ブラウザを開けませんでした。手動で開いてください: {path}',
   },
 
   // Hints and guidance

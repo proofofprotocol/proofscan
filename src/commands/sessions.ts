@@ -20,22 +20,14 @@ import {
   getSpillFilename,
   generateSessionHtml,
   openInBrowser,
+  getPackageVersion,
+  validateOutputPath,
+  validateEmbedMaxBytes,
+  ensureOutputDir,
+  safeWriteFile,
 } from '../html/index.js';
 import type { HtmlSessionReportV1, SessionRpcDetail } from '../html/index.js';
 import type { SessionWithStats, RpcCall, Event } from '../db/types.js';
-
-// Get package version for HTML reports
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-let packageVersion = '0.0.0';
-try {
-  const pkgPath = path.resolve(__dirname, '../../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-  packageVersion = pkg.version || '0.0.0';
-} catch {
-  // Fallback version
-}
 
 function formatDate(iso: string | null): string {
   if (!iso) return '-';
@@ -115,10 +107,9 @@ async function exportSessionHtml(
 ): Promise<void> {
   console.log(t('html.exporting'));
 
-  // Create output directory if needed
-  if (!fs.existsSync(options.outDir)) {
-    fs.mkdirSync(options.outDir, { recursive: true });
-  }
+  // Validate and create output directory
+  const validatedOutDir = validateOutputPath(options.outDir);
+  ensureOutputDir(validatedOutDir);
 
   // Build RPC details with payloads
   const rpcs: SessionRpcDetail[] = [];
@@ -154,13 +145,13 @@ async function exportSessionHtml(
     if (options.spill) {
       if (requestSize > options.embedMaxBytes && requestRaw) {
         requestSpillFile = getSpillFilename(session.session_id, rpc.rpc_id, 'req');
-        const spillPath = path.join(options.outDir, requestSpillFile);
-        fs.writeFileSync(spillPath, requestRaw, 'utf8');
+        const spillPath = path.join(validatedOutDir, requestSpillFile);
+        safeWriteFile(spillPath, requestRaw);
       }
       if (responseSize > options.embedMaxBytes && responseRaw) {
         responseSpillFile = getSpillFilename(session.session_id, rpc.rpc_id, 'res');
-        const spillPath = path.join(options.outDir, responseSpillFile);
-        fs.writeFileSync(spillPath, responseRaw, 'utf8');
+        const spillPath = path.join(validatedOutDir, responseSpillFile);
+        safeWriteFile(spillPath, responseRaw);
       }
     }
 
@@ -214,7 +205,7 @@ async function exportSessionHtml(
     meta: {
       schemaVersion: 1,
       generatedAt: new Date().toISOString(),
-      generatedBy: `proofscan v${packageVersion}`,
+      generatedBy: `proofscan v${getPackageVersion()}`,
       redacted: options.redact,
     },
     session: {
@@ -233,8 +224,8 @@ async function exportSessionHtml(
   // Generate and write HTML
   const html = generateSessionHtml(report);
   const filename = getSessionHtmlFilename(session.session_id);
-  const outputPath = path.join(options.outDir, filename);
-  fs.writeFileSync(outputPath, html, 'utf8');
+  const outputPath = path.join(validatedOutDir, filename);
+  safeWriteFile(outputPath, html);
 
   console.log(t('html.exported', { path: outputPath }));
 
@@ -249,8 +240,8 @@ async function exportSessionHtml(
     console.log(t('html.opening'));
     try {
       await openInBrowser(outputPath);
-    } catch (error) {
-      console.error('Failed to open browser:', error);
+    } catch {
+      console.error(t('errors.openBrowserFailed', { path: outputPath }));
     }
   }
 }
@@ -336,11 +327,12 @@ export function createSessionsCommand(getConfigPath: () => string): Command {
 
         // HTML export mode
         if (options.html) {
+          const embedMaxBytes = validateEmbedMaxBytes(options.embedMaxBytes);
           await exportSessionHtml(session, rpcCalls, events.length, manager.getConfigDir(), {
             outDir: options.out,
             open: options.open,
             redact: options.redact,
-            embedMaxBytes: parseInt(options.embedMaxBytes, 10),
+            embedMaxBytes,
             spill: options.spill,
           });
           return;

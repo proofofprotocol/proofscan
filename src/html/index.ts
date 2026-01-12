@@ -40,3 +40,12 @@ export {
 
 // Browser
 export { openInBrowser } from './browser.js';
+
+// Utilities
+export {
+  getPackageVersion,
+  validateOutputPath,
+  validateEmbedMaxBytes,
+  ensureOutputDir,
+  safeWriteFile,
+} from './utils.js';
