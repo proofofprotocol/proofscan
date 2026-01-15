@@ -36,6 +36,17 @@ export type {
   HtmlConnectorInfo,
   HtmlConnectorSessionRow,
   HtmlConnectorReportV1,
+  // Connector Analytics types (Phase 5.2)
+  HtmlConnectorKpis,
+  HtmlHeatmapCell,
+  HtmlHeatmapData,
+  HtmlLatencyBucket,
+  HtmlLatencyHistogram,
+  HtmlTopTool,
+  HtmlTopToolsData,
+  HtmlMethodSlice,
+  HtmlMethodDistribution,
+  HtmlConnectorAnalyticsV1,
 } from './types.js';
 
 // Templates
@@ -58,3 +69,6 @@ export {
   ensureOutputDir,
   safeWriteFile,
 } from './utils.js';
+
+// Analytics (Phase 5.2)
+export { computeConnectorAnalytics, LATENCY_BUCKETS, P95_MIN_SAMPLES } from './analytics.js';

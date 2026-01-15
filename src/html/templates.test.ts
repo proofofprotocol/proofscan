@@ -524,6 +524,57 @@ describe('generateConnectorHtml', () => {
         },
       },
     },
+    analytics: {
+      kpis: {
+        rpc_total: 5,
+        rpc_ok: 4,
+        rpc_err: 1,
+        rpc_pending: 0,
+        avg_latency_ms: 16,
+        p95_latency_ms: null,
+        max_latency_ms: 25,
+        total_request_bytes: 500,
+        total_response_bytes: 1000,
+        sessions_total: 10,
+        sessions_displayed: 2,
+        top_tool_name: 'read_file',
+        top_tool_calls: 3,
+      },
+      heatmap: {
+        start_date: '2025-01-12',
+        end_date: '2025-01-12',
+        cells: [{ date: '2025-01-12', count: 5 }],
+        max_count: 5,
+      },
+      latency: {
+        buckets: [
+          { label: '0-10', from_ms: 0, to_ms: 10, count: 2 },
+          { label: '10-25', from_ms: 10, to_ms: 25, count: 2 },
+          { label: '25-50', from_ms: 25, to_ms: 50, count: 1 },
+          { label: '50-100', from_ms: 50, to_ms: 100, count: 0 },
+          { label: '100-250', from_ms: 100, to_ms: 250, count: 0 },
+          { label: '250-500', from_ms: 250, to_ms: 500, count: 0 },
+          { label: '500-1000', from_ms: 500, to_ms: 1000, count: 0 },
+          { label: '1000+', from_ms: 1000, to_ms: null, count: 0 },
+        ],
+        sample_size: 5,
+        excluded_count: 0,
+      },
+      top_tools: {
+        items: [
+          { name: 'read_file', count: 3, pct: 60 },
+          { name: 'write_file', count: 2, pct: 40 },
+        ],
+        total_calls: 5,
+      },
+      method_distribution: {
+        slices: [
+          { method: 'tools/call', count: 3, pct: 60 },
+          { method: 'tools/list', count: 2, pct: 40 },
+        ],
+        total_rpcs: 5,
+      },
+    },
   };
 
   it('should generate valid HTML structure', () => {

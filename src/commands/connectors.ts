@@ -26,6 +26,7 @@ import {
   validateEmbedMaxBytes,
   ensureOutputDir,
   safeWriteFile,
+  computeConnectorAnalytics,
 } from '../html/index.js';
 import type {
   HtmlConnectorReportV1,
@@ -360,7 +361,14 @@ async function exportConnectorHtml(
     console.log(t('html.redactedNote'));
   }
 
-  // 5. Build connector report
+  // 5. Compute analytics from session reports
+  const analytics = computeConnectorAnalytics({
+    sessionReports,
+    sessionsTotal: totalSessionCount,
+    sessionsDisplayed: displayedSessions.length,
+  });
+
+  // 6. Build connector report
   const report: HtmlConnectorReportV1 = {
     meta: {
       schemaVersion: 1,
@@ -388,9 +396,10 @@ async function exportConnectorHtml(
       total_latency_ms: sessionReports[s.session_id]?.session.total_latency_ms ?? null,
     })),
     session_reports: sessionReports,
+    analytics,
   };
 
-  // 6. Generate and write HTML
+  // 7. Generate and write HTML
   const html = generateConnectorHtml(report);
   const filename = getConnectorHtmlFilename(connectorId);
   const outputPath = path.join(validatedOutDir, filename);

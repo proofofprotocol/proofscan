@@ -303,6 +303,8 @@ export interface HtmlConnectorReportV1 {
   sessions: HtmlConnectorSessionRow[];
   /** セッション詳細（右ペイン用）- session_id をキーとするマップ */
   session_reports: Record<string, HtmlSessionReportV1>;
+  /** Analytics data (Phase 5.2) */
+  analytics: HtmlConnectorAnalyticsV1;
 }
 
 /**
@@ -312,4 +314,109 @@ export interface HtmlConnectorReportV1 {
 export function getConnectorHtmlFilename(connectorId: string): string {
   const sanitized = connectorId.replace(/[^a-zA-Z0-9-_]/g, '-');
   return `connector_${sanitized}.html`;
+}
+
+// ============================================================================
+// Connector HTML Analytics Types (Phase 5.2)
+// ============================================================================
+
+/**
+ * Connector-level KPIs
+ */
+export interface HtmlConnectorKpis {
+  rpc_total: number;
+  rpc_ok: number;
+  rpc_err: number;
+  rpc_pending: number;
+  avg_latency_ms: number | null;    // null if no RPCs with latency
+  p95_latency_ms: number | null;    // null if < 20 samples (nearest-rank method)
+  max_latency_ms: number | null;
+  total_request_bytes: number;
+  total_response_bytes: number;
+  sessions_total: number;
+  sessions_displayed: number;
+  top_tool_name: string | null;
+  top_tool_calls: number | null;
+}
+
+/**
+ * Heatmap cell (GitHub contributions style)
+ */
+export interface HtmlHeatmapCell {
+  date: string;    // YYYY-MM-DD (UTC)
+  count: number;   // RPC count
+}
+
+/**
+ * Heatmap data with intensity calculation
+ */
+export interface HtmlHeatmapData {
+  start_date: string;
+  end_date: string;
+  cells: HtmlHeatmapCell[];   // Full range including 0-count days
+  max_count: number;          // For intensity scaling
+}
+
+/**
+ * Latency histogram bucket
+ */
+export interface HtmlLatencyBucket {
+  label: string;      // e.g., "0-10", "1000+"
+  from_ms: number;
+  to_ms: number | null;  // null = +∞ (for "1000+" bucket)
+  count: number;
+}
+
+/**
+ * Latency histogram data
+ */
+export interface HtmlLatencyHistogram {
+  buckets: HtmlLatencyBucket[];
+  sample_size: number;      // RPCs with latency_ms
+  excluded_count: number;   // RPCs without latency_ms
+}
+
+/**
+ * Top tool entry
+ */
+export interface HtmlTopTool {
+  name: string;
+  count: number;
+  pct: number;    // 0-100
+}
+
+/**
+ * Top tools data
+ */
+export interface HtmlTopToolsData {
+  items: HtmlTopTool[];   // Top 5
+  total_calls: number;    // Total tools/call count
+}
+
+/**
+ * Method distribution slice (for donut chart)
+ */
+export interface HtmlMethodSlice {
+  method: string;
+  count: number;
+  pct: number;    // 0-100
+}
+
+/**
+ * Method distribution data
+ */
+export interface HtmlMethodDistribution {
+  slices: HtmlMethodSlice[];   // Top 5 methods + "Others"
+  total_rpcs: number;
+}
+
+/**
+ * Complete analytics data
+ */
+export interface HtmlConnectorAnalyticsV1 {
+  kpis: HtmlConnectorKpis;
+  heatmap: HtmlHeatmapData;
+  latency: HtmlLatencyHistogram;
+  top_tools: HtmlTopToolsData;
+  method_distribution: HtmlMethodDistribution;
 }
