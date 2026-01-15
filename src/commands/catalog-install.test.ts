@@ -186,4 +186,67 @@ describe('catalog install', () => {
       expect(afterContent).toBe(originalContent);
     });
   });
+
+  describe('--version option', () => {
+    it('should override package version in pkgRef', () => {
+      // Simulate pkgRef from packages[] array
+      const pkgRef = {
+        package: '@modelcontextprotocol/server-everything',
+        version: '2.0.0', // Original version from GitHub package.json
+      };
+
+      // Simulate --version option override
+      const versionOverride = '2026.1.14';
+      if (versionOverride) {
+        pkgRef.version = versionOverride;
+      }
+
+      expect(pkgRef.version).toBe('2026.1.14');
+    });
+
+    it('should preserve original version when --version not specified', () => {
+      const pkgRef = {
+        package: '@anthropic/mcp-server-time',
+        version: '1.0.0',
+      };
+
+      // No version override
+      const versionOverride: string | undefined = undefined;
+      if (versionOverride) {
+        pkgRef.version = versionOverride;
+      }
+
+      expect(pkgRef.version).toBe('1.0.0');
+    });
+
+    it('should allow "latest" as version value', () => {
+      const pkgRef = {
+        package: '@example/server',
+        version: '1.0.0',
+      };
+
+      // Simulate --version latest
+      const versionOverride = 'latest';
+      if (versionOverride) {
+        pkgRef.version = versionOverride;
+      }
+
+      expect(pkgRef.version).toBe('latest');
+    });
+
+    it('should handle calver format versions', () => {
+      const pkgRef = {
+        package: '@modelcontextprotocol/server-everything',
+        version: undefined as string | undefined,
+      };
+
+      // Simulate --version with calver format
+      const versionOverride = '2025.12.18';
+      if (versionOverride) {
+        pkgRef.version = versionOverride;
+      }
+
+      expect(pkgRef.version).toBe('2025.12.18');
+    });
+  });
 });

@@ -1203,6 +1203,7 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
     .option('--dry-run', 'Show what would be added without modifying config')
     .option('--name <id>', 'Override connector ID')
     .option('--runner <name>', 'Package runner to use for stdio servers (npx, uvx)')
+    .option('--version <version>', 'Package version to install (default: latest from npm/pypi)')
     .option('--allow-untrusted', 'Allow installation of untrusted servers')
     .option('--spinner', 'Show spinner')
     .option('--no-spinner', 'Disable spinner')
@@ -1211,6 +1212,7 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
       dryRun?: boolean;
       name?: string;
       runner?: string;
+      version?: string;
       allowUntrusted?: boolean;
       spinner?: boolean;
       noSpinner?: boolean;
@@ -1368,6 +1370,11 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
               console.error(`  pfscan connectors add ${deriveConnectorId(server.name)} --stdio "<command>"`);
             }
             process.exit(1);
+          }
+
+          // Override version if --version specified
+          if (options.version) {
+            pkgRef.version = options.version;
           }
 
           // Determine runner to use

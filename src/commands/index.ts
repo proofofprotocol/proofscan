@@ -47,3 +47,6 @@ export * from './runners.js';
 
 // Phase 5.2: Plans (validation scenarios)
 export * from './plans.js';
+
+// Web Monitor
+export * from './monitor.js';

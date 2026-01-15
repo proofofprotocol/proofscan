@@ -56,6 +56,8 @@ export {
   generateRpcHtml,
   generateSessionHtml,
   generateConnectorHtml,
+  renderHeatmap,
+  renderMethodDistribution,
 } from './templates.js';
 
 // Browser
