@@ -1374,8 +1374,10 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
 
           // Override version if --version specified
           if (options.version) {
-            // Validate version format: semver, calver, or "latest"
-            const versionPattern = /^(\d+\.)?(\d+\.)?(\*|\d+)$|^latest$|^\d{4}\.\d{1,2}\.\d{1,2}$/;
+            // Validate version format: semver (x.y.z), calver (YYYY.M.D), or "latest"
+            // semver: 1.0.0, 1.2.3, 0.1.0 (requires all three parts)
+            // calver: 2026.1.14, 2025.12.1
+            const versionPattern = /^(\d+\.\d+\.\d+)$|^latest$|^\d{4}\.\d{1,2}\.\d{1,2}$/;
             if (!versionPattern.test(options.version)) {
               if (opts.json) {
                 output({

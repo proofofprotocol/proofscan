@@ -3,7 +3,7 @@
  */
 
 import { Hono } from 'hono';
-import { join } from 'path';
+import { join, resolve, relative } from 'path';
 import { readFile, stat } from 'fs/promises';
 import type { MonitorEnv } from '../server.js';
 import { renderPoplDetailPage, renderPopl404Page, renderArtifactPage } from '../templates/popl.js';
@@ -51,7 +51,21 @@ poplRoutes.get('/:proof_id/artifacts/:name', async (c) => {
 
   // Try to read the artifact file
   const poplDir = join(process.cwd(), '.popl', 'popl_entries', proofId);
-  const artifactPath = join(poplDir, artifact.path);
+  const artifactPath = resolve(poplDir, artifact.path);
+
+  // Security: Prevent path traversal attacks
+  const relativePath = relative(poplDir, artifactPath);
+  if (relativePath.startsWith('..') || relativePath.startsWith('/')) {
+    return c.html(
+      renderArtifactPage({
+        proofId,
+        artifactName,
+        artifact,
+        error: 'Invalid artifact path: access denied',
+      }),
+      403
+    );
+  }
 
   try {
     // Check if file exists and get stats
