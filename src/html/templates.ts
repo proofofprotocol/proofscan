@@ -972,6 +972,13 @@ function getConnectorReportStyles(): string {
       border-color: var(--accent-blue);
       background: rgba(0, 212, 255, 0.15);
     }
+    .session-item.highlight {
+      animation: highlightPulse 2s ease-out;
+    }
+    @keyframes highlightPulse {
+      0% { box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.6); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0); }
+    }
     .session-item-header {
       display: flex;
       align-items: center;
@@ -1595,8 +1602,38 @@ function getConnectorReportScript(): string {
       }
     });
 
-    // Select first session by default
-    if (sessions.length > 0) {
+    // Check for session parameter in URL
+    function getSessionFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('session');
+    }
+
+    // Scroll session item into view
+    function scrollSessionIntoView(sessionId) {
+      const sessionItem = document.querySelector('.session-item[data-session-id="' + sessionId + '"]');
+      if (sessionItem) {
+        sessionItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        // Add highlight effect
+        sessionItem.classList.add('highlight');
+        setTimeout(() => sessionItem.classList.remove('highlight'), 2000);
+      }
+    }
+
+    // Select session from URL or first session by default
+    const urlSession = getSessionFromUrl();
+    if (urlSession) {
+      // Try to find matching session (full or partial match)
+      const matchingSession = sessions.find(s =>
+        s.session_id === urlSession || s.session_id.startsWith(urlSession)
+      );
+      if (matchingSession) {
+        showSession(matchingSession.session_id);
+        // Scroll into view after a short delay to ensure DOM is ready
+        setTimeout(() => scrollSessionIntoView(matchingSession.session_id), 100);
+      } else if (sessions.length > 0) {
+        showSession(sessions[0].session_id);
+      }
+    } else if (sessions.length > 0) {
       showSession(sessions[0].session_id);
     }
   `;
@@ -1674,7 +1711,7 @@ function getHeatmapLevel(count: number, maxCount: number): number {
 /**
  * Render activity heatmap (GitHub contributions style, SVG)
  */
-function renderHeatmap(heatmap: HtmlHeatmapData): string {
+export function renderHeatmap(heatmap: HtmlHeatmapData): string {
   const cellSize = 10;
   const cellGap = 2;
   const cellTotal = cellSize + cellGap;
@@ -1815,7 +1852,7 @@ const DONUT_COLORS = [
 /**
  * Render method distribution donut chart (SVG)
  */
-function renderMethodDistribution(methodDist: HtmlMethodDistribution): string {
+export function renderMethodDistribution(methodDist: HtmlMethodDistribution): string {
   if (methodDist.slices.length === 0) {
     return `
       <div class="method-distribution">

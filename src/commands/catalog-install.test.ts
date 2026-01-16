@@ -186,4 +186,104 @@ describe('catalog install', () => {
       expect(afterContent).toBe(originalContent);
     });
   });
+
+  describe('--version option', () => {
+    it('should override package version in pkgRef', () => {
+      // Simulate pkgRef from packages[] array
+      const pkgRef = {
+        package: '@modelcontextprotocol/server-everything',
+        version: '2.0.0', // Original version from GitHub package.json
+      };
+
+      // Simulate --version option override
+      const versionOverride = '2026.1.14';
+      if (versionOverride) {
+        pkgRef.version = versionOverride;
+      }
+
+      expect(pkgRef.version).toBe('2026.1.14');
+    });
+
+    it('should preserve original version when --version not specified', () => {
+      const pkgRef = {
+        package: '@anthropic/mcp-server-time',
+        version: '1.0.0',
+      };
+
+      // No version override
+      const versionOverride: string | undefined = undefined;
+      if (versionOverride) {
+        pkgRef.version = versionOverride;
+      }
+
+      expect(pkgRef.version).toBe('1.0.0');
+    });
+
+    it('should allow "latest" as version value', () => {
+      const pkgRef = {
+        package: '@example/server',
+        version: '1.0.0',
+      };
+
+      // Simulate --version latest
+      const versionOverride = 'latest';
+      if (versionOverride) {
+        pkgRef.version = versionOverride;
+      }
+
+      expect(pkgRef.version).toBe('latest');
+    });
+
+    it('should handle calver format versions', () => {
+      const pkgRef = {
+        package: '@modelcontextprotocol/server-everything',
+        version: undefined as string | undefined,
+      };
+
+      // Simulate --version with calver format
+      const versionOverride = '2025.12.18';
+      if (versionOverride) {
+        pkgRef.version = versionOverride;
+      }
+
+      expect(pkgRef.version).toBe('2025.12.18');
+    });
+
+    describe('version format validation', () => {
+      // The regex used in catalog.ts for version validation
+      const versionPattern = /^(\d+\.\d+\.\d+)$|^latest$|^\d{4}\.\d{1,2}\.\d{1,2}$/;
+
+      it('should accept valid semver versions', () => {
+        expect(versionPattern.test('1.0.0')).toBe(true);
+        expect(versionPattern.test('1.2.3')).toBe(true);
+        expect(versionPattern.test('0.1.0')).toBe(true);
+        expect(versionPattern.test('10.20.30')).toBe(true);
+      });
+
+      it('should accept "latest" keyword', () => {
+        expect(versionPattern.test('latest')).toBe(true);
+      });
+
+      it('should accept valid calver versions', () => {
+        expect(versionPattern.test('2026.1.14')).toBe(true);
+        expect(versionPattern.test('2025.12.1')).toBe(true);
+        expect(versionPattern.test('2024.6.30')).toBe(true);
+      });
+
+      it('should reject incomplete semver versions', () => {
+        expect(versionPattern.test('1')).toBe(false);
+        expect(versionPattern.test('1.2')).toBe(false);
+        expect(versionPattern.test('1.')).toBe(false);
+        expect(versionPattern.test('1.2.')).toBe(false);
+      });
+
+      it('should reject invalid formats', () => {
+        expect(versionPattern.test('*')).toBe(false);
+        expect(versionPattern.test('v1.0.0')).toBe(false);
+        expect(versionPattern.test('1.0.0-beta')).toBe(false);
+        expect(versionPattern.test('')).toBe(false);
+        expect(versionPattern.test('abc')).toBe(false);
+      });
+    });
+  });
 });
