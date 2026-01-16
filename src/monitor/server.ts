@@ -43,7 +43,7 @@ export function createMonitorApp(options: MonitorServerOptions): Hono<MonitorEnv
 export function startMonitorServer(
   options: MonitorServerOptions
 ): Promise<Server> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const app = createMonitorApp(options);
 
     const server = serve(
@@ -60,5 +60,16 @@ export function startMonitorServer(
         resolve(server as unknown as Server);
       }
     );
+
+    // Handle server errors (e.g., EADDRINUSE)
+    (server as unknown as Server).on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Error: Port ${options.port} is already in use`);
+        console.error(`Try a different port with: pfs monitor start --port <port>`);
+        reject(err);
+      } else {
+        reject(err);
+      }
+    });
   });
 }

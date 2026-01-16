@@ -40,14 +40,17 @@ export function createMonitorCommand(getConfigPath: () => string): Command {
           await openInBrowser(url);
         }
 
-        // Keep process alive
-        process.on('SIGINT', () => {
-          console.log('\nShutting down monitor...');
-          process.exit(0);
+        // Keep server running until interrupted
+        await new Promise<void>((resolve) => {
+          process.on('SIGINT', () => {
+            console.log('\nShutting down monitor...');
+            resolve();
+          });
+          process.on('SIGTERM', () => {
+            console.log('\nShutting down monitor...');
+            resolve();
+          });
         });
-
-        // Prevent exit
-        await new Promise(() => {});
       } catch (error) {
         console.error('Failed to start monitor:', error);
         process.exit(1);
