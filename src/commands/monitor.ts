@@ -29,7 +29,7 @@ export function createMonitorCommand(getConfigPath: () => string): Command {
       console.log(`  Config: ${configPath}`);
 
       try {
-        await startMonitorServer({
+        const server = await startMonitorServer({
           configPath,
           port,
           host: options.host,
@@ -42,14 +42,16 @@ export function createMonitorCommand(getConfigPath: () => string): Command {
 
         // Keep server running until interrupted
         await new Promise<void>((resolve) => {
-          process.on('SIGINT', () => {
+          const shutdown = () => {
             console.log('\nShutting down monitor...');
-            resolve();
-          });
-          process.on('SIGTERM', () => {
-            console.log('\nShutting down monitor...');
-            resolve();
-          });
+            server.close(() => {
+              console.log('Monitor stopped.');
+              resolve();
+            });
+          };
+
+          process.on('SIGINT', shutdown);
+          process.on('SIGTERM', shutdown);
         });
       } catch (error) {
         console.error('Failed to start monitor:', error);

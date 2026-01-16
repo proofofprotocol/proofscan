@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - JSON API endpoints (`/api/connectors`, `/api/popl`, etc.)
   - Offline-first, read-only design with no CDN dependencies
 
+- **RPC Inspector**: Wireshark-style 2-column JSON viewer for RPC analysis
+  - Summary view (left) with method-aware parsing (tools/list, etc.)
+  - Raw JSON view (right) with syntax highlighting and path tracking
+  - Click-to-navigate: Summary items scroll to corresponding JSON path
+  - Schema property styling: required (bold + *), default (green =), deprecated (strikethrough + badge)
+  - Collapsible tools list with expand/collapse all controls (for 5+ tools)
+  - RFC 6901 JSON Pointer paths for precise navigation
+
 - **Catalog Install**: `--version` option to specify package version
   - Override default version from catalog source
   - Support for CalVer format (e.g., `2026.1.14`)

@@ -74,3 +74,22 @@ export {
 
 // Analytics (Phase 5.2)
 export { computeConnectorAnalytics, LATENCY_BUCKETS, P95_MIN_SAMPLES } from './analytics.js';
+
+// RPC Inspector (Phase 11.5)
+export {
+  escapeJsonPointer,
+  renderJsonWithPaths,
+  renderMethodSummary,
+  renderSummaryRowsHtml,
+  registerMethodHandler,
+  getRpcInspectorStyles,
+  getRpcInspectorScript,
+} from './rpc-inspector.js';
+
+export type {
+  JsonPointerTarget,
+  JsonPointer,
+  SummaryRow,
+  MethodSummary,
+  MethodSummaryHandler,
+} from './types.js';

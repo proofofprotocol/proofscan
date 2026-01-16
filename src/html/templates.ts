@@ -22,6 +22,13 @@ import type {
   SessionRpcDetail,
 } from './types.js';
 import { getStatusSymbol, SHORT_ID_LENGTH } from './types.js';
+import {
+  getRpcInspectorStyles,
+  getRpcInspectorScript,
+  renderJsonWithPaths,
+  renderMethodSummary,
+  renderSummaryRowsHtml,
+} from './rpc-inspector.js';
 
 /**
  * Escape HTML special characters to prevent XSS
@@ -380,6 +387,8 @@ function getSessionReportStyles(): string {
     .resize-handle:hover {
       background: var(--accent-blue);
     }
+    /* RPC Inspector styles */
+    ${getRpcInspectorStyles()}
   `;
 }
 
@@ -466,7 +475,7 @@ function getSessionReportScript(): string {
              '<pre id="' + elementId + '"><code>' + content + '</code></pre>';
     }
 
-    // Show RPC detail in right pane
+    // Show RPC detail in right pane (2-column Wireshark-style layout)
     function showRpcDetail(idx) {
       if (idx < 0 || idx >= rpcs.length) return;
 
@@ -483,26 +492,49 @@ function getSessionReportScript(): string {
       const statusSymbol = rpc.status === 'OK' ? '✓' : rpc.status === 'ERR' ? '✗' : '?';
       const latency = rpc.latency_ms !== null ? rpc.latency_ms + 'ms' : '(pending)';
 
+      // Get pre-rendered summary and raw JSON from data attributes
+      const summaryHtml = rpc._summaryHtml || '<div class="summary-row summary-header">No summary available</div>';
+      const requestRawHtml = rpc._requestRawHtml || '<span class="json-null">(no data)</span>';
+      const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
+
+      // Determine default target based on method
+      const defaultTarget = (rpc.method === 'tools/list' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
+
       rightPane.innerHTML =
         '<div class="detail-section">' +
         '  <h2>RPC Info</h2>' +
-        '  <dl>' +
-        '    <dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd>' +
-        '    <dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd>' +
-        '    <dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd>' +
-        '    <dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd>' +
-        '    <dt>Request Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd>' +
-        '    <dt>Response Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd>' +
-        '  </dl>' +
+        '  <div class="rpc-info-grid">' +
+        '    <div class="rpc-info-item"><dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd></div>' +
+        '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
+        '    <div class="rpc-info-item"><dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd></div>' +
+        '    <div class="rpc-info-item"><dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd></div>' +
+        '    <div class="rpc-info-item"><dt>Req Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Res Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd></div>' +
+        '  </div>' +
         '</div>' +
         '<div class="detail-section">' +
-        '  <h2>Request</h2>' +
-        '  ' + renderPayload('', rpc.request, 'req-' + idx).replace('<h3> ', '').replace('</h3>', '') +
-        '</div>' +
-        '<div class="detail-section">' +
-        '  <h2>Response</h2>' +
-        '  ' + renderPayload('', rpc.response, 'res-' + idx).replace('<h3> ', '').replace('</h3>', '') +
+        '  <div class="rpc-inspector">' +
+        '    <div class="rpc-inspector-summary">' +
+        '      <h3>Summary</h3>' +
+        summaryHtml +
+        '    </div>' +
+        '    <div class="rpc-inspector-raw">' +
+        '      <div class="rpc-toggle-bar">' +
+        '        <button id="toggle-req" class="rpc-toggle-btn' + (defaultTarget === 'request' ? ' active' : '') + '">[Req]</button>' +
+        '        <button id="toggle-res" class="rpc-toggle-btn' + (defaultTarget === 'response' ? ' active' : '') + '">[Res]</button>' +
+        '      </div>' +
+        '      <div class="rpc-raw-json">' +
+        '        <div id="raw-json-request" style="display:' + (defaultTarget === 'request' ? 'block' : 'none') + '">' + requestRawHtml + '</div>' +
+        '        <div id="raw-json-response" style="display:' + (defaultTarget === 'response' ? 'block' : 'none') + '">' + responseRawHtml + '</div>' +
+        '      </div>' +
+        '    </div>' +
+        '  </div>' +
         '</div>';
+
+      // Re-initialize RPC Inspector handlers
+      if (window.initRpcInspector) {
+        window.initRpcInspector();
+      }
     }
 
     // Copy to clipboard
@@ -572,6 +604,9 @@ function getSessionReportScript(): string {
     if (rpcs.length > 0) {
       showRpcDetail(0);
     }
+
+    // RPC Inspector script
+    ${getRpcInspectorScript()}
   `;
 }
 
@@ -718,7 +753,23 @@ export function generateSessionHtml(report: HtmlSessionReportV1): string {
   const sessionShort = shortenId(session.session_id, 12);
 
   const rpcRows = rpcs.map((rpc, idx) => renderRpcRow(rpc, idx)).join('\n');
-  const embeddedJson = escapeJsonForScript(JSON.stringify(report));
+
+  // Pre-render summary and raw JSON HTML for each RPC (for RPC Inspector)
+  const rpcsWithInspectorHtml = rpcs.map((rpc) => {
+    const summaryRows = renderMethodSummary(rpc.method, rpc.request.json, rpc.response.json);
+    return {
+      ...rpc,
+      _summaryHtml: renderSummaryRowsHtml(summaryRows),
+      _requestRawHtml: renderJsonWithPaths(rpc.request.json, '#'),
+      _responseRawHtml: renderJsonWithPaths(rpc.response.json, '#'),
+    };
+  });
+
+  const reportWithInspectorHtml = {
+    ...report,
+    rpcs: rpcsWithInspectorHtml,
+  };
+  const embeddedJson = escapeJsonForScript(JSON.stringify(reportWithInspectorHtml));
 
   // Format total latency
   const totalLatencyDisplay = session.total_latency_ms !== null
@@ -1373,6 +1424,8 @@ function getConnectorReportStyles(): string {
       color: var(--text-secondary);
       flex-shrink: 0;
     }
+    /* RPC Inspector styles */
+    ${getRpcInspectorStyles()}
   `;
 }
 
@@ -1451,7 +1504,7 @@ function getConnectorReportScript(): string {
       }
     }
 
-    // Show RPC detail in right pane
+    // Show RPC detail in right pane (2-column Wireshark-style layout)
     function showRpcDetail(sessionId, idx) {
       const report = sessionReports[sessionId];
       if (!report || idx < 0 || idx >= report.rpcs.length) return;
@@ -1473,44 +1526,49 @@ function getConnectorReportScript(): string {
       const statusSymbol = rpc.status === 'OK' ? '\\u2713' : rpc.status === 'ERR' ? '\\u2717' : '?';
       const latency = rpc.latency_ms !== null ? rpc.latency_ms + 'ms' : '(pending)';
 
-      function renderPayload(payload, elementId) {
-        let content, notes = '';
+      // Get pre-rendered summary and raw JSON from data attributes
+      const summaryHtml = rpc._summaryHtml || '<div class="summary-row summary-header">No summary available</div>';
+      const requestRawHtml = rpc._requestRawHtml || '<span class="json-null">(no data)</span>';
+      const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
 
-        if (payload.truncated) {
-          notes = '<p class="truncated-note">Payload truncated (' + formatBytes(payload.size) + ', showing first 4096 chars)</p>';
-          if (payload.spillFile) {
-            notes += '<p class="spill-link">Full payload: <a href="' + escapeHtml(payload.spillFile) + '">' + escapeHtml(payload.spillFile) + '</a></p>';
-          }
-          content = payload.preview ? escapeHtml(payload.preview) + '\\n... (truncated)' : '(no data)';
-        } else if (payload.json !== null) {
-          content = escapeHtml(formatJson(payload.json));
-        } else {
-          content = '(no data)';
-        }
-
-        return notes + '<pre id="' + elementId + '"><code>' + content + '</code></pre>';
-      }
+      // Determine default target based on method
+      const defaultTarget = (rpc.method === 'tools/list' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
 
       rightPane.innerHTML =
         '<div class="detail-section">' +
         '  <h2>RPC Info</h2>' +
-        '  <dl class="session-info">' +
-        '    <dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd>' +
-        '    <dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd>' +
-        '    <dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd>' +
-        '    <dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd>' +
-        '    <dt>Request Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd>' +
-        '    <dt>Response Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd>' +
-        '  </dl>' +
+        '  <div class="rpc-info-grid">' +
+        '    <div class="rpc-info-item"><dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd></div>' +
+        '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
+        '    <div class="rpc-info-item"><dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd></div>' +
+        '    <div class="rpc-info-item"><dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd></div>' +
+        '    <div class="rpc-info-item"><dt>Req Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Res Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd></div>' +
+        '  </div>' +
         '</div>' +
         '<div class="detail-section">' +
-        '  <h2>Request <button class="copy-btn" onclick="copyToClipboard(\\'req-' + sessionId + '-' + idx + '\\', this)">Copy</button></h2>' +
-        '  ' + renderPayload(rpc.request, 'req-' + sessionId + '-' + idx) +
-        '</div>' +
-        '<div class="detail-section">' +
-        '  <h2>Response <button class="copy-btn" onclick="copyToClipboard(\\'res-' + sessionId + '-' + idx + '\\', this)">Copy</button></h2>' +
-        '  ' + renderPayload(rpc.response, 'res-' + sessionId + '-' + idx) +
+        '  <div class="rpc-inspector">' +
+        '    <div class="rpc-inspector-summary">' +
+        '      <h3>Summary</h3>' +
+        summaryHtml +
+        '    </div>' +
+        '    <div class="rpc-inspector-raw">' +
+        '      <div class="rpc-toggle-bar">' +
+        '        <button id="toggle-req" class="rpc-toggle-btn' + (defaultTarget === 'request' ? ' active' : '') + '">[Req]</button>' +
+        '        <button id="toggle-res" class="rpc-toggle-btn' + (defaultTarget === 'response' ? ' active' : '') + '">[Res]</button>' +
+        '      </div>' +
+        '      <div class="rpc-raw-json">' +
+        '        <div id="raw-json-request" style="display:' + (defaultTarget === 'request' ? 'block' : 'none') + '">' + requestRawHtml + '</div>' +
+        '        <div id="raw-json-response" style="display:' + (defaultTarget === 'response' ? 'block' : 'none') + '">' + responseRawHtml + '</div>' +
+        '      </div>' +
+        '    </div>' +
+        '  </div>' +
         '</div>';
+
+      // Re-initialize RPC Inspector handlers
+      if (window.initRpcInspector) {
+        window.initRpcInspector();
+      }
     }
 
     // Copy to clipboard
@@ -1636,6 +1694,9 @@ function getConnectorReportScript(): string {
     } else if (sessions.length > 0) {
       showSession(sessions[0].session_id);
     }
+
+    // RPC Inspector script
+    ${getRpcInspectorScript()}
   `;
 }
 
@@ -2111,7 +2172,28 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
     return renderSessionDetailContent(s.session_id, sessionReport);
   }).join('\n');
 
-  const embeddedJson = escapeJsonForScript(JSON.stringify(report));
+  // Pre-render summary and raw JSON HTML for each RPC in each session (for RPC Inspector)
+  const sessionReportsWithInspectorHtml: Record<string, HtmlSessionReportV1 & { rpcs: Array<SessionRpcDetail & { _summaryHtml: string; _requestRawHtml: string; _responseRawHtml: string }> }> = {};
+  for (const [sessionId, sessionReport] of Object.entries(session_reports)) {
+    sessionReportsWithInspectorHtml[sessionId] = {
+      ...sessionReport,
+      rpcs: sessionReport.rpcs.map((rpc) => {
+        const summaryRows = renderMethodSummary(rpc.method, rpc.request.json, rpc.response.json);
+        return {
+          ...rpc,
+          _summaryHtml: renderSummaryRowsHtml(summaryRows),
+          _requestRawHtml: renderJsonWithPaths(rpc.request.json, '#'),
+          _responseRawHtml: renderJsonWithPaths(rpc.response.json, '#'),
+        };
+      }),
+    };
+  }
+
+  const reportWithInspectorHtml = {
+    ...report,
+    session_reports: sessionReportsWithInspectorHtml,
+  };
+  const embeddedJson = escapeJsonForScript(JSON.stringify(reportWithInspectorHtml));
 
   return `<!DOCTYPE html>
 <html lang="en">

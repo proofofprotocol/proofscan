@@ -420,3 +420,48 @@ export interface HtmlConnectorAnalyticsV1 {
   top_tools: HtmlTopToolsData;
   method_distribution: HtmlMethodDistribution;
 }
+
+// ============================================================================
+// RPC Inspector Types (Phase 11.5)
+// ============================================================================
+
+/**
+ * JSON Pointer target (request or response payload)
+ */
+export type JsonPointerTarget = 'request' | 'response';
+
+/**
+ * Pointer link for summary-to-raw navigation
+ */
+export interface JsonPointer {
+  target: JsonPointerTarget;
+  path: string; // JSON Pointer format, e.g., "#/result/tools/0/name"
+}
+
+/**
+ * Summary row with optional pointer link
+ */
+export interface SummaryRow {
+  type: 'header' | 'property' | 'item';
+  label: string;
+  value?: string;
+  pointer?: JsonPointer;
+  children?: SummaryRow[];
+  cssClass?: string;
+}
+
+/**
+ * Method-specific summary renderer result
+ */
+export interface MethodSummary {
+  method: string;
+  rows: SummaryRow[];
+}
+
+/**
+ * Method summary handler interface
+ */
+export interface MethodSummaryHandler {
+  method: string | RegExp;
+  render: (request: unknown, response: unknown) => SummaryRow[];
+}
