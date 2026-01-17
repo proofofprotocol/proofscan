@@ -1119,15 +1119,31 @@ function getConnectorReportStyles(): string {
     .sessions-list {
       flex: 1;
       overflow-y: auto;
-      padding: 8px;
+      padding: 4px 8px;
+    }
+    .sessions-header-row {
+      display: grid;
+      grid-template-columns: 80px 1fr 50px 70px 40px;
+      gap: 8px;
+      padding: 4px 8px;
+      font-size: 10px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 4px;
     }
     .session-item {
-      padding: 10px 12px;
-      border-radius: 6px;
+      display: grid;
+      grid-template-columns: 80px 1fr 50px 70px 40px;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 8px;
+      border-radius: 4px;
       cursor: pointer;
-      margin-bottom: 6px;
+      margin-bottom: 2px;
       border: 1px solid transparent;
       background: var(--bg-primary);
+      font-size: 11px;
     }
     .session-item:hover {
       background: rgba(0, 212, 255, 0.1);
@@ -1144,26 +1160,33 @@ function getConnectorReportStyles(): string {
       0% { box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.6); }
       100% { box-shadow: 0 0 0 0 rgba(0, 212, 255, 0); }
     }
-    .session-item-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 4px;
-    }
     .session-item .session-id {
       font-family: 'SFMono-Regular', Consolas, monospace;
       color: var(--accent-blue);
-      font-size: 0.85em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .session-item .session-meta {
-      font-size: 0.75em;
+    .session-item .session-timestamp {
       color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .session-item .session-stats {
-      display: flex;
-      gap: 8px;
-      font-size: 0.75em;
+    .session-item .session-rpcs {
+      color: var(--text-primary);
+      text-align: right;
+    }
+    .session-item .session-latency {
       color: var(--text-secondary);
+      text-align: right;
+    }
+    .session-item .session-status {
+      text-align: center;
+    }
+    .session-item .session-status .badge {
+      padding: 1px 4px;
+      font-size: 10px;
     }
 
     /* Session detail pane (middle) */
@@ -2269,27 +2292,44 @@ function renderAnalyticsPanel(analytics: HtmlConnectorAnalyticsV1): string {
 }
 
 /**
- * Render a session item for the sessions pane
+ * Render a session item for the sessions pane (compact grid view)
  */
 function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
-  const timeStr = formatTimestamp(session.started_at).split(' ')[1]?.slice(0, 8) || '-';
-  const dateStr = formatTimestamp(session.started_at).split(' ')[0] || '-';
+  // Format timestamp compactly: MM/DD HH:MM
+  const timestamp = formatCompactTimestamp(session.started_at);
   const statusBadge = session.error_count > 0
     ? '<span class="badge status-ERR">ERR</span>'
     : '<span class="badge status-OK">OK</span>';
+  const latencyStr = session.total_latency_ms !== null
+    ? `${session.total_latency_ms}ms`
+    : '-';
 
   return `
-    <div class="session-item" data-session-id="${escapeHtml(session.session_id)}">
-      <div class="session-item-header">
-        <span class="session-id">[${escapeHtml(session.short_id)}]</span>
-        ${statusBadge}
-      </div>
-      <div class="session-meta">${dateStr} ${timeStr}</div>
-      <div class="session-stats">
-        <span>${session.rpc_count} RPCs</span>
-        ${session.error_count > 0 ? `<span style="color: var(--status-err)">${session.error_count} errors</span>` : ''}
-      </div>
+    <div class="session-item"
+         data-session-id="${escapeHtml(session.session_id)}"
+         title="Session: ${session.session_id}&#10;Started: ${session.started_at}">
+      <span class="session-id">[${escapeHtml(session.short_id)}]</span>
+      <span class="session-timestamp">${timestamp}</span>
+      <span class="session-rpcs">${session.rpc_count}</span>
+      <span class="session-latency">${latencyStr}</span>
+      <span class="session-status">${statusBadge}</span>
     </div>`;
+}
+
+/**
+ * Format timestamp compactly for grid display
+ */
+function formatCompactTimestamp(isoStr: string): string {
+  try {
+    const date = new Date(isoStr);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${month}/${day} ${hours}:${minutes}`;
+  } catch {
+    return '-';
+  }
 }
 
 /**
@@ -2522,6 +2562,13 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
       <div class="sessions-header">
         <h2>Sessions</h2>
         <span class="pagination-info">${paginationInfo}</span>
+      </div>
+      <div class="sessions-header-row">
+        <span>ID</span>
+        <span>Timestamp</span>
+        <span style="text-align:right">RPCs</span>
+        <span style="text-align:right">Latency</span>
+        <span style="text-align:center">St</span>
       </div>
       <div class="sessions-list">
 ${sessionItems}
