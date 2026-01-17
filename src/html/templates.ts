@@ -991,8 +991,8 @@ function getConnectorReportStyles(): string {
       background: #6e7681;
       border-radius: 50%;
     }
-    /* Auto-refresh toggle */
-    .refresh-toggle {
+    /* Auto-check toggle (Phase 12.1) */
+    .auto-check-toggle {
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -1001,12 +1001,12 @@ function getConnectorReportStyles(): string {
       border-radius: 12px;
       padding: 2px 4px;
     }
-    .refresh-toggle .refresh-label {
+    .auto-check-toggle .auto-check-label {
       font-size: 10px;
       color: var(--text-secondary);
       padding-left: 4px;
     }
-    .refresh-toggle button {
+    .auto-check-toggle button {
       background: transparent;
       border: none;
       padding: 2px 8px;
@@ -1016,12 +1016,34 @@ function getConnectorReportStyles(): string {
       cursor: pointer;
       transition: all 0.15s;
     }
-    .refresh-toggle button:hover {
+    .auto-check-toggle button:hover {
       color: var(--text-primary);
     }
-    .refresh-toggle button.active {
+    .auto-check-toggle button.active {
       background: rgba(0, 212, 255, 0.15);
       color: var(--accent-blue);
+    }
+    /* New data banner */
+    .new-data-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      background: rgba(0, 212, 255, 0.15);
+      border: 1px solid var(--accent-blue);
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--accent-blue);
+    }
+    .new-data-banner.active { display: inline-flex; }
+    .new-data-banner button {
+      background: var(--accent-blue);
+      border: none;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 10px;
+      color: var(--bg-primary);
+      cursor: pointer;
     }
     /* Page header (Connector name + KPI row) */
     .page-header {
@@ -1761,48 +1783,78 @@ function getConnectorReportStyles(): string {
  */
 function getConnectorReportScript(): string {
   return `
-    // Auto-refresh functionality
+    // Auto-check functionality (Phase 12.1)
     (function() {
-      let refreshInterval = null;
-      const toggle = document.getElementById('refreshToggle');
+      // Only run on monitor pages (not static HTML export)
+      if (!document.body.dataset.app || document.body.dataset.app !== 'monitor') {
+        return;
+      }
+
+      let checkInterval = null;
+      let lastDigest = null;
+      let newDataDetected = false;
+      const INTERVAL_MS = 10000;
+
+      const toggle = document.getElementById('autoCheckToggle');
+      const banner = document.getElementById('newDataBanner');
+      const refreshBtn = document.getElementById('refreshNowBtn');
       if (!toggle) return;
 
       const buttons = toggle.querySelectorAll('button');
+      const enabled = localStorage.getItem('proofscan-auto-check') === 'true';
 
-      // Load saved interval from localStorage
-      const savedInterval = localStorage.getItem('proofscan-refresh-interval');
-      if (savedInterval) {
-        setRefreshInterval(parseInt(savedInterval, 10));
+      // Initial state
+      buttons.forEach(function(btn) {
+        btn.classList.toggle('active', (btn.dataset.enabled === 'true') === enabled);
+      });
+      if (enabled) startChecking();
+
+      function startChecking() {
+        checkForUpdates(); // First check
+        checkInterval = setInterval(checkForUpdates, INTERVAL_MS);
       }
 
-      function setRefreshInterval(seconds) {
-        // Clear existing interval
-        if (refreshInterval) {
-          clearInterval(refreshInterval);
-          refreshInterval = null;
-        }
+      function stopChecking() {
+        if (checkInterval) clearInterval(checkInterval);
+        checkInterval = null;
+      }
 
-        // Update button states
-        buttons.forEach(function(btn) {
-          btn.classList.toggle('active', parseInt(btn.dataset.interval, 10) === seconds);
-        });
-
-        // Save preference
-        localStorage.setItem('proofscan-refresh-interval', String(seconds));
-
-        // Set new interval if not OFF
-        if (seconds > 0) {
-          refreshInterval = setInterval(function() {
-            location.reload();
-          }, seconds * 1000);
-        }
+      function checkForUpdates() {
+        if (newDataDetected) return; // Banner already shown
+        fetch('/api/monitor/summary')
+          .then(function(res) { return res.ok ? res.json() : null; })
+          .then(function(data) {
+            if (!data) return;
+            if (lastDigest === null) {
+              lastDigest = data.digest; // Baseline
+            } else if (data.digest !== lastDigest) {
+              newDataDetected = true;
+              if (banner) banner.classList.add('active');
+            }
+          })
+          .catch(function(err) { console.debug('[Auto-check] Poll failed:', err); });
       }
 
       buttons.forEach(function(btn) {
         btn.addEventListener('click', function() {
-          setRefreshInterval(parseInt(btn.dataset.interval, 10));
+          var on = btn.dataset.enabled === 'true';
+          localStorage.setItem('proofscan-auto-check', String(on));
+          buttons.forEach(function(b) {
+            b.classList.toggle('active', (b.dataset.enabled === 'true') === on);
+          });
+          if (on) {
+            startChecking();
+          } else {
+            stopChecking();
+            if (banner) banner.classList.remove('active');
+            newDataDetected = false;
+          }
         });
       });
+
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() { location.reload(); });
+      }
     })();
 
     // Report data
@@ -2983,12 +3035,14 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
       <a href="/" class="header-back">← Home</a>
     </div>
     <div class="header-meta">
-      <div class="refresh-toggle" id="refreshToggle">
-        <span class="refresh-label">Refresh:</span>
-        <button data-interval="0" class="active">OFF</button>
-        <button data-interval="5">5s</button>
-        <button data-interval="10">10s</button>
-        <button data-interval="30">30s</button>
+      <div class="auto-check-toggle" id="autoCheckToggle">
+        <span class="auto-check-label">Auto-check:</span>
+        <button data-enabled="false" class="active">OFF</button>
+        <button data-enabled="true">ON</button>
+      </div>
+      <div class="new-data-banner" id="newDataBanner">
+        <span>New data available</span>
+        <button id="refreshNowBtn">Refresh now</button>
       </div>
       <span class="offline-badge">Offline</span>
       <span>Generated: ${formatTimestamp(meta.generatedAt)}${meta.redacted ? ' (redacted)' : ''}</span>
