@@ -164,3 +164,33 @@ export interface MonitorPoplSummary {
   errors: number;
   session_id: string | null;
 }
+
+// =============================================================================
+// Phase Issue #59: Events View 型定義
+// =============================================================================
+
+/**
+ * Event direction
+ */
+export type EventDirection = 'client_to_server' | 'server_to_client';
+
+/**
+ * Event kind
+ */
+export type EventKind = 'request' | 'response' | 'notification' | 'transport_event';
+
+/**
+ * Session event for Events View display
+ */
+export interface MonitorSessionEvent {
+  event_id: string;
+  session_id: string;
+  rpc_id: string | null;
+  direction: EventDirection;
+  kind: EventKind;
+  ts: string; // ISO timestamp
+  seq: number | null;
+  summary: string | null;
+  method: string | null; // Extracted from raw_json if available
+  has_payload: boolean; // Whether raw_json exists
+}

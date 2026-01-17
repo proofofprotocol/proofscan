@@ -1396,6 +1396,129 @@ function getConnectorReportStyles(): string {
       background: var(--accent-blue);
     }
 
+    /* Events View Toggle (Issue #59) */
+    .view-toggle {
+      display: flex;
+      gap: 2px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+    .view-toggle-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.15s;
+    }
+    .view-toggle-btn:first-child {
+      border-radius: 4px 0 0 4px;
+    }
+    .view-toggle-btn:last-child {
+      border-radius: 0 4px 4px 0;
+    }
+    .view-toggle-btn:hover {
+      border-color: var(--accent-blue);
+      color: var(--text-primary);
+    }
+    .view-toggle-btn.active {
+      background: rgba(0, 212, 255, 0.15);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+    .view-toggle-count {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+
+    /* Events List (Issue #59) */
+    .events-list {
+      flex: 1;
+      overflow-y: auto;
+      display: none;
+    }
+    .events-list.active {
+      display: block;
+    }
+    .rpc-list.hidden {
+      display: none;
+    }
+    .events-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85em;
+    }
+    .events-table th {
+      text-align: left;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 6px 8px;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      background: var(--bg-primary);
+      z-index: 1;
+    }
+    .events-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+    .event-row {
+      cursor: pointer;
+    }
+    .event-row:hover {
+      background: rgba(0, 212, 255, 0.1);
+    }
+    .event-row.selected {
+      background: rgba(0, 212, 255, 0.2);
+    }
+
+    /* Event kind badges */
+    .badge-kind-request {
+      background: rgba(0, 212, 255, 0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+    .badge-kind-response {
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+    .badge-kind-notification {
+      background: rgba(210, 153, 34, 0.15);
+      color: var(--accent-yellow);
+      border: 1px solid rgba(210, 153, 34, 0.3);
+    }
+    .badge-kind-transport_event {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
+    }
+
+    /* Event direction indicators */
+    .direction-indicator {
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+    .direction-indicator.outgoing {
+      color: var(--accent-blue);
+    }
+    .direction-indicator.incoming {
+      color: var(--accent-green);
+    }
+
+    /* Events loading state */
+    .events-loading {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
+
     /* Analytics Panel (Phase 5.2) - Revised Layout */
 
     /* Header with KPI stats inline */
@@ -1945,6 +2068,189 @@ function getConnectorReportScript(): string {
       showSession(sessions[0].session_id);
     }
 
+    // Events View toggle and data loading (Issue #59)
+    (function() {
+      // Cache for loaded events
+      const eventsCache = {};
+
+      // Event kind display labels
+      const kindLabels = {
+        request: 'REQ',
+        response: 'RES',
+        notification: 'NOTIF',
+        transport_event: 'TRANS'
+      };
+
+      // Format time for events table
+      function formatEventTime(ts) {
+        try {
+          const date = new Date(ts);
+          return date.toISOString().split('T')[1].slice(0, 12);
+        } catch {
+          return ts;
+        }
+      }
+
+      // Render events table
+      function renderEventsTable(events) {
+        if (!events || events.length === 0) {
+          return '<div class="events-loading">No events in this session</div>';
+        }
+
+        const rows = events.map(function(event, idx) {
+          const dirClass = event.direction === 'client_to_server' ? 'outgoing' : 'incoming';
+          const dirSymbol = event.direction === 'client_to_server' ? '\\u2192' : '\\u2190';
+          const kindClass = 'badge-kind-' + event.kind;
+          const kindLabel = kindLabels[event.kind] || event.kind;
+          const method = event.method || event.summary || '-';
+          const timeStr = formatEventTime(event.ts);
+          const hasPayload = event.has_payload ? '\\u2713' : '';
+
+          return '<tr class="event-row" data-event-idx="' + idx + '" data-event-id="' + escapeHtml(event.event_id) + '">' +
+            '<td>' + timeStr + '</td>' +
+            '<td><span class="direction-indicator ' + dirClass + '">' + dirSymbol + '</span></td>' +
+            '<td><span class="badge ' + kindClass + '">' + kindLabel + '</span></td>' +
+            '<td>' + escapeHtml(method) + '</td>' +
+            '<td>' + hasPayload + '</td>' +
+            '</tr>';
+        }).join('');
+
+        return '<table class="events-table">' +
+          '<thead><tr>' +
+            '<th>Time</th>' +
+            '<th>Dir</th>' +
+            '<th>Kind</th>' +
+            '<th>Method/Summary</th>' +
+            '<th>Data</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+          '</table>';
+      }
+
+      // Load events for a session
+      function loadEvents(sessionId, eventsList) {
+        if (eventsCache[sessionId]) {
+          eventsList.innerHTML = renderEventsTable(eventsCache[sessionId]);
+          return;
+        }
+
+        // Check if we're in offline mode (static HTML) or live server
+        // Try to fetch from API, fallback to "no data" message
+        eventsList.innerHTML = '<div class="events-loading">Loading events...</div>';
+
+        fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/events')
+          .then(function(res) {
+            if (!res.ok) throw new Error('API not available');
+            return res.json();
+          })
+          .then(function(data) {
+            eventsCache[sessionId] = data.events;
+            eventsList.innerHTML = renderEventsTable(data.events);
+            // Attach click handlers for event rows
+            attachEventRowHandlers(eventsList, sessionId, data.events);
+          })
+          .catch(function() {
+            eventsList.innerHTML = '<div class="events-loading">Events data not available (API offline)</div>';
+          });
+      }
+
+      // Attach click handlers for event rows
+      function attachEventRowHandlers(eventsList, sessionId, events) {
+        eventsList.querySelectorAll('.event-row').forEach(function(row) {
+          row.addEventListener('click', function() {
+            const idx = parseInt(row.dataset.eventIdx);
+            const event = events[idx];
+            if (!event || !event.has_payload) return;
+
+            // Clear previous selection
+            eventsList.querySelectorAll('.event-row').forEach(function(r) {
+              r.classList.remove('selected');
+            });
+            row.classList.add('selected');
+
+            // Show event detail in right pane
+            showEventDetail(sessionId, event);
+          });
+        });
+      }
+
+      // Show event detail in right pane
+      function showEventDetail(sessionId, event) {
+        const sessionContent = document.querySelector('.session-content[data-session-id="' + sessionId + '"]');
+        if (!sessionContent) return;
+
+        const rightPane = sessionContent.querySelector('.right-pane');
+        if (!rightPane) return;
+
+        // Fetch full event detail
+        fetch('/api/events/' + encodeURIComponent(event.event_id))
+          .then(function(res) {
+            if (!res.ok) throw new Error('Event not found');
+            return res.json();
+          })
+          .then(function(data) {
+            const evt = data.event;
+            const kindClass = 'badge-kind-' + evt.kind;
+            const dirLabel = evt.direction === 'client_to_server' ? 'Client \\u2192 Server' : 'Server \\u2192 Client';
+            const method = evt.method || evt.summary || '(unknown)';
+            const rawJson = evt.raw_json ? JSON.parse(evt.raw_json) : null;
+            const formattedJson = rawJson ? JSON.stringify(rawJson, null, 2) : '(no data)';
+
+            rightPane.innerHTML =
+              '<div class="detail-section">' +
+                '<h3>Event Detail</h3>' +
+                '<dl style="display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.9em;">' +
+                  '<dt>Event ID</dt><dd><code>' + escapeHtml(evt.event_id) + '</code></dd>' +
+                  '<dt>Kind</dt><dd><span class="badge ' + kindClass + '">' + evt.kind + '</span></dd>' +
+                  '<dt>Direction</dt><dd>' + dirLabel + '</dd>' +
+                  '<dt>Method</dt><dd>' + escapeHtml(method) + '</dd>' +
+                  '<dt>Timestamp</dt><dd>' + escapeHtml(evt.ts) + '</dd>' +
+                  (evt.seq !== null ? '<dt>Sequence</dt><dd>' + evt.seq + '</dd>' : '') +
+                '</dl>' +
+              '</div>' +
+              '<div class="detail-section">' +
+                '<h3>Payload</h3>' +
+                '<pre><code>' + escapeHtml(formattedJson) + '</code></pre>' +
+              '</div>';
+          })
+          .catch(function() {
+            rightPane.innerHTML = '<div class="detail-placeholder">Failed to load event detail</div>';
+          });
+      }
+
+      // Handle view toggle clicks
+      document.querySelectorAll('.view-toggle').forEach(function(toggle) {
+        const sessionContent = toggle.closest('.session-content');
+        if (!sessionContent) return;
+
+        const sessionId = sessionContent.dataset.sessionId;
+        const rpcList = sessionContent.querySelector('.rpc-list');
+        const eventsList = sessionContent.querySelector('.events-list');
+        const buttons = toggle.querySelectorAll('.view-toggle-btn');
+
+        buttons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const view = btn.dataset.view;
+
+            // Update button states
+            buttons.forEach(function(b) {
+              b.classList.toggle('active', b.dataset.view === view);
+            });
+
+            // Toggle lists
+            if (view === 'events') {
+              rpcList.classList.add('hidden');
+              eventsList.classList.add('active');
+              loadEvents(sessionId, eventsList);
+            } else {
+              rpcList.classList.remove('hidden');
+              eventsList.classList.remove('active');
+            }
+          });
+        });
+      });
+    })();
+
     // RPC Inspector script
     ${getRpcInspectorScript()}
   `;
@@ -2450,6 +2756,14 @@ function renderSessionDetailContent(
               <dd><span class="badge">${totalLatencyDisplay}</span></dd>
             </dl>
           </div>
+          <div class="view-toggle">
+            <button class="view-toggle-btn active" data-view="rpc">
+              RPCs<span class="view-toggle-count">(${session.rpc_count})</span>
+            </button>
+            <button class="view-toggle-btn" data-view="events">
+              Events<span class="view-toggle-count">(${session.event_count})</span>
+            </button>
+          </div>
           <div class="rpc-list">
             <table class="rpc-table">
               <thead>
@@ -2465,6 +2779,9 @@ function renderSessionDetailContent(
 ${rpcRows}
               </tbody>
             </table>
+          </div>
+          <div class="events-list">
+            <div class="events-loading">Loading events...</div>
           </div>
         </div>
         <div class="resize-handle"></div>
