@@ -815,25 +815,25 @@ describe('generateConnectorHtml', () => {
 });
 
 describe('formatCompactTimestamp', () => {
-  it('should format valid UTC timestamp as MM/DD HH:MM', () => {
-    // 2025-01-12T14:30:45.000Z in UTC
-    const result = formatCompactTimestamp('2025-01-12T14:30:45.000Z');
-    expect(result).toBe('01/12 14:30');
+  it('should format valid UTC timestamp as HH:MM:SS.mmm', () => {
+    // 2025-01-12T14:30:45.123Z in UTC
+    const result = formatCompactTimestamp('2025-01-12T14:30:45.123Z');
+    expect(result).toBe('14:30:45.123');
   });
 
-  it('should pad single digit months and days with zeros', () => {
-    const result = formatCompactTimestamp('2025-03-05T08:09:00.000Z');
-    expect(result).toBe('03/05 08:09');
+  it('should pad single digit hours, minutes, seconds with zeros', () => {
+    const result = formatCompactTimestamp('2025-03-05T08:09:07.005Z');
+    expect(result).toBe('08:09:07.005');
   });
 
   it('should handle midnight correctly', () => {
     const result = formatCompactTimestamp('2025-12-31T00:00:00.000Z');
-    expect(result).toBe('12/31 00:00');
+    expect(result).toBe('00:00:00.000');
   });
 
   it('should handle end of day correctly', () => {
     const result = formatCompactTimestamp('2025-06-15T23:59:59.999Z');
-    expect(result).toBe('06/15 23:59');
+    expect(result).toBe('23:59:59.999');
   });
 
   it('should return "-" for invalid timestamp', () => {
@@ -845,18 +845,16 @@ describe('formatCompactTimestamp', () => {
     expect(formatCompactTimestamp('')).toBe('-');
   });
 
-  it('should handle timestamp without Z suffix', () => {
-    // ISO 8601 without timezone is parsed as local time by Date
-    // But our function uses UTC methods, so output depends on input interpretation
+  it('should handle timestamp without milliseconds', () => {
     const result = formatCompactTimestamp('2025-07-20T12:00:00Z');
-    expect(result).toBe('07/20 12:00');
+    expect(result).toBe('12:00:00.000');
   });
 
   it('should use UTC timezone consistently', () => {
     // Verify that the same UTC timestamp always produces the same output
     // regardless of local timezone (this tests the getUTC* methods are used)
-    const timestamp = '2025-01-15T23:45:30.000Z';
+    const timestamp = '2025-01-15T23:45:30.456Z';
     const result = formatCompactTimestamp(timestamp);
-    expect(result).toBe('01/15 23:45');
+    expect(result).toBe('23:45:30.456');
   });
 });

@@ -2306,7 +2306,7 @@ function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
 
 /**
  * Format timestamp compactly for grid display (UTC)
- * Returns format: MM/DD HH:MM
+ * Returns format: HH:MM:SS.mmm (time with milliseconds)
  * @public - exported for testing
  */
 export function formatCompactTimestamp(isoStr: string): string {
@@ -2315,11 +2315,11 @@ export function formatCompactTimestamp(isoStr: string): string {
     if (isNaN(date.getTime())) {
       return '-';
     }
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
     const hours = String(date.getUTCHours()).padStart(2, '0');
     const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-    return `${month}/${day} ${hours}:${minutes}`;
+    const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+    const millis = String(date.getUTCMilliseconds()).padStart(3, '0');
+    return `${hours}:${minutes}:${seconds}.${millis}`;
   } catch {
     return '-';
   }
