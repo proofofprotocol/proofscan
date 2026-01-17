@@ -533,12 +533,13 @@ function getSessionReportScript(): string {
       const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
 
       // Sensitive content warning badge (Phase 12.x-c)
-      const sensitiveKeys = rpc._sensitiveKeys || [];
+      // Escape keys to prevent XSS via malicious key names
+      const sensitiveKeys = (rpc._sensitiveKeys || []).map(function(k) { return escapeHtml(k); });
       const sensitiveTooltip = sensitiveKeys.length > 5
         ? 'Contains ' + sensitiveKeys.length + ' sensitive keys: ' + sensitiveKeys.slice(0, 5).join(', ') + '...'
         : 'Contains sensitive keys: ' + sensitiveKeys.join(', ');
       const sensitiveBadge = rpc._hasSensitive
-        ? '<span class="sensitive-badge" title="' + sensitiveTooltip + '">⚠ Sensitive</span>'
+        ? '<span class="sensitive-badge" title="' + escapeHtml(sensitiveTooltip) + '">⚠ Sensitive</span>'
         : '';
 
       // Determine default target based on method (response-focused methods default to response)
@@ -1770,12 +1771,13 @@ function getConnectorReportScript(): string {
       const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
 
       // Sensitive content warning badge (Phase 12.x-c)
-      const sensitiveKeys = rpc._sensitiveKeys || [];
+      // Escape keys to prevent XSS via malicious key names
+      const sensitiveKeys = (rpc._sensitiveKeys || []).map(function(k) { return escapeHtml(k); });
       const sensitiveTooltip = sensitiveKeys.length > 5
         ? 'Contains ' + sensitiveKeys.length + ' sensitive keys: ' + sensitiveKeys.slice(0, 5).join(', ') + '...'
         : 'Contains sensitive keys: ' + sensitiveKeys.join(', ');
       const sensitiveBadge = rpc._hasSensitive
-        ? '<span class="sensitive-badge" title="' + sensitiveTooltip + '">⚠ Sensitive</span>'
+        ? '<span class="sensitive-badge" title="' + escapeHtml(sensitiveTooltip) + '">⚠ Sensitive</span>'
         : '';
 
       // Determine default target based on method (response-focused methods default to response)
