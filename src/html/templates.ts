@@ -553,8 +553,8 @@ function getSessionReportScript(): string {
         '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd></div>' +
-        '    <div class="rpc-info-item"><dt>Req Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd></div>' +
-        '    <div class="rpc-info-item"><dt>Res Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Request</dt><dd>' + escapeHtml(rpc.request_ts) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Response</dt><dd>' + escapeHtml(rpc.response_ts || '-') + '</dd></div>' +
         '  </div>' +
         '</div>' +
         '<div class="detail-section">' +
@@ -1196,7 +1196,7 @@ function getConnectorReportStyles(): string {
     }
     .session-item {
       display: grid;
-      grid-template-columns: 70px 1fr 60px 50px;
+      grid-template-columns: 70px 1fr auto 50px 50px;
       gap: 8px;
       align-items: center;
       padding: 6px 8px;
@@ -1206,6 +1206,15 @@ function getConnectorReportStyles(): string {
       border: 1px solid transparent;
       background: var(--bg-primary);
       font-size: 11px;
+    }
+    .session-item .session-counts {
+      display: flex;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+    .session-item .session-counts span {
+      white-space: nowrap;
     }
     .session-item .session-extra {
       justify-self: end;
@@ -1803,6 +1812,8 @@ function getConnectorReportScript(): string {
 
     let currentSessionId = null;
     let currentRpcIdx = null;
+    let currentEventIdx = null;
+    let currentViewMode = 'rpc'; // 'rpc' or 'events'
 
     // Connector info toggle
     const connectorInfo = document.querySelector('.connector-info');
@@ -1844,6 +1855,8 @@ function getConnectorReportScript(): string {
       if (currentSessionId === sessionId) return;
       currentSessionId = sessionId;
       currentRpcIdx = null;
+      currentEventIdx = null;
+      currentViewMode = 'rpc'; // Reset to RPC view
 
       // Update session list selection
       document.querySelectorAll('.session-item').forEach(item => {
@@ -1916,8 +1929,8 @@ function getConnectorReportScript(): string {
         '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd></div>' +
-        '    <div class="rpc-info-item"><dt>Req Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd></div>' +
-        '    <div class="rpc-info-item"><dt>Res Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Request</dt><dd>' + escapeHtml(rpc.request_ts) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Response</dt><dd>' + escapeHtml(rpc.response_ts || '-') + '</dd></div>' +
         '  </div>' +
         '</div>' +
         '<div class="detail-section">' +
@@ -1979,16 +1992,46 @@ function getConnectorReportScript(): string {
       });
     });
 
-    // Keyboard navigation
+    // Keyboard navigation (handles both RPC and Events views)
     document.addEventListener('keydown', (e) => {
       if (!currentSessionId) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
 
-      const report = sessionReports[currentSessionId];
-      if (!report) return;
+      e.preventDefault();
+      const sessionContent = document.querySelector('.session-content[data-session-id="' + currentSessionId + '"]');
+      if (!sessionContent) return;
 
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
+      // Check which view is active
+      if (currentViewMode === 'events') {
+        // Events navigation
+        const eventRows = sessionContent.querySelectorAll('.event-row');
+        if (eventRows.length === 0) return;
+
+        let newIdx = currentEventIdx;
+        if (currentEventIdx === null) {
+          newIdx = 0;
+        } else if (e.key === 'ArrowDown' && currentEventIdx < eventRows.length - 1) {
+          newIdx = currentEventIdx + 1;
+        } else if (e.key === 'ArrowUp' && currentEventIdx > 0) {
+          newIdx = currentEventIdx - 1;
+        }
+
+        if (newIdx !== currentEventIdx) {
+          currentEventIdx = newIdx;
+          // Update selection visually
+          eventRows.forEach((r, i) => r.classList.toggle('selected', i === newIdx));
+          // Scroll into view
+          eventRows[newIdx].scrollIntoView({ block: 'nearest' });
+          // Trigger click to show detail (if has payload)
+          eventRows[newIdx].click();
+        }
+      } else {
+        // RPC navigation
+        const report = sessionReports[currentSessionId];
+        if (!report) return;
         const rpcs = report.rpcs;
+        if (rpcs.length === 0) return;
+
         if (currentRpcIdx === null && rpcs.length > 0) {
           showRpcDetail(currentSessionId, 0);
           return;
@@ -1999,11 +2042,8 @@ function getConnectorReportScript(): string {
           showRpcDetail(currentSessionId, currentRpcIdx - 1);
         }
         // Scroll selected row into view
-        const sessionContent = document.querySelector('.session-content[data-session-id="' + currentSessionId + '"]');
-        if (sessionContent) {
-          const row = sessionContent.querySelector('.rpc-row.selected');
-          if (row) row.scrollIntoView({ block: 'nearest' });
-        }
+        const row = sessionContent.querySelector('.rpc-row.selected');
+        if (row) row.scrollIntoView({ block: 'nearest' });
       }
     });
 
@@ -2108,7 +2148,8 @@ function getConnectorReportScript(): string {
             : 'Server \\u2192 Client';
           const kindClass = 'badge-kind-' + event.kind;
           const kindLabel = kindLabels[event.kind] || event.kind;
-          const method = event.method || event.summary || '-';
+          // Method/Summary fallback: method > summary > kind label (e.g., "connected")
+          const method = event.method || event.summary || kindLabel;
           const timeStr = formatEventTime(event.ts);
           const hasPayload = event.has_payload ? '\\u2713' : '';
 
@@ -2265,6 +2306,9 @@ function getConnectorReportScript(): string {
         buttons.forEach(function(btn) {
           btn.addEventListener('click', function() {
             const view = btn.dataset.view;
+
+            // Update current view mode
+            currentViewMode = view;
 
             // Update button states
             buttons.forEach(function(b) {
@@ -2708,9 +2752,10 @@ function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
   return `
     <div class="session-item"
          data-session-id="${escapeHtml(session.session_id)}"
-         title="Session: ${session.session_id}&#10;Started: ${session.started_at}&#10;RPCs: ${session.rpc_count}&#10;Errors: ${session.error_count}">
+         title="Session: ${session.session_id}&#10;Started: ${session.started_at}&#10;RPCs: ${session.rpc_count}&#10;Events: ${session.event_count}&#10;Errors: ${session.error_count}">
       <span class="session-id">[${escapeHtml(session.short_id)}]</span>
       <span class="session-timestamp">${timestamp}</span>
+      <span class="session-counts"><span>R:${session.rpc_count}</span><span>E:${session.event_count}</span></span>
       <span class="session-latency">${latencyStr}</span>
       <span class="session-extra"></span>
     </div>`;
