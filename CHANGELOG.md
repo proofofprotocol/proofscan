@@ -28,6 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - RFC 6901 JSON Pointer paths for precise navigation
   - `initialize` method handler showing Server Info and Capabilities
 
+- **Events View** (Issue #59): Protocol-level communication viewer
+  - Toggle between RPC View and Events View for each session
+  - Chronological display of all protocol events (requests, responses, notifications, transport events)
+  - Direction arrows with color coding (⇨ blue = Client→Server, ⇦ green = Server→Client)
+  - Kind badges (REQ, RES, NOTIF, TRANS) with distinct styling
+  - Method/Summary column showing: method name, summary, or payload type (e.g., "connected")
+  - Payload type extraction from raw_json for meaningful transport_event display
+  - R:/E: counts in session list (RPC count and Event count)
+  - Keyboard navigation support (↑/↓ to navigate, Enter to view details)
+  - API endpoints: `/api/sessions/:id/events`, `/api/events/:id`
+
 - **Web Monitor UX Refinements** (Phase 12)
   - Auto-check toggle with "New data available" notification banner (Phase 12.1)
   - Lightweight `/api/monitor/summary` endpoint for change detection with SHA-256 digest

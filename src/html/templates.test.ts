@@ -723,8 +723,9 @@ describe('generateConnectorHtml', () => {
     };
     const html = generateConnectorHtml(noServerReport);
     expect(html).toContain('<!DOCTYPE html>');
-    expect(html).not.toContain('Server');
-    expect(html).not.toContain('Protocol');
+    // Check that the Server Info card is not rendered (not just any 'Server' word)
+    expect(html).not.toContain('Server Info');
+    expect(html).not.toContain('Protocol Version');
   });
 
   it('should show disabled badge when connector is disabled', () => {

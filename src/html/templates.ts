@@ -553,8 +553,8 @@ function getSessionReportScript(): string {
         '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd></div>' +
-        '    <div class="rpc-info-item"><dt>Req Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd></div>' +
-        '    <div class="rpc-info-item"><dt>Res Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Request</dt><dd>' + escapeHtml(rpc.request_ts) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Response</dt><dd>' + escapeHtml(rpc.response_ts || '-') + '</dd></div>' +
         '  </div>' +
         '</div>' +
         '<div class="detail-section">' +
@@ -1196,7 +1196,7 @@ function getConnectorReportStyles(): string {
     }
     .session-item {
       display: grid;
-      grid-template-columns: 70px 1fr 60px 50px;
+      grid-template-columns: 70px 1fr auto 50px 50px;
       gap: 8px;
       align-items: center;
       padding: 6px 8px;
@@ -1206,6 +1206,15 @@ function getConnectorReportStyles(): string {
       border: 1px solid transparent;
       background: var(--bg-primary);
       font-size: 11px;
+    }
+    .session-item .session-counts {
+      display: flex;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--text-secondary);
+    }
+    .session-item .session-counts span {
+      white-space: nowrap;
     }
     .session-item .session-extra {
       justify-self: end;
@@ -1394,6 +1403,131 @@ function getConnectorReportStyles(): string {
     }
     .resize-handle:hover {
       background: var(--accent-blue);
+    }
+
+    /* Events View Toggle (Issue #59) */
+    .view-toggle {
+      display: flex;
+      gap: 2px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+    }
+    .view-toggle-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.15s;
+    }
+    .view-toggle-btn:first-child {
+      border-radius: 4px 0 0 4px;
+    }
+    .view-toggle-btn:last-child {
+      border-radius: 0 4px 4px 0;
+    }
+    .view-toggle-btn:hover {
+      border-color: var(--accent-blue);
+      color: var(--text-primary);
+    }
+    .view-toggle-btn.active {
+      background: rgba(0, 212, 255, 0.15);
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+    .view-toggle-count {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+
+    /* Events List (Issue #59) */
+    .events-list {
+      flex: 1;
+      overflow-y: auto;
+      display: none;
+    }
+    .events-list.active {
+      display: block;
+    }
+    .rpc-list.hidden {
+      display: none;
+    }
+    .events-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85em;
+    }
+    .events-table th {
+      text-align: left;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border-color);
+      padding: 6px 8px;
+      font-weight: 500;
+      position: sticky;
+      top: 0;
+      background: var(--bg-primary);
+      z-index: 1;
+    }
+    .events-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+    .event-row {
+      cursor: pointer;
+    }
+    .event-row:hover {
+      background: rgba(0, 212, 255, 0.1);
+    }
+    .event-row.selected {
+      background: rgba(0, 212, 255, 0.2);
+    }
+
+    /* Event kind badges */
+    .badge-kind-request {
+      background: rgba(0, 212, 255, 0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+    .badge-kind-response {
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+    .badge-kind-notification {
+      background: rgba(210, 153, 34, 0.15);
+      color: var(--accent-yellow);
+      border: 1px solid rgba(210, 153, 34, 0.3);
+    }
+    .badge-kind-transport_event {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-color);
+    }
+
+    /* Event direction arrows */
+    .direction-arrow {
+      font-size: 18px;
+      font-weight: bold;
+      line-height: 1;
+      cursor: help;
+    }
+    .direction-arrow.outgoing {
+      color: var(--accent-blue);
+    }
+    .direction-arrow.incoming {
+      color: var(--accent-green);
+    }
+
+    /* Events loading state */
+    .events-loading {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-secondary);
     }
 
     /* Analytics Panel (Phase 5.2) - Revised Layout */
@@ -1678,6 +1812,8 @@ function getConnectorReportScript(): string {
 
     let currentSessionId = null;
     let currentRpcIdx = null;
+    let currentEventIdx = null;
+    let currentViewMode = 'rpc'; // 'rpc' or 'events'
 
     // Connector info toggle
     const connectorInfo = document.querySelector('.connector-info');
@@ -1719,6 +1855,8 @@ function getConnectorReportScript(): string {
       if (currentSessionId === sessionId) return;
       currentSessionId = sessionId;
       currentRpcIdx = null;
+      currentEventIdx = null;
+      currentViewMode = 'rpc'; // Reset to RPC view
 
       // Update session list selection
       document.querySelectorAll('.session-item').forEach(item => {
@@ -1791,8 +1929,8 @@ function getConnectorReportScript(): string {
         '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd></div>' +
-        '    <div class="rpc-info-item"><dt>Req Size</dt><dd>' + formatBytes(rpc.request.size) + '</dd></div>' +
-        '    <div class="rpc-info-item"><dt>Res Size</dt><dd>' + formatBytes(rpc.response.size) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Request</dt><dd>' + escapeHtml(rpc.request_ts) + '</dd></div>' +
+        '    <div class="rpc-info-item"><dt>Response</dt><dd>' + escapeHtml(rpc.response_ts || '-') + '</dd></div>' +
         '  </div>' +
         '</div>' +
         '<div class="detail-section">' +
@@ -1854,16 +1992,46 @@ function getConnectorReportScript(): string {
       });
     });
 
-    // Keyboard navigation
+    // Keyboard navigation (handles both RPC and Events views)
     document.addEventListener('keydown', (e) => {
       if (!currentSessionId) return;
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
 
-      const report = sessionReports[currentSessionId];
-      if (!report) return;
+      e.preventDefault();
+      const sessionContent = document.querySelector('.session-content[data-session-id="' + currentSessionId + '"]');
+      if (!sessionContent) return;
 
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
+      // Check which view is active
+      if (currentViewMode === 'events') {
+        // Events navigation
+        const eventRows = sessionContent.querySelectorAll('.event-row');
+        if (eventRows.length === 0) return;
+
+        let newIdx = currentEventIdx;
+        if (currentEventIdx === null) {
+          newIdx = 0;
+        } else if (e.key === 'ArrowDown' && currentEventIdx < eventRows.length - 1) {
+          newIdx = currentEventIdx + 1;
+        } else if (e.key === 'ArrowUp' && currentEventIdx > 0) {
+          newIdx = currentEventIdx - 1;
+        }
+
+        if (newIdx !== currentEventIdx) {
+          currentEventIdx = newIdx;
+          // Update selection visually
+          eventRows.forEach((r, i) => r.classList.toggle('selected', i === newIdx));
+          // Scroll into view
+          eventRows[newIdx].scrollIntoView({ block: 'nearest' });
+          // Trigger click to show detail (if has payload)
+          eventRows[newIdx].click();
+        }
+      } else {
+        // RPC navigation
+        const report = sessionReports[currentSessionId];
+        if (!report) return;
         const rpcs = report.rpcs;
+        if (rpcs.length === 0) return;
+
         if (currentRpcIdx === null && rpcs.length > 0) {
           showRpcDetail(currentSessionId, 0);
           return;
@@ -1874,11 +2042,8 @@ function getConnectorReportScript(): string {
           showRpcDetail(currentSessionId, currentRpcIdx - 1);
         }
         // Scroll selected row into view
-        const sessionContent = document.querySelector('.session-content[data-session-id="' + currentSessionId + '"]');
-        if (sessionContent) {
-          const row = sessionContent.querySelector('.rpc-row.selected');
-          if (row) row.scrollIntoView({ block: 'nearest' });
-        }
+        const row = sessionContent.querySelector('.rpc-row.selected');
+        if (row) row.scrollIntoView({ block: 'nearest' });
       }
     });
 
@@ -1944,6 +2109,225 @@ function getConnectorReportScript(): string {
     } else if (sessions.length > 0) {
       showSession(sessions[0].session_id);
     }
+
+    // Events View toggle and data loading (Issue #59)
+    (function() {
+      // Cache for loaded events
+      const eventsCache = {};
+
+      // Event kind display labels
+      const kindLabels = {
+        request: 'REQ',
+        response: 'RES',
+        notification: 'NOTIF',
+        transport_event: 'TRANS'
+      };
+
+      // Format time for events table
+      function formatEventTime(ts) {
+        try {
+          const date = new Date(ts);
+          return date.toISOString().split('T')[1].slice(0, 12);
+        } catch {
+          return ts;
+        }
+      }
+
+      // Render events table
+      function renderEventsTable(events) {
+        if (!events || events.length === 0) {
+          return '<div class="events-loading">No events in this session</div>';
+        }
+
+        const rows = events.map(function(event, idx) {
+          const dirClass = event.direction === 'client_to_server' ? 'outgoing' : 'incoming';
+          // Large arrows with tooltip: ⇨ (blue) = Client→Server, ⇦ (green) = Server→Client
+          const dirArrow = event.direction === 'client_to_server' ? '\\u21E8' : '\\u21E6';
+          const dirTooltip = event.direction === 'client_to_server'
+            ? 'Client \\u2192 Server'
+            : 'Server \\u2192 Client';
+          const kindClass = 'badge-kind-' + event.kind;
+          const kindLabel = kindLabels[event.kind] || event.kind;
+          // Method/Summary fallback: method > summary > payload_type (e.g., "connected")
+          const method = event.method || event.summary || event.payload_type || '';
+          const timeStr = formatEventTime(event.ts);
+          const hasPayload = event.has_payload ? '\\u2713' : '';
+
+          return '<tr class="event-row" data-event-idx="' + idx + '" data-event-id="' + escapeHtml(event.event_id) + '">' +
+            '<td>' + timeStr + '</td>' +
+            '<td><span class="direction-arrow ' + dirClass + '" title="' + dirTooltip + '">' + dirArrow + '</span></td>' +
+            '<td><span class="badge ' + kindClass + '">' + kindLabel + '</span></td>' +
+            '<td>' + escapeHtml(method) + '</td>' +
+            '<td>' + hasPayload + '</td>' +
+            '</tr>';
+        }).join('');
+
+        return '<table class="events-table">' +
+          '<thead><tr>' +
+            '<th>Time</th>' +
+            '<th>Dir</th>' +
+            '<th>Kind</th>' +
+            '<th>Method/Summary</th>' +
+            '<th>Data</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+          '</table>';
+      }
+
+      // Load events for a session
+      function loadEvents(sessionId, eventsList) {
+        if (eventsCache[sessionId]) {
+          eventsList.innerHTML = renderEventsTable(eventsCache[sessionId]);
+          // Attach click handlers even when using cached data
+          attachEventRowHandlers(eventsList, sessionId, eventsCache[sessionId]);
+          return;
+        }
+
+        // Check if we're in offline mode (static HTML) or live server
+        // Try to fetch from API, fallback to "no data" message
+        eventsList.innerHTML = '<div class="events-loading">Loading events...</div>';
+
+        fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/events')
+          .then(function(res) {
+            if (!res.ok) throw new Error('API not available');
+            return res.json();
+          })
+          .then(function(data) {
+            eventsCache[sessionId] = data.events;
+            eventsList.innerHTML = renderEventsTable(data.events);
+            // Attach click handlers for event rows
+            attachEventRowHandlers(eventsList, sessionId, data.events);
+          })
+          .catch(function() {
+            eventsList.innerHTML = '<div class="events-loading">Events data not available (API offline)</div>';
+          });
+      }
+
+      // Attach click handlers for event rows
+      function attachEventRowHandlers(eventsList, sessionId, events) {
+        eventsList.querySelectorAll('.event-row').forEach(function(row) {
+          row.addEventListener('click', function() {
+            const idx = parseInt(row.dataset.eventIdx);
+            const event = events[idx];
+            if (!event || !event.has_payload) return;
+
+            // Clear previous selection
+            eventsList.querySelectorAll('.event-row').forEach(function(r) {
+              r.classList.remove('selected');
+            });
+            row.classList.add('selected');
+
+            // Show event detail in right pane
+            showEventDetail(sessionId, event);
+          });
+        });
+      }
+
+      // Show event detail in right pane (2-column layout like RPC Inspector)
+      function showEventDetail(sessionId, event) {
+        const sessionContent = document.querySelector('.session-content[data-session-id="' + sessionId + '"]');
+        if (!sessionContent) return;
+
+        const rightPane = sessionContent.querySelector('.right-pane');
+        if (!rightPane) return;
+
+        // Fetch full event detail
+        fetch('/api/events/' + encodeURIComponent(event.event_id))
+          .then(function(res) {
+            if (!res.ok) throw new Error('Event not found');
+            return res.json();
+          })
+          .then(function(data) {
+            const evt = data.event;
+            const kindClass = 'badge-kind-' + evt.kind;
+            const dirClass = evt.direction === 'client_to_server' ? 'outgoing' : 'incoming';
+            // Large arrows with tooltip: ⇨ (blue) = Client→Server, ⇦ (green) = Server→Client
+            const dirArrow = evt.direction === 'client_to_server' ? '\\u21E8' : '\\u21E6';
+            const dirTooltip = evt.direction === 'client_to_server'
+              ? 'Client \\u2192 Server'
+              : 'Server \\u2192 Client';
+            const method = evt.method || evt.summary || '(unknown)';
+            const rawJson = evt.raw_json ? JSON.parse(evt.raw_json) : null;
+            const formattedJson = rawJson ? JSON.stringify(rawJson, null, 2) : '(no data)';
+
+            // Build summary section
+            var summaryHtml = '<div class="summary-row summary-header">Event Info</div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Kind</span><span class="summary-prop-value"><span class="badge ' + kindClass + '">' + evt.kind + '</span></span></div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Direction</span><span class="summary-prop-value"><span class="direction-arrow ' + dirClass + '" title="' + dirTooltip + '">' + dirArrow + '</span> ' + dirTooltip + '</span></div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Method</span><span class="summary-prop-value">' + escapeHtml(method) + '</span></div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Timestamp</span><span class="summary-prop-value">' + escapeHtml(evt.ts) + '</span></div>';
+            if (evt.seq !== null) {
+              summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Sequence</span><span class="summary-prop-value">' + evt.seq + '</span></div>';
+            }
+
+            // If JSON has recognizable structure, add more summary
+            if (rawJson) {
+              if (rawJson.method) {
+                summaryHtml += '<div class="summary-row summary-header" style="margin-top: 12px;">JSON-RPC</div>';
+                summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">method</span><span class="summary-prop-value">' + escapeHtml(rawJson.method) + '</span></div>';
+              }
+              if (rawJson.id !== undefined) {
+                summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">id</span><span class="summary-prop-value">' + escapeHtml(String(rawJson.id)) + '</span></div>';
+              }
+              if (rawJson.error) {
+                summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">error</span><span class="summary-prop-value" style="color: var(--accent-red);">' + escapeHtml(JSON.stringify(rawJson.error)) + '</span></div>';
+              }
+            }
+
+            // 2-column layout: Summary (left) + Raw JSON (right)
+            rightPane.innerHTML =
+              '<div class="rpc-inspector">' +
+                '<div class="rpc-inspector-summary" style="flex: 0 0 280px; max-width: 320px;">' +
+                  '<div class="summary-container">' + summaryHtml + '</div>' +
+                '</div>' +
+                '<div class="rpc-inspector-raw" style="flex: 1; min-width: 0;">' +
+                  '<div class="rpc-raw-header">' +
+                    '<span class="rpc-raw-title">Payload</span>' +
+                  '</div>' +
+                  '<div class="rpc-raw-json"><pre><code>' + escapeHtml(formattedJson) + '</code></pre></div>' +
+                '</div>' +
+              '</div>';
+          })
+          .catch(function() {
+            rightPane.innerHTML = '<div class="detail-placeholder">Failed to load event detail</div>';
+          });
+      }
+
+      // Handle view toggle clicks
+      document.querySelectorAll('.view-toggle').forEach(function(toggle) {
+        const sessionContent = toggle.closest('.session-content');
+        if (!sessionContent) return;
+
+        const sessionId = sessionContent.dataset.sessionId;
+        const rpcList = sessionContent.querySelector('.rpc-list');
+        const eventsList = sessionContent.querySelector('.events-list');
+        const buttons = toggle.querySelectorAll('.view-toggle-btn');
+
+        buttons.forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const view = btn.dataset.view;
+
+            // Update current view mode
+            currentViewMode = view;
+
+            // Update button states
+            buttons.forEach(function(b) {
+              b.classList.toggle('active', b.dataset.view === view);
+            });
+
+            // Toggle lists
+            if (view === 'events') {
+              rpcList.classList.add('hidden');
+              eventsList.classList.add('active');
+              loadEvents(sessionId, eventsList);
+            } else {
+              rpcList.classList.remove('hidden');
+              eventsList.classList.remove('active');
+            }
+          });
+        });
+      });
+    })();
 
     // RPC Inspector script
     ${getRpcInspectorScript()}
@@ -2368,9 +2752,10 @@ function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
   return `
     <div class="session-item"
          data-session-id="${escapeHtml(session.session_id)}"
-         title="Session: ${session.session_id}&#10;Started: ${session.started_at}&#10;RPCs: ${session.rpc_count}&#10;Errors: ${session.error_count}">
+         title="Session: ${session.session_id}&#10;Started: ${session.started_at}&#10;RPCs: ${session.rpc_count}&#10;Events: ${session.event_count}&#10;Errors: ${session.error_count}">
       <span class="session-id">[${escapeHtml(session.short_id)}]</span>
       <span class="session-timestamp">${timestamp}</span>
+      <span class="session-counts"><span>R:${session.rpc_count}</span><span>E:${session.event_count}</span></span>
       <span class="session-latency">${latencyStr}</span>
       <span class="session-extra"></span>
     </div>`;
@@ -2450,6 +2835,14 @@ function renderSessionDetailContent(
               <dd><span class="badge">${totalLatencyDisplay}</span></dd>
             </dl>
           </div>
+          <div class="view-toggle">
+            <button class="view-toggle-btn active" data-view="rpc">
+              RPCs<span class="view-toggle-count">(${session.rpc_count})</span>
+            </button>
+            <button class="view-toggle-btn" data-view="events">
+              Events<span class="view-toggle-count">(${session.event_count})</span>
+            </button>
+          </div>
           <div class="rpc-list">
             <table class="rpc-table">
               <thead>
@@ -2465,6 +2858,9 @@ function renderSessionDetailContent(
 ${rpcRows}
               </tbody>
             </table>
+          </div>
+          <div class="events-list">
+            <div class="events-loading">Loading events...</div>
           </div>
         </div>
         <div class="resize-handle"></div>

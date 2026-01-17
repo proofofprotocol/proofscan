@@ -1142,7 +1142,6 @@ export function getRpcInspectorStyles(): string {
 
     .rpc-inspector-raw {
       flex: 1;
-      max-width: var(--raw-pane-max-width, 480px);
       display: flex;
       flex-direction: column;
       min-width: 0;

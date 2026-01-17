@@ -9,6 +9,11 @@ import {
   getPoplEntry,
   getPoplEntriesByConnector,
 } from '../data/popl.js';
+import {
+  getEventsBySession,
+  getEventDetail,
+  getEventCountsByKind,
+} from '../data/events.js';
 
 export const apiRoutes = new Hono<MonitorEnv>();
 
@@ -117,4 +122,43 @@ apiRoutes.get('/popl/:proof_id/download', async (c) => {
   c.header('Content-Type', 'application/json');
   c.header('Content-Disposition', `attachment; filename="${proofId}.json"`);
   return c.body(jsonContent);
+});
+
+// =============================================================================
+// Events API (Issue #59)
+// =============================================================================
+
+// GET /api/sessions/:id/events - Get all events for a session
+apiRoutes.get('/sessions/:id/events', (c) => {
+  const sessionId = c.req.param('id');
+  const configPath = c.get('configPath');
+  const limit = parseInt(c.req.query('limit') ?? '1000', 10);
+
+  const events = getEventsBySession(configPath, sessionId, { limit });
+  const counts = getEventCountsByKind(configPath, sessionId);
+
+  return c.json({
+    generated_at: new Date().toISOString(),
+    session_id: sessionId,
+    total: events.length,
+    counts,
+    events,
+  });
+});
+
+// GET /api/events/:id - Get event detail with raw JSON
+apiRoutes.get('/events/:id', (c) => {
+  const eventId = c.req.param('id');
+  const configPath = c.get('configPath');
+
+  const event = getEventDetail(configPath, eventId);
+
+  if (!event) {
+    return c.json({ error: 'Event not found', event_id: eventId }, 404);
+  }
+
+  return c.json({
+    generated_at: new Date().toISOString(),
+    event,
+  });
 });
