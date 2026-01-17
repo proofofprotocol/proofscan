@@ -8,6 +8,8 @@ import {
   renderJsonWithPaths,
   renderMethodSummary,
   renderSummaryRowsHtml,
+  detectSensitiveKeys,
+  hasSensitiveContent,
 } from './rpc-inspector.js';
 
 describe('escapeJsonPointer', () => {
@@ -369,5 +371,135 @@ describe('renderSummaryRowsHtml', () => {
     // Should contain escaped versions
     expect(html).toContain('&lt;script&gt;');
     expect(html).toContain('&lt;img');
+  });
+});
+
+describe('detectSensitiveKeys', () => {
+  it('should detect authorization header', () => {
+    const json = { headers: { authorization: 'Bearer xxx' } };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('headers.authorization');
+  });
+
+  it('should detect api_key and api-key variations', () => {
+    const json = { api_key: 'xxx', config: { 'api-key': 'yyy' } };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('api_key');
+    expect(keys).toContain('config.api-key');
+  });
+
+  it('should detect token and access_token', () => {
+    const json = { token: 'xxx', auth: { access_token: 'yyy', refresh_token: 'zzz' } };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('token');
+    expect(keys).toContain('auth.access_token');
+    expect(keys).toContain('auth.refresh_token');
+  });
+
+  it('should detect password and secret', () => {
+    const json = { password: 'xxx', db: { secret: 'yyy' } };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('password');
+    expect(keys).toContain('db.secret');
+  });
+
+  it('should detect private_key and credential', () => {
+    const json = { private_key: 'xxx', credential: 'yyy' };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('private_key');
+    expect(keys).toContain('credential');
+  });
+
+  it('should detect bearer and signature', () => {
+    const json = { bearer: 'xxx', signature: 'yyy' };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('bearer');
+    expect(keys).toContain('signature');
+  });
+
+  it('should detect session_id and cookie', () => {
+    const json = { session_id: 'xxx', cookie: 'yyy' };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('session_id');
+    expect(keys).toContain('cookie');
+  });
+
+  it('should detect auth-related keys case-insensitively', () => {
+    const json = { Authorization: 'xxx', API_KEY: 'yyy', Token: 'zzz' };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('Authorization');
+    expect(keys).toContain('API_KEY');
+    expect(keys).toContain('Token');
+  });
+
+  it('should traverse nested objects', () => {
+    const json = {
+      level1: {
+        level2: {
+          level3: {
+            secret: 'hidden',
+          },
+        },
+      },
+    };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('level1.level2.level3.secret');
+  });
+
+  it('should traverse arrays', () => {
+    const json = {
+      items: [
+        { name: 'safe' },
+        { password: 'hidden' },
+        { api_key: 'xxx' },
+      ],
+    };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('items[1].password');
+    expect(keys).toContain('items[2].api_key');
+  });
+
+  it('should return empty array for safe data', () => {
+    const json = { name: 'test', value: 123, items: ['a', 'b'] };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toEqual([]);
+  });
+
+  it('should handle null and undefined', () => {
+    expect(detectSensitiveKeys(null)).toEqual([]);
+    expect(detectSensitiveKeys(undefined)).toEqual([]);
+  });
+
+  it('should handle primitive values', () => {
+    expect(detectSensitiveKeys('string')).toEqual([]);
+    expect(detectSensitiveKeys(123)).toEqual([]);
+    expect(detectSensitiveKeys(true)).toEqual([]);
+  });
+
+  it('should handle empty object and array', () => {
+    expect(detectSensitiveKeys({})).toEqual([]);
+    expect(detectSensitiveKeys([])).toEqual([]);
+  });
+});
+
+describe('hasSensitiveContent', () => {
+  it('should return true when sensitive keys exist', () => {
+    const json = { authorization: 'Bearer xxx' };
+    expect(hasSensitiveContent(json)).toBe(true);
+  });
+
+  it('should return false when no sensitive keys exist', () => {
+    const json = { name: 'test', value: 123 };
+    expect(hasSensitiveContent(json)).toBe(false);
+  });
+
+  it('should return false for null/undefined', () => {
+    expect(hasSensitiveContent(null)).toBe(false);
+    expect(hasSensitiveContent(undefined)).toBe(false);
+  });
+
+  it('should detect nested sensitive content', () => {
+    const json = { config: { db: { password: 'xxx' } } };
+    expect(hasSensitiveContent(json)).toBe(true);
   });
 });

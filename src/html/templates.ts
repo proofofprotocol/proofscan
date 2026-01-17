@@ -27,10 +27,10 @@ import {
   getRpcInspectorStyles,
   getRpcInspectorScript,
   renderJsonWithPaths,
-  renderMethodSummary,
   renderRequestSummary,
   renderResponseSummary,
   renderSummaryRowsHtml,
+  detectSensitiveKeys,
 } from './rpc-inspector.js';
 
 /**
@@ -134,6 +134,21 @@ function getRpcReportStyles(): string {
     .badge.status-OK { border-color: var(--status-ok); color: var(--status-ok); }
     .badge.status-ERR { border-color: var(--status-err); color: var(--status-err); }
     .badge.status-PENDING { border-color: var(--status-pending); color: var(--status-pending); }
+    /* Sensitive content warning badge (Phase 12.x-c) */
+    .sensitive-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      margin-left: 8px;
+      background: rgba(210, 153, 34, 0.15);
+      border: 1px solid rgba(210, 153, 34, 0.3);
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #d29922;
+      vertical-align: middle;
+    }
     .section {
       background: var(--bg-secondary);
       border-radius: 8px;
@@ -261,6 +276,21 @@ function getSessionReportStyles(): string {
     .badge.status-OK { border-color: var(--status-ok); color: var(--status-ok); }
     .badge.status-ERR { border-color: var(--status-err); color: var(--status-err); }
     .badge.status-PENDING { border-color: var(--status-pending); color: var(--status-pending); }
+    /* Sensitive content warning badge (Phase 12.x-c) */
+    .sensitive-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      margin-left: 8px;
+      background: rgba(210, 153, 34, 0.15);
+      border: 1px solid rgba(210, 153, 34, 0.3);
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #d29922;
+      vertical-align: middle;
+    }
     /* Two-pane layout */
     .container {
       display: flex;
@@ -502,12 +532,18 @@ function getSessionReportScript(): string {
       const requestRawHtml = rpc._requestRawHtml || '<span class="json-null">(no data)</span>';
       const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
 
+      // Sensitive content warning badge (Phase 12.x-c)
+      const sensitiveKeys = rpc._sensitiveKeys || [];
+      const sensitiveBadge = rpc._hasSensitive
+        ? '<span class="sensitive-badge" title="Contains sensitive keys: ' + sensitiveKeys.slice(0, 5).join(', ') + (sensitiveKeys.length > 5 ? '...' : '') + '">⚠ Sensitive</span>'
+        : '';
+
       // Determine default target based on method (response-focused methods default to response)
       const defaultTarget = (rpc.method === 'tools/list' || rpc.method === 'initialize' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
 
       rightPane.innerHTML =
         '<div class="detail-section">' +
-        '  <h2>RPC Info</h2>' +
+        '  <h2>RPC Info' + sensitiveBadge + '</h2>' +
         '  <div class="rpc-info-grid">' +
         '    <div class="rpc-info-item"><dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
@@ -762,15 +798,22 @@ export function generateSessionHtml(report: HtmlSessionReportV1): string {
 
   // Pre-render summary and raw JSON HTML for each RPC (for RPC Inspector)
   // Now generates separate request/response summaries for Req/Res toggle
+  // Also detect sensitive content for warning badge (Phase 12.x-c)
   const rpcsWithInspectorHtml = rpcs.map((rpc) => {
     const requestSummaryRows = renderRequestSummary(rpc.method, rpc.request.json);
     const responseSummaryRows = renderResponseSummary(rpc.method, rpc.response.json);
+    // Detect sensitive keys in request/response
+    const reqSensitiveKeys = detectSensitiveKeys(rpc.request.json);
+    const resSensitiveKeys = detectSensitiveKeys(rpc.response.json);
+    const hasSensitive = reqSensitiveKeys.length > 0 || resSensitiveKeys.length > 0;
     return {
       ...rpc,
       _requestSummaryHtml: renderSummaryRowsHtml(requestSummaryRows),
       _responseSummaryHtml: renderSummaryRowsHtml(responseSummaryRows),
       _requestRawHtml: renderJsonWithPaths(rpc.request.json, '#'),
       _responseRawHtml: renderJsonWithPaths(rpc.response.json, '#'),
+      _hasSensitive: hasSensitive,
+      _sensitiveKeys: [...reqSensitiveKeys, ...resSensitiveKeys],
     };
   });
 
@@ -1023,6 +1066,21 @@ function getConnectorReportStyles(): string {
     .badge.status-PENDING { border-color: var(--status-pending); color: var(--status-pending); }
     .badge.cap-enabled { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(0, 212, 255, 0.1); }
     .badge.cap-disabled { border-color: var(--border-color); color: var(--text-secondary); background: transparent; opacity: 0.5; }
+    /* Sensitive content warning badge (Phase 12.x-c) */
+    .sensitive-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      margin-left: 8px;
+      background: rgba(210, 153, 34, 0.15);
+      border: 1px solid rgba(210, 153, 34, 0.3);
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #d29922;
+      vertical-align: middle;
+    }
 
     /* Connector info cards container (side by side) */
     .connector-info-cards {
@@ -1708,12 +1766,18 @@ function getConnectorReportScript(): string {
       const requestRawHtml = rpc._requestRawHtml || '<span class="json-null">(no data)</span>';
       const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
 
+      // Sensitive content warning badge (Phase 12.x-c)
+      const sensitiveKeys = rpc._sensitiveKeys || [];
+      const sensitiveBadge = rpc._hasSensitive
+        ? '<span class="sensitive-badge" title="Contains sensitive keys: ' + sensitiveKeys.slice(0, 5).join(', ') + (sensitiveKeys.length > 5 ? '...' : '') + '">\\u26A0 Sensitive</span>'
+        : '';
+
       // Determine default target based on method (response-focused methods default to response)
       const defaultTarget = (rpc.method === 'tools/list' || rpc.method === 'initialize' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
 
       rightPane.innerHTML =
         '<div class="detail-section">' +
-        '  <h2>RPC Info</h2>' +
+        '  <h2>RPC Info' + sensitiveBadge + '</h2>' +
         '  <div class="rpc-info-grid">' +
         '    <div class="rpc-info-item"><dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd></div>' +
         '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
@@ -2477,12 +2541,18 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
       rpcs: sessionReport.rpcs.map((rpc) => {
         const requestSummaryRows = renderRequestSummary(rpc.method, rpc.request.json);
         const responseSummaryRows = renderResponseSummary(rpc.method, rpc.response.json);
+        // Detect sensitive keys in request/response (Phase 12.x-c)
+        const reqSensitiveKeys = detectSensitiveKeys(rpc.request.json);
+        const resSensitiveKeys = detectSensitiveKeys(rpc.response.json);
+        const hasSensitive = reqSensitiveKeys.length > 0 || resSensitiveKeys.length > 0;
         return {
           ...rpc,
           _requestSummaryHtml: renderSummaryRowsHtml(requestSummaryRows),
           _responseSummaryHtml: renderSummaryRowsHtml(responseSummaryRows),
           _requestRawHtml: renderJsonWithPaths(rpc.request.json, '#'),
           _responseRawHtml: renderJsonWithPaths(rpc.response.json, '#'),
+          _hasSensitive: hasSensitive,
+          _sensitiveKeys: [...reqSensitiveKeys, ...resSensitiveKeys],
         };
       }),
     };
