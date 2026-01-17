@@ -92,12 +92,17 @@ apiRoutes.get('/popl/:proof_id/download', async (c) => {
   }
 
   if (format === 'yaml') {
-    // Dynamic import of yaml package
-    const { stringify } = await import('yaml');
-    const yamlContent = stringify(entry);
-    c.header('Content-Type', 'application/x-yaml');
-    c.header('Content-Disposition', `attachment; filename="${proofId}.yaml"`);
-    return c.body(yamlContent);
+    try {
+      // Dynamic import of yaml package
+      const { stringify } = await import('yaml');
+      const yamlContent = stringify(entry);
+      c.header('Content-Type', 'application/x-yaml');
+      c.header('Content-Disposition', `attachment; filename="${proofId}.yaml"`);
+      return c.body(yamlContent);
+    } catch (err) {
+      console.error('YAML serialization failed:', err);
+      return c.json({ error: 'YAML serialization failed' }, 500);
+    }
   }
 
   // Default to JSON
