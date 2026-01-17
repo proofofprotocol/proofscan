@@ -30,7 +30,7 @@ export function renderHomePage(data: MonitorHomeData): string {
     <section class="section">
       <div class="overview-row">
         <div class="overview-panel popl-summary">
-          <div class="section-title">POPL Summary</div>
+          <div class="section-title">Ledger Summary</div>
           ${poplPanel}
         </div>
         <div class="overview-panel activity-overview">
@@ -66,12 +66,15 @@ export function renderHomePage(data: MonitorHomeData): string {
     </section>
   `;
 
+  // Add modal HTML to content
+  const contentWithModal = content + getLedgerModalHtml();
+
   return renderLayout({
     title: 'ProofScan Monitor',
     generatedAt: data.generated_at,
-    content,
+    content: contentWithModal,
     extraStyles: getHomeStyles(),
-    scripts: getFilterScript(),
+    scripts: getFilterScript() + getLedgerModalScript(),
   });
 }
 
@@ -84,6 +87,7 @@ ${getPoplPanelStyles()}
 ${getConnectorCardStyles()}
 ${getAnalyticsStyles()}
 ${getOverviewRowStyles()}
+${getPoplDetailStyles()}
 
     .section-header {
       display: flex;
@@ -332,6 +336,441 @@ function getFilterScript(): string {
       applyFilters();
     });
   });
+})();
+  `;
+}
+
+/**
+ * Get POPL detail styles for modal content
+ */
+function getPoplDetailStyles(): string {
+  return `
+    /* Trust Badge */
+    .trust-badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .trust-level-0 {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+    .trust-level-1 {
+      background: rgba(63, 185, 80, 0.15);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+      color: var(--accent-green);
+    }
+    .trust-level-2 {
+      background: rgba(0, 212, 255, 0.15);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      color: var(--accent-blue);
+    }
+    .trust-level-3 {
+      background: rgba(255, 215, 0, 0.15);
+      border: 1px solid rgba(255, 215, 0, 0.3);
+      color: #ffd700;
+    }
+
+    /* Source Table */
+    .source-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .source-table th,
+    .source-table td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .source-table tr:last-child th,
+    .source-table tr:last-child td {
+      border-bottom: none;
+    }
+    .source-table th {
+      width: 120px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 12px;
+    }
+    .source-link {
+      color: var(--accent-blue);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .source-link:hover {
+      text-decoration: underline;
+    }
+    .source-link code {
+      font-family: 'SF Mono', Consolas, monospace;
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .session-full {
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-left: 4px;
+    }
+    .no-session {
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+    .badge-kind {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+    }
+
+    /* Capture Table */
+    .capture-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .capture-table th,
+    .capture-table td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .capture-table tr:last-child th,
+    .capture-table tr:last-child td {
+      border-bottom: none;
+    }
+    .capture-table th {
+      width: 120px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 12px;
+    }
+    .capture-stat {
+      font-family: 'SF Mono', Consolas, monospace;
+      font-weight: 600;
+      color: var(--accent-blue);
+    }
+    .capture-stat.stat-error {
+      color: var(--accent-red);
+    }
+
+    /* Artifacts Table */
+    .artifacts-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .artifacts-table th,
+    .artifacts-table td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .artifacts-table th {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .artifacts-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .artifact-name {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .artifact-path {
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .artifact-sha256 {
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .artifact-link {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+    .artifact-link:hover {
+      text-decoration: underline;
+    }
+    .no-artifacts {
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+
+    /* POPL Detail Sections */
+    .popl-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .popl-header-main h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0 0 4px 0;
+    }
+    .popl-entry-id {
+      font-family: 'SF Mono', Consolas, monospace;
+      color: var(--accent-blue);
+    }
+    .popl-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin: 0;
+    }
+    .detail-section {
+      margin-bottom: 24px;
+    }
+    .detail-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+  `;
+}
+
+/**
+ * Get Ledger modal HTML structure
+ */
+function getLedgerModalHtml(): string {
+  return `
+<div class="modal-overlay" id="ledgerModal">
+  <div class="modal-container">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span>Ledger Entry:</span>
+        <span class="modal-entry-id" id="modalEntryId"></span>
+      </div>
+      <div class="modal-actions">
+        <div style="position: relative;">
+          <button class="modal-menu-btn" id="modalMenuBtn">⋮</button>
+          <div class="modal-dropdown" id="modalDropdown">
+            <a class="modal-dropdown-item" id="modalOpenNew" target="_blank">
+              <span>↗</span> Open in new window
+            </a>
+            <div class="modal-dropdown-divider"></div>
+            <button class="modal-dropdown-item" id="modalDownloadJson">
+              <span>↓</span> Download JSON
+            </button>
+            <button class="modal-dropdown-item" id="modalDownloadYaml">
+              <span>↓</span> Download YAML
+            </button>
+            <div class="modal-dropdown-divider"></div>
+            <button class="modal-dropdown-item" id="modalCopyLink">
+              <span>🔗</span> Copy link
+            </button>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="modalCloseBtn">×</button>
+      </div>
+    </div>
+    <div class="modal-content" id="modalContent">
+      <!-- Loaded dynamically -->
+    </div>
+  </div>
+</div>`;
+}
+
+/**
+ * Get Ledger modal JavaScript
+ */
+function getLedgerModalScript(): string {
+  return `
+(function() {
+  var currentLedgerId = null;
+  var modal = document.getElementById('ledgerModal');
+  var modalContent = document.getElementById('modalContent');
+  var modalEntryId = document.getElementById('modalEntryId');
+  var modalOpenNew = document.getElementById('modalOpenNew');
+  var modalMenuBtn = document.getElementById('modalMenuBtn');
+  var modalDropdown = document.getElementById('modalDropdown');
+  var modalCloseBtn = document.getElementById('modalCloseBtn');
+  var modalCopyLink = document.getElementById('modalCopyLink');
+  var modalDownloadJson = document.getElementById('modalDownloadJson');
+  var modalDownloadYaml = document.getElementById('modalDownloadYaml');
+
+  if (!modal) return;
+
+  // Open modal
+  function openLedgerModal(ledgerId, options) {
+    options = options || {};
+
+    // Prevent duplicate opens
+    if (currentLedgerId === ledgerId) return;
+
+    currentLedgerId = ledgerId;
+
+    // Update URL (skip if from popstate to avoid loop)
+    if (!options.fromPopstate) {
+      var url = new URL(window.location.href);
+      url.searchParams.set('ledger', ledgerId);
+      history.pushState({ ledger: ledgerId }, '', url);
+    }
+
+    // Load content via fetch
+    fetch('/popl/' + encodeURIComponent(ledgerId))
+      .then(function(res) { return res.text(); })
+      .then(function(html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        // Try data-page="popl" first, then fallback to main
+        var main = doc.querySelector('main[data-page="popl"]') || doc.querySelector('main');
+        if (main) {
+          modalContent.innerHTML = main.innerHTML;
+          // Remove back link from modal content
+          var backLink = modalContent.querySelector('.back-link');
+          if (backLink) backLink.remove();
+        } else {
+          modalContent.innerHTML = '<div class="modal-error">Failed to load content</div>';
+        }
+      })
+      .catch(function() {
+        modalContent.innerHTML = '<div class="modal-error">Failed to load content</div>';
+      });
+
+    // Update modal UI
+    modalEntryId.textContent = ledgerId.slice(0, 12) + '...';
+    modalOpenNew.href = '/popl/' + encodeURIComponent(ledgerId);
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  // Close modal
+  function closeLedgerModal() {
+    if (!currentLedgerId) return;
+    currentLedgerId = null;
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+    modalDropdown.classList.remove('active');
+  }
+
+  // Close and update URL
+  function closeAndUpdateUrl() {
+    closeLedgerModal();
+    var url = new URL(window.location.href);
+    url.searchParams.delete('ledger');
+    history.pushState({}, '', url);
+  }
+
+  // Intercept clicks on ledger/POPL links (only entry pages, not artifacts)
+  document.addEventListener('click', function(e) {
+    var link = e.target.closest('a[href^="/popl/"]');
+    if (link) {
+      // Don't intercept target="_blank" links (Open in new window)
+      if (link.target === '_blank') return;
+
+      // Ctrl/Cmd+Click opens in new tab (don't intercept)
+      if (e.ctrlKey || e.metaKey) return;
+
+      // Check if this is a POPL entry link (not artifacts or other sub-paths)
+      // Format: /popl/{ULID} where ULID is 26 chars
+      var href = link.getAttribute('href');
+      var match = href.match(/^\/popl\/([^\/]+)$/);
+      if (!match) return; // Not a direct POPL entry link, let it navigate normally
+
+      var ledgerId = match[1].split('?')[0];
+      if (ledgerId) {
+        e.preventDefault();
+        openLedgerModal(decodeURIComponent(ledgerId), { fromPopstate: false });
+      }
+    }
+  });
+
+  // Close button
+  modalCloseBtn.addEventListener('click', closeAndUpdateUrl);
+
+  // Click outside modal (on overlay)
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) {
+      closeAndUpdateUrl();
+    }
+  });
+
+  // Escape key
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && modal.classList.contains('active')) {
+      closeAndUpdateUrl();
+    }
+  });
+
+  // Menu toggle
+  modalMenuBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    modalDropdown.classList.toggle('active');
+  });
+
+  // Close dropdown on outside click
+  document.addEventListener('click', function() {
+    modalDropdown.classList.remove('active');
+  });
+
+  // Copy link
+  modalCopyLink.addEventListener('click', function() {
+    navigator.clipboard.writeText(window.location.href).then(function() {
+      modalCopyLink.querySelector('span').textContent = '✓';
+      setTimeout(function() {
+        modalCopyLink.querySelector('span').textContent = '🔗';
+      }, 1500);
+    }).catch(function(err) {
+      console.error('Copy failed:', err);
+    });
+  });
+
+  // Download handlers
+  modalDownloadJson.addEventListener('click', function() {
+    if (currentLedgerId) {
+      window.location.href = '/api/popl/' + encodeURIComponent(currentLedgerId) + '/download?format=json';
+    }
+  });
+
+  modalDownloadYaml.addEventListener('click', function() {
+    if (currentLedgerId) {
+      window.location.href = '/api/popl/' + encodeURIComponent(currentLedgerId) + '/download?format=yaml';
+    }
+  });
+
+  // Handle browser back/forward
+  window.addEventListener('popstate', function() {
+    var params = new URLSearchParams(window.location.search);
+    var ledgerId = params.get('ledger');
+    if (ledgerId) {
+      openLedgerModal(ledgerId, { fromPopstate: true });
+    } else {
+      closeLedgerModal();
+    }
+  });
+
+  // Check URL on load for modal state
+  var params = new URLSearchParams(window.location.search);
+  var initialLedgerId = params.get('ledger');
+  if (initialLedgerId) {
+    openLedgerModal(initialLedgerId, { fromPopstate: true });
+  }
 })();
   `;
 }

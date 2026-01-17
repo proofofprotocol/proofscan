@@ -13,6 +13,7 @@ import type {
   MonitorConnectorCapabilities,
   ConnectorStatus,
   TransportType,
+  ProtocolTag,
 } from '../types.js';
 import { getPoplKpis } from './popl.js';
 import {
@@ -87,8 +88,8 @@ function buildConnectorCard(
   // Get recent sessions for status determination
   const recentSessions = eventsStore.getSessionsByConnector(connector.id, 5);
 
-  // Get server info from initialize response
-  const serverInfo = getServerInfo(db, connector.id);
+  // Get protocol and server info from initialize response
+  const protocolInfo = getProtocolInfo(db, connector.id);
 
   // Calculate KPIs
   const kpis = calculateKpis(db, connector.id);
@@ -104,8 +105,10 @@ function buildConnectorCard(
 
   return {
     connector_id: connector.id,
-    package_name: serverInfo?.name ?? connector.id,
-    package_version: serverInfo?.version ?? 'unknown',
+    package_name: protocolInfo?.name ?? connector.id,
+    package_version: protocolInfo?.version ?? 'unknown',
+    protocol: protocolInfo?.protocol ?? 'Unknown',
+    protocol_version: protocolInfo?.protocolVersion,
     status,
     enabled: connector.enabled,
     capabilities,
@@ -127,7 +130,7 @@ function buildOrphanConnectorCard(
   const db = getEventsDb(configDir);
 
   const recentSessions = eventsStore.getSessionsByConnector(connectorId, 5);
-  const serverInfo = getServerInfo(db, connectorId);
+  const protocolInfo = getProtocolInfo(db, connectorId);
   const kpis = calculateKpis(db, connectorId);
   const capabilities = detectCapabilities(db, connectorId);
   const status = determineStatus(recentSessions);
@@ -135,8 +138,10 @@ function buildOrphanConnectorCard(
 
   return {
     connector_id: connectorId,
-    package_name: serverInfo?.name ?? connectorId,
-    package_version: serverInfo?.version ?? 'unknown',
+    package_name: protocolInfo?.name ?? connectorId,
+    package_version: protocolInfo?.version ?? 'unknown',
+    protocol: protocolInfo?.protocol ?? 'Unknown',
+    protocol_version: protocolInfo?.protocolVersion,
     status,
     enabled: false, // Not in config = disabled
     capabilities,
@@ -163,39 +168,89 @@ function getOrphanConnectorIds(
 }
 
 /**
- * Get server info from latest initialize response
+ * Protocol and server info from initialize response
  */
-function getServerInfo(
+interface ProtocolInfo {
+  name: string;
+  version: string;
+  protocol: ProtocolTag;
+  protocolVersion?: string;
+}
+
+/**
+ * Get protocol and server info from latest initialize response
+ * Detection rules:
+ * - MCP: Has initialize RPC with serverInfo in response (typical MCP pattern)
+ * - A2A: Placeholder for Agent-to-Agent detection (future)
+ * - JSON-RPC: Has RPC calls but no MCP evidence
+ * - Unknown: No observed traffic to determine
+ */
+function getProtocolInfo(
   db: ReturnType<typeof getEventsDb>,
   connectorId: string
-): { name: string; version: string } | null {
-  const stmt = db.prepare(`
+): ProtocolInfo | null {
+  // Check for initialize response with serverInfo (MCP pattern)
+  // NOTE: rpc_calls has composite PK (rpc_id, session_id), so we must join on both
+  // to avoid cross-connector data leakage
+  const initStmt = db.prepare(`
     SELECT e.raw_json
     FROM events e
     JOIN sessions s ON e.session_id = s.session_id
-    JOIN rpc_calls r ON e.rpc_id = r.rpc_id
+    JOIN rpc_calls r ON e.rpc_id = r.rpc_id AND r.session_id = s.session_id
     WHERE s.connector_id = ?
       AND r.method = 'initialize'
-      AND e.direction = 'server'
-      AND e.kind = 'result'
+      AND e.direction = 'server_to_client'
+      AND e.kind = 'response'
     ORDER BY e.ts DESC
     LIMIT 1
   `);
-  const row = stmt.get(connectorId) as { raw_json: string } | undefined;
-  if (!row?.raw_json) return null;
+  const initRow = initStmt.get(connectorId) as { raw_json: string } | undefined;
 
-  try {
-    const json = JSON.parse(row.raw_json);
-    const result = json.result;
-    if (result?.serverInfo) {
+  if (initRow?.raw_json) {
+    try {
+      const json = JSON.parse(initRow.raw_json);
+      const result = json.result;
+
+      // MCP detection: serverInfo with name is the key indicator
+      if (result?.serverInfo?.name) {
+        return {
+          name: result.serverInfo.name,
+          version: result.serverInfo.version ?? 'unknown',
+          protocol: 'MCP',
+          protocolVersion: result.protocolVersion,
+        };
+      }
+
+      // Has initialize response but no serverInfo - could be custom JSON-RPC
       return {
-        name: result.serverInfo.name ?? connectorId,
-        version: result.serverInfo.version ?? 'unknown',
+        name: connectorId,
+        version: 'unknown',
+        protocol: 'JSON-RPC',
       };
+    } catch {
+      // Parse error - fall through
     }
-  } catch {
-    // Ignore parse errors
   }
+
+  // Check if there are any RPC calls at all
+  const rpcStmt = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM rpc_calls r
+    JOIN sessions s ON r.session_id = s.session_id
+    WHERE s.connector_id = ?
+  `);
+  const rpcCount = (rpcStmt.get(connectorId) as { count: number }).count;
+
+  if (rpcCount > 0) {
+    // Has RPC traffic but no initialize response - generic JSON-RPC
+    return {
+      name: connectorId,
+      version: 'unknown',
+      protocol: 'JSON-RPC',
+    };
+  }
+
+  // No observed traffic
   return null;
 }
 

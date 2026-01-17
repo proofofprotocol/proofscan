@@ -79,3 +79,30 @@ apiRoutes.get('/popl/:proof_id', async (c) => {
     entry,
   });
 });
+
+// GET /api/popl/:proof_id/download - Download POPL entry as JSON or YAML
+apiRoutes.get('/popl/:proof_id/download', async (c) => {
+  const proofId = c.req.param('proof_id');
+  const format = c.req.query('format') ?? 'json';
+
+  const entry = await getPoplEntry(proofId);
+
+  if (!entry) {
+    return c.json({ error: 'POPL entry not found', proof_id: proofId }, 404);
+  }
+
+  if (format === 'yaml') {
+    // Dynamic import of yaml package
+    const { stringify } = await import('yaml');
+    const yamlContent = stringify(entry);
+    c.header('Content-Type', 'application/x-yaml');
+    c.header('Content-Disposition', `attachment; filename="${proofId}.yaml"`);
+    return c.body(yamlContent);
+  }
+
+  // Default to JSON
+  const jsonContent = JSON.stringify(entry, null, 2);
+  c.header('Content-Type', 'application/json');
+  c.header('Content-Disposition', `attachment; filename="${proofId}.json"`);
+  return c.body(jsonContent);
+});

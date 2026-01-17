@@ -41,17 +41,32 @@ export function createMonitorCommand(getConfigPath: () => string): Command {
         }
 
         // Keep server running until interrupted
-        await new Promise<void>((resolve) => {
-          const shutdown = () => {
-            console.log('\nShutting down monitor...');
-            server.close(() => {
-              console.log('Monitor stopped.');
-              resolve();
-            });
-          };
+        let shutdownRequested = false;
+        const shutdown = () => {
+          if (shutdownRequested) {
+            // Force exit on second Ctrl+C
+            console.log('\nForce exit.');
+            process.exit(0);
+          }
+          shutdownRequested = true;
+          console.log('\nShutting down monitor...');
+          server.close(() => {
+            console.log('Monitor stopped.');
+            process.exit(0);
+          });
+          // Force exit after timeout if close doesn't complete
+          setTimeout(() => {
+            console.log('Force exit after timeout.');
+            process.exit(0);
+          }, 3000);
+        };
 
-          process.on('SIGINT', shutdown);
-          process.on('SIGTERM', shutdown);
+        process.on('SIGINT', shutdown);
+        process.on('SIGTERM', shutdown);
+
+        // Keep process alive
+        await new Promise<void>(() => {
+          // This promise never resolves - we exit via the signal handlers
         });
       } catch (error) {
         console.error('Failed to start monitor:', error);

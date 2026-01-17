@@ -8,6 +8,15 @@
 export type ConnectorStatus = 'OK' | 'WARN' | 'ERR' | 'OFFLINE';
 
 /**
+ * Protocol tag based on observed traffic patterns
+ * - MCP: Model Context Protocol (serverInfo in initialize response)
+ * - A2A: Agent-to-Agent protocol (placeholder for future)
+ * - JSON-RPC: Generic JSON-RPC 2.0 without MCP evidence
+ * - Unknown: Cannot determine from observed traffic
+ */
+export type ProtocolTag = 'MCP' | 'A2A' | 'JSON-RPC' | 'Unknown';
+
+/**
  * Transport type for connector
  */
 export type TransportType = 'stdio' | 'sse' | 'http';
@@ -42,6 +51,10 @@ export interface MonitorConnectorCard {
   // Package identification (required)
   package_name: string; // serverInfo.name from initialize response
   package_version: string; // serverInfo.version ?? 'unknown'
+
+  // Protocol detection (fact-based)
+  protocol: ProtocolTag; // Detected from observed traffic
+  protocol_version?: string; // e.g., MCP protocolVersion if known
 
   // Status (independent states)
   status: ConnectorStatus; // Based on recent observations

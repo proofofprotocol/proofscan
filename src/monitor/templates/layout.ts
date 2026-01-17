@@ -129,6 +129,200 @@ export function getBaseStyles(): string {
     .badge-disabled { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
     .badge-capability { background: rgba(0, 212, 255, 0.1); color: var(--accent-blue); border: 1px solid rgba(0, 212, 255, 0.2); }
     .badge-transport { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+
+    /* Auto-refresh toggle */
+    .refresh-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 2px 4px;
+    }
+
+    .refresh-toggle .refresh-label {
+      font-size: 10px;
+      color: var(--text-secondary);
+      padding-left: 4px;
+    }
+
+    .refresh-toggle button {
+      background: transparent;
+      border: none;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .refresh-toggle button:hover {
+      color: var(--text-primary);
+    }
+
+    .refresh-toggle button.active {
+      background: rgba(0, 212, 255, 0.15);
+      color: var(--accent-blue);
+    }
+
+    /* External link indicator */
+    .external-link::after {
+      content: ' ↗';
+      font-size: 0.8em;
+      opacity: 0.7;
+    }
+
+    /* Modal Overlay */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(13, 17, 23, 0.85);
+      z-index: 1000;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .modal-container {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      max-width: 900px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+      margin-top: 40px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      background: var(--bg-secondary);
+      z-index: 1;
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-entry-id {
+      font-family: 'SF Mono', Consolas, monospace;
+      color: var(--accent-blue);
+    }
+
+    .modal-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+    }
+
+    .modal-menu-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .modal-menu-btn:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      padding: 4px 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    .modal-close-btn:hover {
+      color: var(--accent-red);
+    }
+
+    .modal-content {
+      padding: 20px;
+    }
+
+    /* Modal dropdown menu */
+    .modal-dropdown {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 4px 0;
+      min-width: 180px;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 2;
+    }
+
+    .modal-dropdown.active {
+      display: block;
+    }
+
+    .modal-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      color: var(--text-primary);
+      text-decoration: none;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+
+    .modal-dropdown-item:hover {
+      background: rgba(0, 212, 255, 0.1);
+      color: var(--accent-blue);
+    }
+
+    .modal-dropdown-divider {
+      height: 1px;
+      background: var(--border-color);
+      margin: 4px 0;
+    }
+
+    .modal-error {
+      padding: 24px;
+      text-align: center;
+      color: var(--accent-red);
+    }
   `;
 }
 
@@ -141,7 +335,9 @@ export function renderLayout(options: {
   content: string;
   extraStyles?: string;
   scripts?: string;
+  dataPage?: string;
 }): string {
+  const mainAttrs = options.dataPage ? ` data-page="${escapeHtml(options.dataPage)}"` : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -157,13 +353,21 @@ ${options.extraStyles ?? ''}
   <header class="header">
     <div class="header-title">ProofScan Monitor</div>
     <div class="header-meta">
+      <div class="refresh-toggle" id="refreshToggle">
+        <span class="refresh-label">Refresh:</span>
+        <button data-interval="0" class="active">OFF</button>
+        <button data-interval="5">5s</button>
+        <button data-interval="10">10s</button>
+        <button data-interval="30">30s</button>
+      </div>
       <span class="offline-badge">Offline</span>
       <span>Generated: ${formatTimestamp(options.generatedAt)}</span>
     </div>
   </header>
-  <main class="main">
+  <main class="main"${mainAttrs}>
 ${options.content}
   </main>
+<script>${getRefreshScript()}</script>
 ${options.scripts ? `<script>${options.scripts}</script>` : ''}
 </body>
 </html>`;
@@ -191,4 +395,54 @@ export function formatTimestamp(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+/**
+ * Get auto-refresh script
+ */
+function getRefreshScript(): string {
+  return `
+(function() {
+  let refreshInterval = null;
+  const toggle = document.getElementById('refreshToggle');
+  if (!toggle) return;
+
+  const buttons = toggle.querySelectorAll('button');
+
+  // Load saved interval from localStorage
+  const savedInterval = localStorage.getItem('proofscan-refresh-interval');
+  if (savedInterval) {
+    setRefreshInterval(parseInt(savedInterval, 10));
+  }
+
+  function setRefreshInterval(seconds) {
+    // Clear existing interval
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+      refreshInterval = null;
+    }
+
+    // Update button states
+    buttons.forEach(function(btn) {
+      btn.classList.toggle('active', parseInt(btn.dataset.interval, 10) === seconds);
+    });
+
+    // Save preference
+    localStorage.setItem('proofscan-refresh-interval', String(seconds));
+
+    // Set new interval if not OFF
+    if (seconds > 0) {
+      refreshInterval = setInterval(function() {
+        location.reload();
+      }, seconds * 1000);
+    }
+  }
+
+  buttons.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      setRefreshInterval(parseInt(btn.dataset.interval, 10));
+    });
+  });
+})();
+  `;
 }
