@@ -872,8 +872,9 @@ function getConnectorReportStyles(): string {
       --status-pending: #d29922;
       --border-color: #30363d;
       --link-color: #58a6ff;
-      --sessions-pane-width: 280px;
-      --left-pane-width: 420px;
+      --sessions-pane-width: 360px;
+      --left-pane-width: 480px;
+      --raw-pane-max-width: 480px;
     }
     * { box-sizing: border-box; }
     html, body {
