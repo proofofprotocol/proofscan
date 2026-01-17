@@ -1500,16 +1500,20 @@ function getConnectorReportStyles(): string {
       border: 1px solid var(--border-color);
     }
 
-    /* Event direction indicators */
-    .direction-indicator {
-      font-size: 10px;
-      color: var(--text-secondary);
+    /* Event direction badges */
+    .direction-badge {
+      font-size: 9px;
+      padding: 1px 4px;
     }
-    .direction-indicator.outgoing {
+    .direction-badge.outgoing {
+      background: rgba(0, 212, 255, 0.15);
       color: var(--accent-blue);
+      border: 1px solid rgba(0, 212, 255, 0.3);
     }
-    .direction-indicator.incoming {
+    .direction-badge.incoming {
+      background: rgba(63, 185, 80, 0.15);
       color: var(--accent-green);
+      border: 1px solid rgba(63, 185, 80, 0.3);
     }
 
     /* Events loading state */
@@ -2099,7 +2103,8 @@ function getConnectorReportScript(): string {
 
         const rows = events.map(function(event, idx) {
           const dirClass = event.direction === 'client_to_server' ? 'outgoing' : 'incoming';
-          const dirSymbol = event.direction === 'client_to_server' ? '\\u2192' : '\\u2190';
+          // More readable direction labels: OUT (client→server), IN (server→client)
+          const dirLabel = event.direction === 'client_to_server' ? 'OUT' : 'IN';
           const kindClass = 'badge-kind-' + event.kind;
           const kindLabel = kindLabels[event.kind] || event.kind;
           const method = event.method || event.summary || '-';
@@ -2108,7 +2113,7 @@ function getConnectorReportScript(): string {
 
           return '<tr class="event-row" data-event-idx="' + idx + '" data-event-id="' + escapeHtml(event.event_id) + '">' +
             '<td>' + timeStr + '</td>' +
-            '<td><span class="direction-indicator ' + dirClass + '">' + dirSymbol + '</span></td>' +
+            '<td><span class="badge direction-badge ' + dirClass + '">' + dirLabel + '</span></td>' +
             '<td><span class="badge ' + kindClass + '">' + kindLabel + '</span></td>' +
             '<td>' + escapeHtml(method) + '</td>' +
             '<td>' + hasPayload + '</td>' +
@@ -2174,7 +2179,7 @@ function getConnectorReportScript(): string {
         });
       }
 
-      // Show event detail in right pane
+      // Show event detail in right pane (2-column layout like RPC Inspector)
       function showEventDetail(sessionId, event) {
         const sessionContent = document.querySelector('.session-content[data-session-id="' + sessionId + '"]');
         if (!sessionContent) return;
@@ -2191,26 +2196,48 @@ function getConnectorReportScript(): string {
           .then(function(data) {
             const evt = data.event;
             const kindClass = 'badge-kind-' + evt.kind;
-            const dirLabel = evt.direction === 'client_to_server' ? 'Client \\u2192 Server' : 'Server \\u2192 Client';
+            const dirClass = evt.direction === 'client_to_server' ? 'outgoing' : 'incoming';
+            const dirLabel = evt.direction === 'client_to_server' ? 'OUT' : 'IN';
             const method = evt.method || evt.summary || '(unknown)';
             const rawJson = evt.raw_json ? JSON.parse(evt.raw_json) : null;
             const formattedJson = rawJson ? JSON.stringify(rawJson, null, 2) : '(no data)';
 
+            // Build summary section
+            var summaryHtml = '<div class="summary-row summary-header">Event Info</div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Kind</span><span class="summary-prop-value"><span class="badge ' + kindClass + '">' + evt.kind + '</span></span></div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Direction</span><span class="summary-prop-value"><span class="badge direction-badge ' + dirClass + '">' + dirLabel + '</span></span></div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Method</span><span class="summary-prop-value">' + escapeHtml(method) + '</span></div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Timestamp</span><span class="summary-prop-value">' + escapeHtml(evt.ts) + '</span></div>';
+            if (evt.seq !== null) {
+              summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Sequence</span><span class="summary-prop-value">' + evt.seq + '</span></div>';
+            }
+
+            // If JSON has recognizable structure, add more summary
+            if (rawJson) {
+              if (rawJson.method) {
+                summaryHtml += '<div class="summary-row summary-header" style="margin-top: 12px;">JSON-RPC</div>';
+                summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">method</span><span class="summary-prop-value">' + escapeHtml(rawJson.method) + '</span></div>';
+              }
+              if (rawJson.id !== undefined) {
+                summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">id</span><span class="summary-prop-value">' + escapeHtml(String(rawJson.id)) + '</span></div>';
+              }
+              if (rawJson.error) {
+                summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">error</span><span class="summary-prop-value" style="color: var(--accent-red);">' + escapeHtml(JSON.stringify(rawJson.error)) + '</span></div>';
+              }
+            }
+
+            // 2-column layout: Summary (left) + Raw JSON (right)
             rightPane.innerHTML =
-              '<div class="detail-section">' +
-                '<h3>Event Detail</h3>' +
-                '<dl style="display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.9em;">' +
-                  '<dt>Event ID</dt><dd><code>' + escapeHtml(evt.event_id) + '</code></dd>' +
-                  '<dt>Kind</dt><dd><span class="badge ' + kindClass + '">' + evt.kind + '</span></dd>' +
-                  '<dt>Direction</dt><dd>' + dirLabel + '</dd>' +
-                  '<dt>Method</dt><dd>' + escapeHtml(method) + '</dd>' +
-                  '<dt>Timestamp</dt><dd>' + escapeHtml(evt.ts) + '</dd>' +
-                  (evt.seq !== null ? '<dt>Sequence</dt><dd>' + evt.seq + '</dd>' : '') +
-                '</dl>' +
-              '</div>' +
-              '<div class="detail-section">' +
-                '<h3>Payload</h3>' +
-                '<pre><code>' + escapeHtml(formattedJson) + '</code></pre>' +
+              '<div class="rpc-inspector">' +
+                '<div class="rpc-inspector-summary" style="flex: 0 0 280px; max-width: 320px;">' +
+                  '<div class="summary-container">' + summaryHtml + '</div>' +
+                '</div>' +
+                '<div class="rpc-inspector-raw" style="flex: 1; min-width: 0;">' +
+                  '<div class="rpc-raw-header">' +
+                    '<span class="rpc-raw-title">Payload</span>' +
+                  '</div>' +
+                  '<div class="rpc-raw-json"><pre><code>' + escapeHtml(formattedJson) + '</code></pre></div>' +
+                '</div>' +
               '</div>';
           })
           .catch(function() {
