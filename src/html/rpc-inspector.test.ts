@@ -142,24 +142,26 @@ describe('renderMethodSummary', () => {
 
       const rows = renderMethodSummary('tools/list', {}, response);
 
-      // Should have header + 2 tool rows
-      expect(rows.length).toBe(3);
+      // Should have method header + tools header + 2 tool rows
+      expect(rows.length).toBe(4);
       expect(rows[0].type).toBe('header');
-      expect(rows[0].label).toBe('Tools (2)');
+      expect(rows[0].label).toBe('Method: tools/list');
+      expect(rows[1].type).toBe('header');
+      expect(rows[1].label).toBe('Tools (2)');
 
       // First tool
-      expect(rows[1].type).toBe('item');
-      expect(rows[1].label).toBe('read_file');
-      expect(rows[1].value).toBe('Read a file');
-      expect(rows[1].pointer).toEqual({
+      expect(rows[2].type).toBe('item');
+      expect(rows[2].label).toBe('read_file');
+      expect(rows[2].value).toBe('Read a file');
+      expect(rows[2].pointer).toEqual({
         target: 'response',
         path: '#/result/tools/0',
       });
 
       // Second tool
-      expect(rows[2].type).toBe('item');
-      expect(rows[2].label).toBe('write_file');
-      expect(rows[2].pointer).toEqual({
+      expect(rows[3].type).toBe('item');
+      expect(rows[3].label).toBe('write_file');
+      expect(rows[3].pointer).toEqual({
         target: 'response',
         path: '#/result/tools/1',
       });
@@ -187,12 +189,12 @@ describe('renderMethodSummary', () => {
 
       const rows = renderMethodSummary('tools/list', {}, response);
 
-      // Tool row should have children
-      expect(rows[1].children).toBeDefined();
-      expect(rows[1].children!.length).toBe(2);
+      // Tool row should have children (row[2] is first tool after 2 headers)
+      expect(rows[2].children).toBeDefined();
+      expect(rows[2].children!.length).toBe(2);
 
       // path property (required)
-      const pathProp = rows[1].children![0];
+      const pathProp = rows[2].children![0];
       expect(pathProp.label).toBe('path');
       expect(pathProp.value).toBe('string (required)');
       expect(pathProp.cssClass).toBe('schema-required');
@@ -202,7 +204,7 @@ describe('renderMethodSummary', () => {
       });
 
       // encoding property (optional)
-      const encodingProp = rows[1].children![1];
+      const encodingProp = rows[2].children![1];
       expect(encodingProp.label).toBe('encoding');
       expect(encodingProp.value).toBe('string');
       expect(encodingProp.cssClass).toBe('schema-optional');
@@ -212,16 +214,20 @@ describe('renderMethodSummary', () => {
       const response = { result: { tools: [] } };
       const rows = renderMethodSummary('tools/list', {}, response);
 
-      expect(rows.length).toBe(1);
-      expect(rows[0].label).toBe('No tools available');
+      // Method header + empty message
+      expect(rows.length).toBe(2);
+      expect(rows[0].label).toBe('Method: tools/list');
+      expect(rows[1].label).toBe('(no tools available)');
     });
 
     it('should handle missing tools in response', () => {
       const response = { result: {} };
       const rows = renderMethodSummary('tools/list', {}, response);
 
-      expect(rows.length).toBe(1);
-      expect(rows[0].label).toBe('No tools available');
+      // Method header + empty message
+      expect(rows.length).toBe(2);
+      expect(rows[0].label).toBe('Method: tools/list');
+      expect(rows[1].label).toBe('(no tools available)');
     });
   });
 
@@ -232,13 +238,13 @@ describe('renderMethodSummary', () => {
 
       const rows = renderMethodSummary('custom/method', request, response);
 
-      // Should have method header
+      // Should have method header (appears twice: once for request, once for response)
       expect(rows[0].type).toBe('header');
       expect(rows[0].label).toBe('Method: custom/method');
 
-      // Should have request parameters section
+      // Should have parameters section
       const paramHeader = rows.find(
-        (r) => r.label === 'Request Parameters' && r.type === 'header'
+        (r) => r.label === 'Parameters' && r.type === 'header'
       );
       expect(paramHeader).toBeDefined();
 
@@ -250,7 +256,7 @@ describe('renderMethodSummary', () => {
 
       // Should have response result section
       const resultHeader = rows.find(
-        (r) => r.label === 'Response Result' && r.type === 'header'
+        (r) => r.label === 'Result' && r.type === 'header'
       );
       expect(resultHeader).toBeDefined();
     });
@@ -267,10 +273,11 @@ describe('renderMethodSummary', () => {
       );
       expect(errorHeader).toBeDefined();
 
-      const errorRow = rows.find((r) => r.label === 'error');
-      expect(errorRow).toBeDefined();
-      expect(errorRow!.pointer?.target).toBe('response');
-      expect(errorRow!.pointer?.path).toBe('#/error');
+      // Error object properties are shown as separate rows (code, message)
+      const codeRow = rows.find((r) => r.label === 'code');
+      expect(codeRow).toBeDefined();
+      expect(codeRow!.pointer?.target).toBe('response');
+      expect(codeRow!.pointer?.path).toBe('#/error/code');
     });
   });
 });

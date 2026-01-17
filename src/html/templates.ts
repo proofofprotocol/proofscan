@@ -2483,7 +2483,7 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
         <button data-interval="30">30s</button>
       </div>
       <span class="offline-badge">Offline</span>
-      <span>Generated: ${formatTimestamp(meta.generatedAt)}</span>
+      <span>Generated: ${formatTimestamp(meta.generatedAt)}${meta.redacted ? ' (redacted)' : ''}</span>
     </div>
   </header>
   <div class="page-header">
@@ -2520,6 +2520,7 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
     <div class="sessions-pane">
       <div class="sessions-header">
         <h2>Sessions</h2>
+        <span class="pagination-info">${paginationInfo}</span>
       </div>
       <div class="sessions-list">
 ${sessionItems}
