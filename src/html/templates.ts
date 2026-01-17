@@ -1769,7 +1769,7 @@ function getConnectorReportScript(): string {
       // Sensitive content warning badge (Phase 12.x-c)
       const sensitiveKeys = rpc._sensitiveKeys || [];
       const sensitiveBadge = rpc._hasSensitive
-        ? '<span class="sensitive-badge" title="Contains sensitive keys: ' + sensitiveKeys.slice(0, 5).join(', ') + (sensitiveKeys.length > 5 ? '...' : '') + '">\\u26A0 Sensitive</span>'
+        ? '<span class="sensitive-badge" title="Contains sensitive keys: ' + sensitiveKeys.slice(0, 5).join(', ') + (sensitiveKeys.length > 5 ? '...' : '') + '">⚠ Sensitive</span>'
         : '';
 
       // Determine default target based on method (response-focused methods default to response)
