@@ -1010,8 +1010,13 @@ const SENSITIVE_PATTERNS: RegExp[] = [
   /refresh[_-]?token/i,
   /session[_-]?id/i,
   /cookie/i,
-  // Note: /auth/i removed - too broad, matches 'author', 'authorized_users', etc.
-  // authorization, access_token, refresh_token already cover auth-related keys
+  /^auth$/i, // Exact match for 'auth' key (avoids 'author', 'authorized_users')
+  /^auth_/i, // Prefix match for auth_token, auth_header, etc.
+  /client[_-]?secret/i,
+  /jwt/i,
+  /oauth/i,
+  /x-api-key/i,
+  /x-auth/i,
 ];
 
 /**

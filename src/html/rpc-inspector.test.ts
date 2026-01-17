@@ -424,6 +424,30 @@ describe('detectSensitiveKeys', () => {
     expect(keys).toContain('cookie');
   });
 
+  it('should detect exact auth key but not author', () => {
+    const json = { auth: 'xxx', author: 'John', auth_token: 'yyy' };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('auth');
+    expect(keys).toContain('auth_token');
+    expect(keys).not.toContain('author'); // Should NOT match 'author'
+  });
+
+  it('should detect client_secret, jwt, oauth, x-api-key', () => {
+    const json = {
+      client_secret: 'xxx',
+      jwt: 'yyy',
+      oauth: 'zzz',
+      'x-api-key': 'aaa',
+      'x-auth-token': 'bbb',
+    };
+    const keys = detectSensitiveKeys(json);
+    expect(keys).toContain('client_secret');
+    expect(keys).toContain('jwt');
+    expect(keys).toContain('oauth');
+    expect(keys).toContain('x-api-key');
+    expect(keys).toContain('x-auth-token');
+  });
+
   it('should detect auth-related keys case-insensitively', () => {
     const json = { Authorization: 'xxx', API_KEY: 'yyy', Token: 'zzz' };
     const keys = detectSensitiveKeys(json);
