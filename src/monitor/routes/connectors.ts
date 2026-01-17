@@ -514,6 +514,9 @@ connectorsRoutes.get('/:id', async (c) => {
   // Add POPL badges to session rows
   html = addPoplBadgesToSessions(html, sessionPoplMap);
 
+  // Phase 12.1: Add data-app="monitor" to body for auto-check script
+  html = html.replace('<body>', '<body data-app="monitor">');
+
   // Add Ledger modal HTML and JavaScript
   html = html.replace(
     '</body>',

@@ -2,9 +2,11 @@
  * ProofScan Web Monitor - Connector data queries
  */
 
+import { createHash } from 'crypto';
 import { ConfigManager } from '../../config/manager.js';
 import { EventsStore } from '../../db/events-store.js';
 import { getEventsDb } from '../../db/connection.js';
+import { listPoplEntries, hasPoplDir } from '../../popl/index.js';
 import type { Connector } from '../../types/config.js';
 import type {
   MonitorHomeData,
@@ -461,4 +463,89 @@ export async function getConnectorDetail(
   } else {
     return buildOrphanConnectorCard(connectorId, configDir);
   }
+}
+
+/**
+ * Monitor summary for change detection (Phase 12.1)
+ */
+export interface MonitorSummary {
+  generated_at: string;
+  session_count: number;
+  rpc_count: number;
+  ledger_count: number;
+  latest_event_ts: string | null;
+  digest: string; // SHA-256 first 16 chars for change detection
+}
+
+/**
+ * Get lightweight summary for polling-based change detection
+ * Used by Auto-check feature to detect new data without full page reload
+ *
+ * Note: getEventsDb() returns a cached singleton connection, so no explicit
+ * close is needed. The connection is reused across all monitor requests.
+ */
+export async function getMonitorSummary(
+  configPath: string
+): Promise<MonitorSummary> {
+  const manager = new ConfigManager(configPath);
+  const configDir = manager.getConfigDir();
+  // Note: getEventsDb returns a singleton connection - no leak risk
+  const db = getEventsDb(configDir);
+  const generatedAt = new Date().toISOString();
+
+  // Fast SQL counts
+  const sessionCount = db.prepare('SELECT COUNT(*) as c FROM sessions').get() as {
+    c: number;
+  };
+  const rpcCount = db.prepare('SELECT COUNT(*) as c FROM rpc_calls').get() as {
+    c: number;
+  };
+
+  // Latest event timestamp: prefer events table, fallback to rpc_calls.response_ts
+  let latestEventTs: string | null = null;
+  try {
+    // Check if events table has data (more reliable than rpc_calls.response_ts)
+    const eventsRow = db.prepare('SELECT MAX(ts) as ts FROM events').get() as {
+      ts: string | null;
+    };
+    if (eventsRow.ts) {
+      latestEventTs = eventsRow.ts;
+    }
+  } catch (err) {
+    // events table might not exist in older DBs - log for debugging
+    console.debug('[getMonitorSummary] events table query failed:', err);
+  }
+  if (!latestEventTs) {
+    const rpcRow = db.prepare(
+      'SELECT MAX(response_ts) as ts FROM rpc_calls'
+    ).get() as { ts: string | null };
+    latestEventTs = rpcRow.ts;
+  }
+
+  // Ledger count using existing POPL helpers
+  // Note: POPL entries are stored in .popl/ directory relative to where the
+  // monitor server was started. This is typically the user's project root.
+  let ledgerCount = 0;
+  const outputRoot = process.cwd();
+  if (hasPoplDir(outputRoot)) {
+    try {
+      const entries = await listPoplEntries(outputRoot);
+      ledgerCount = entries.length;
+    } catch (err) {
+      console.debug('[getMonitorSummary] Failed to list POPL entries:', err);
+    }
+  }
+
+  // Create digest using SHA-256 for change detection
+  const digestStr = `${sessionCount.c}:${rpcCount.c}:${ledgerCount}:${latestEventTs || ''}`;
+  const digest = createHash('sha256').update(digestStr).digest('hex').slice(0, 16);
+
+  return {
+    generated_at: generatedAt,
+    session_count: sessionCount.c,
+    rpc_count: rpcCount.c,
+    ledger_count: ledgerCount,
+    latest_event_ts: latestEventTs,
+    digest,
+  };
 }

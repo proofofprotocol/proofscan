@@ -130,8 +130,8 @@ export function getBaseStyles(): string {
     .badge-capability { background: rgba(0, 212, 255, 0.1); color: var(--accent-blue); border: 1px solid rgba(0, 212, 255, 0.2); }
     .badge-transport { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); }
 
-    /* Auto-refresh toggle */
-    .refresh-toggle {
+    /* Auto-check toggle (Phase 12.1) */
+    .auto-check-toggle {
       display: inline-flex;
       align-items: center;
       gap: 4px;
@@ -141,13 +141,13 @@ export function getBaseStyles(): string {
       padding: 2px 4px;
     }
 
-    .refresh-toggle .refresh-label {
+    .auto-check-toggle .auto-check-label {
       font-size: 10px;
       color: var(--text-secondary);
       padding-left: 4px;
     }
 
-    .refresh-toggle button {
+    .auto-check-toggle button {
       background: transparent;
       border: none;
       padding: 2px 8px;
@@ -158,13 +158,44 @@ export function getBaseStyles(): string {
       transition: all 0.15s;
     }
 
-    .refresh-toggle button:hover {
+    .auto-check-toggle button:hover {
       color: var(--text-primary);
     }
 
-    .refresh-toggle button.active {
+    .auto-check-toggle button.active {
       background: rgba(0, 212, 255, 0.15);
       color: var(--accent-blue);
+    }
+
+    /* New data banner (Phase 12.1) */
+    .new-data-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      background: rgba(0, 212, 255, 0.15);
+      border: 1px solid var(--accent-blue);
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--accent-blue);
+    }
+
+    .new-data-banner.active {
+      display: inline-flex;
+    }
+
+    .new-data-banner button {
+      background: var(--accent-blue);
+      border: none;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-size: 10px;
+      color: var(--bg-primary);
+      cursor: pointer;
+    }
+
+    .new-data-banner button:hover {
+      opacity: 0.9;
     }
 
     /* External link indicator */
@@ -360,8 +391,10 @@ export function renderLayout(options: {
   extraStyles?: string;
   scripts?: string;
   dataPage?: string;
+  dataApp?: string; // 'monitor' for monitor pages (Phase 12.1)
 }): string {
   const mainAttrs = options.dataPage ? ` data-page="${escapeHtml(options.dataPage)}"` : '';
+  const bodyAttrs = options.dataApp ? ` data-app="${escapeHtml(options.dataApp)}"` : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -373,16 +406,18 @@ ${getBaseStyles()}
 ${options.extraStyles ?? ''}
   </style>
 </head>
-<body>
+<body${bodyAttrs}>
   <header class="header">
     <div class="header-title">ProofScan Monitor</div>
     <div class="header-meta">
-      <div class="refresh-toggle" id="refreshToggle">
-        <span class="refresh-label">Refresh:</span>
-        <button data-interval="0" class="active">OFF</button>
-        <button data-interval="5">5s</button>
-        <button data-interval="10">10s</button>
-        <button data-interval="30">30s</button>
+      <div class="auto-check-toggle" id="autoCheckToggle">
+        <span class="auto-check-label">Auto-check:</span>
+        <button data-enabled="false" class="active">OFF</button>
+        <button data-enabled="true">ON</button>
+      </div>
+      <div class="new-data-banner" id="newDataBanner">
+        <span>New data available</span>
+        <button id="refreshNowBtn">Refresh now</button>
       </div>
       <span class="offline-badge">Offline</span>
       <span>Generated: ${formatTimestamp(options.generatedAt)}</span>
@@ -391,7 +426,7 @@ ${options.extraStyles ?? ''}
   <main class="main"${mainAttrs}>
 ${options.content}
   </main>
-<script>${getRefreshScript()}</script>
+<script>${getAutoCheckScript()}</script>
 ${options.scripts ? `<script>${options.scripts}</script>` : ''}
 </body>
 </html>`;
@@ -422,51 +457,87 @@ export function formatTimestamp(iso: string): string {
 }
 
 /**
- * Get auto-refresh script
+ * Get auto-check script (Phase 12.1)
+ * Polls /api/monitor/summary for changes and shows banner instead of auto-reload
  */
-function getRefreshScript(): string {
+function getAutoCheckScript(): string {
   return `
 (function() {
-  let refreshInterval = null;
-  const toggle = document.getElementById('refreshToggle');
-  if (!toggle) return;
-
-  const buttons = toggle.querySelectorAll('button');
-
-  // Load saved interval from localStorage
-  const savedInterval = localStorage.getItem('proofscan-refresh-interval');
-  if (savedInterval) {
-    setRefreshInterval(parseInt(savedInterval, 10));
+  // CRITICAL: Only run on monitor pages (not embedded HTML export)
+  if (!document.body.dataset.app || document.body.dataset.app !== 'monitor') {
+    return;
   }
 
-  function setRefreshInterval(seconds) {
-    // Clear existing interval
-    if (refreshInterval) {
-      clearInterval(refreshInterval);
-      refreshInterval = null;
-    }
+  var checkInterval = null;
+  var lastDigest = null;
+  var newDataDetected = false;
+  var INTERVAL_MS = 10000;
 
-    // Update button states
-    buttons.forEach(function(btn) {
-      btn.classList.toggle('active', parseInt(btn.dataset.interval, 10) === seconds);
-    });
+  var toggle = document.getElementById('autoCheckToggle');
+  var banner = document.getElementById('newDataBanner');
+  var refreshBtn = document.getElementById('refreshNowBtn');
+  if (!toggle) return;
 
-    // Save preference
-    localStorage.setItem('proofscan-refresh-interval', String(seconds));
+  var buttons = toggle.querySelectorAll('button');
+  var enabled = localStorage.getItem('proofscan-auto-check') === 'true';
 
-    // Set new interval if not OFF
-    if (seconds > 0) {
-      refreshInterval = setInterval(function() {
-        location.reload();
-      }, seconds * 1000);
-    }
+  // Initial state
+  buttons.forEach(function(btn) {
+    btn.classList.toggle('active', (btn.dataset.enabled === 'true') === enabled);
+  });
+  if (enabled) startChecking();
+
+  function startChecking() {
+    checkForUpdates(); // First check
+    checkInterval = setInterval(checkForUpdates, INTERVAL_MS);
+  }
+
+  function stopChecking() {
+    if (checkInterval) clearInterval(checkInterval);
+    checkInterval = null;
+  }
+
+  function checkForUpdates() {
+    if (newDataDetected) return; // Banner already shown
+    fetch('/api/monitor/summary')
+      .then(function(res) {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then(function(data) {
+        if (!data) return;
+        if (lastDigest === null) {
+          lastDigest = data.digest; // Baseline
+        } else if (data.digest !== lastDigest) {
+          newDataDetected = true;
+          banner.classList.add('active');
+        }
+      })
+      .catch(function(err) { console.debug('[Auto-check] Poll failed:', err); });
   }
 
   buttons.forEach(function(btn) {
     btn.addEventListener('click', function() {
-      setRefreshInterval(parseInt(btn.dataset.interval, 10));
+      var on = btn.dataset.enabled === 'true';
+      localStorage.setItem('proofscan-auto-check', String(on));
+      buttons.forEach(function(b) {
+        b.classList.toggle('active', (b.dataset.enabled === 'true') === on);
+      });
+      if (on) {
+        startChecking();
+      } else {
+        stopChecking();
+        banner.classList.remove('active');
+        newDataDetected = false;
+      }
     });
   });
+
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', function() {
+      location.reload();
+    });
+  }
 })();
   `;
 }

@@ -75,6 +75,7 @@ export function renderHomePage(data: MonitorHomeData): string {
     content: contentWithModal,
     extraStyles: getHomeStyles(),
     scripts: getFilterScript() + getLedgerModalScript(),
+    dataApp: 'monitor', // Phase 12.1: Enable auto-check script
   });
 }
 
