@@ -1123,7 +1123,7 @@ function getConnectorReportStyles(): string {
     }
     .sessions-header-row {
       display: grid;
-      grid-template-columns: 80px 1fr 50px 70px 50px;
+      grid-template-columns: 70px 1fr 60px;
       gap: 8px;
       padding: 4px 8px;
       font-size: 10px;
@@ -1134,7 +1134,7 @@ function getConnectorReportStyles(): string {
     }
     .session-item {
       display: grid;
-      grid-template-columns: 80px 1fr 50px 70px 50px;
+      grid-template-columns: 70px 1fr 60px;
       gap: 8px;
       align-items: center;
       padding: 6px 8px;
@@ -1173,20 +1173,9 @@ function getConnectorReportStyles(): string {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .session-item .session-rpcs {
-      color: var(--text-primary);
-      text-align: right;
-    }
     .session-item .session-latency {
       color: var(--text-secondary);
       text-align: right;
-    }
-    .session-item .session-status {
-      text-align: center;
-    }
-    .session-item .session-status .badge {
-      padding: 1px 4px;
-      font-size: 10px;
     }
 
     /* Session detail pane (middle) */
@@ -2297,9 +2286,6 @@ function renderAnalyticsPanel(analytics: HtmlConnectorAnalyticsV1): string {
 function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
   // Format timestamp compactly: MM/DD HH:MM
   const timestamp = formatCompactTimestamp(session.started_at);
-  const statusBadge = session.error_count > 0
-    ? '<span class="badge status-ERR">ERR</span>'
-    : '<span class="badge status-OK">OK</span>';
   const latencyStr = session.total_latency_ms !== null
     ? `${session.total_latency_ms}ms`
     : '-';
@@ -2307,12 +2293,10 @@ function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
   return `
     <div class="session-item"
          data-session-id="${escapeHtml(session.session_id)}"
-         title="Session: ${session.session_id}&#10;Started: ${session.started_at}">
+         title="Session: ${session.session_id}&#10;Started: ${session.started_at}&#10;RPCs: ${session.rpc_count}&#10;Errors: ${session.error_count}">
       <span class="session-id">[${escapeHtml(session.short_id)}]</span>
       <span class="session-timestamp">${timestamp}</span>
-      <span class="session-rpcs">${session.rpc_count}</span>
       <span class="session-latency">${latencyStr}</span>
-      <span class="session-status">${statusBadge}</span>
     </div>`;
 }
 
@@ -2571,9 +2555,7 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
       <div class="sessions-header-row">
         <span>ID</span>
         <span>Time (UTC)</span>
-        <span style="text-align:right">RPCs</span>
         <span style="text-align:right">Latency</span>
-        <span style="text-align:center">Status</span>
       </div>
       <div class="sessions-list">
 ${sessionItems}
