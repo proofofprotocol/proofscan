@@ -1123,7 +1123,7 @@ function getConnectorReportStyles(): string {
     }
     .sessions-header-row {
       display: grid;
-      grid-template-columns: 80px 1fr 50px 70px 40px;
+      grid-template-columns: 80px 1fr 50px 70px 50px;
       gap: 8px;
       padding: 4px 8px;
       font-size: 10px;
@@ -1134,7 +1134,7 @@ function getConnectorReportStyles(): string {
     }
     .session-item {
       display: grid;
-      grid-template-columns: 80px 1fr 50px 70px 40px;
+      grid-template-columns: 80px 1fr 50px 70px 50px;
       gap: 8px;
       align-items: center;
       padding: 6px 8px;
@@ -2317,15 +2317,20 @@ function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
 }
 
 /**
- * Format timestamp compactly for grid display
+ * Format timestamp compactly for grid display (UTC)
+ * Returns format: MM/DD HH:MM
+ * @public - exported for testing
  */
-function formatCompactTimestamp(isoStr: string): string {
+export function formatCompactTimestamp(isoStr: string): string {
   try {
     const date = new Date(isoStr);
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+    if (isNaN(date.getTime())) {
+      return '-';
+    }
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
     return `${month}/${day} ${hours}:${minutes}`;
   } catch {
     return '-';
@@ -2565,10 +2570,10 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
       </div>
       <div class="sessions-header-row">
         <span>ID</span>
-        <span>Timestamp</span>
+        <span>Time (UTC)</span>
         <span style="text-align:right">RPCs</span>
         <span style="text-align:right">Latency</span>
-        <span style="text-align:center">St</span>
+        <span style="text-align:center">Status</span>
       </div>
       <div class="sessions-list">
 ${sessionItems}
