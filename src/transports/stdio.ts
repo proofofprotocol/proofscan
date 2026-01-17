@@ -6,6 +6,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import type { StdioTransport } from '../types/index.js';
+import { resolveRunnerCommand } from '../runners/index.js';
 
 export interface JsonRpcRequest {
   jsonrpc: '2.0';
@@ -59,7 +60,10 @@ export class StdioConnection extends EventEmitter {
   async connect(): Promise<void> {
     const { command, args = [], env, cwd } = this.transport;
 
-    this.process = spawn(command, args, {
+    // Resolve runner commands (npx, uvx) to full paths on Windows
+    const resolvedCommand = await resolveRunnerCommand(command);
+
+    this.process = spawn(resolvedCommand, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, ...env },
       cwd,

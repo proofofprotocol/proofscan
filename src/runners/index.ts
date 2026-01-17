@@ -21,6 +21,56 @@ export { sanitizeEnv };
 const RUNNERS: Runner[] = [npxRunner, uvxRunner];
 
 /**
+ * Cache for resolved runner paths (to avoid repeated detection)
+ */
+const resolvedPaths: Map<string, string> = new Map();
+
+/**
+ * Resolve a runner command to its full path
+ *
+ * On Windows, spawn() may fail to find commands like 'npx' or 'uvx' even if
+ * they are in PATH, because the PATH resolution differs between shells.
+ * This function detects the runner and returns the full executable path.
+ *
+ * @param command - The command to resolve (e.g., 'npx', 'uvx')
+ * @returns Full path if runner is detected, otherwise returns original command
+ */
+export async function resolveRunnerCommand(command: string): Promise<string> {
+  const cmd = command.toLowerCase();
+
+  // Check if it's a known runner
+  if (cmd !== 'npx' && cmd !== 'uvx') {
+    return command;
+  }
+
+  // Check cache first
+  const cached = resolvedPaths.get(cmd);
+  if (cached) {
+    return cached;
+  }
+
+  // Detect runner and get full path
+  try {
+    const runner = getRunner(cmd as RunnerName);
+    const status = await runner.detect();
+    if (status.available && status.path) {
+      // On Windows, ensure we use the .cmd extension if needed
+      let fullPath = status.path;
+      if (process.platform === 'win32' && !fullPath.toLowerCase().endsWith('.cmd') && !fullPath.toLowerCase().endsWith('.exe')) {
+        // Try adding .cmd extension for Windows batch files
+        fullPath = `${fullPath}.cmd`;
+      }
+      resolvedPaths.set(cmd, fullPath);
+      return fullPath;
+    }
+  } catch {
+    // Runner not found, return original command
+  }
+
+  return command;
+}
+
+/**
  * Get a specific runner by name
  * @throws Error if runner name is unknown
  */
