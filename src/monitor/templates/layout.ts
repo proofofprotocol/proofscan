@@ -513,7 +513,7 @@ function getAutoCheckScript(): string {
           banner.classList.add('active');
         }
       })
-      .catch(function() { /* ignore */ });
+      .catch(function(err) { console.debug('[Auto-check] Poll failed:', err); });
   }
 
   buttons.forEach(function(btn) {

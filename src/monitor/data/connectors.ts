@@ -480,12 +480,16 @@ export interface MonitorSummary {
 /**
  * Get lightweight summary for polling-based change detection
  * Used by Auto-check feature to detect new data without full page reload
+ *
+ * Note: getEventsDb() returns a cached singleton connection, so no explicit
+ * close is needed. The connection is reused across all monitor requests.
  */
 export async function getMonitorSummary(
   configPath: string
 ): Promise<MonitorSummary> {
   const manager = new ConfigManager(configPath);
   const configDir = manager.getConfigDir();
+  // Note: getEventsDb returns a singleton connection - no leak risk
   const db = getEventsDb(configDir);
   const generatedAt = new Date().toISOString();
 
@@ -507,8 +511,9 @@ export async function getMonitorSummary(
     if (eventsRow.ts) {
       latestEventTs = eventsRow.ts;
     }
-  } catch {
-    // events table might not exist in older DBs
+  } catch (err) {
+    // events table might not exist in older DBs - log for debugging
+    console.debug('[getMonitorSummary] events table query failed:', err);
   }
   if (!latestEventTs) {
     const rpcRow = db.prepare(
@@ -517,19 +522,21 @@ export async function getMonitorSummary(
     latestEventTs = rpcRow.ts;
   }
 
-  // Ledger count using existing POPL helpers (not process.cwd() direct)
+  // Ledger count using existing POPL helpers
+  // Note: POPL entries are stored in .popl/ directory relative to where the
+  // monitor server was started. This is typically the user's project root.
   let ledgerCount = 0;
-  const outputRoot = process.cwd(); // POPL output root (user's project directory)
+  const outputRoot = process.cwd();
   if (hasPoplDir(outputRoot)) {
     try {
       const entries = await listPoplEntries(outputRoot);
       ledgerCount = entries.length;
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.debug('[getMonitorSummary] Failed to list POPL entries:', err);
     }
   }
 
-  // Create digest using SHA-256 (not MD5)
+  // Create digest using SHA-256 for change detection
   const digestStr = `${sessionCount.c}:${rpcCount.c}:${ledgerCount}:${latestEventTs || ''}`;
   const digest = createHash('sha256').update(digestStr).digest('hex').slice(0, 16);
 
