@@ -29,12 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `initialize` method handler showing Server Info and Capabilities
 
 - **Web Monitor UX Refinements** (Phase 12)
-  - Auto-refresh toggle (OFF/5s/10s/30s) with localStorage persistence
+  - Auto-check toggle with "New data available" notification banner (Phase 12.1)
+  - Lightweight `/api/monitor/summary` endpoint for change detection with SHA-256 digest
   - "POPL" → "Ledger" badge terminology for clearer MCP/non-MCP distinction
   - Ledger modal with URL synchronization (`?ledger=xxx`) for context-preserving POPL viewing
   - Modal dropdown menu: Open in new window, Download JSON/YAML, Copy link
   - ESC key and overlay click to close modal
   - `/api/popl/:id/download` endpoint for JSON/YAML export
+  - Compact sessions grid (1 session = 1 row) with UTC timestamps (Phase 12.x)
+  - Adjusted layout widths for better readability (Phase 12.x-b)
 
 - **Catalog Install**: `--version` option to specify package version
   - Override default version from catalog source
