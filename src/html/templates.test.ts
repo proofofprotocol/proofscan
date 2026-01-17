@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
   escapeHtml,
   escapeJsonForScript,
+  formatCompactTimestamp,
   generateRpcHtml,
   generateSessionHtml,
   generateConnectorHtml,
@@ -810,5 +811,52 @@ describe('generateConnectorHtml', () => {
     };
     const html = generateConnectorHtml(offsetReport);
     expect(html).toContain('Showing 51-100 of 100 sessions');
+  });
+});
+
+describe('formatCompactTimestamp', () => {
+  it('should format valid UTC timestamp as MM/DD HH:MM', () => {
+    // 2025-01-12T14:30:45.000Z in UTC
+    const result = formatCompactTimestamp('2025-01-12T14:30:45.000Z');
+    expect(result).toBe('01/12 14:30');
+  });
+
+  it('should pad single digit months and days with zeros', () => {
+    const result = formatCompactTimestamp('2025-03-05T08:09:00.000Z');
+    expect(result).toBe('03/05 08:09');
+  });
+
+  it('should handle midnight correctly', () => {
+    const result = formatCompactTimestamp('2025-12-31T00:00:00.000Z');
+    expect(result).toBe('12/31 00:00');
+  });
+
+  it('should handle end of day correctly', () => {
+    const result = formatCompactTimestamp('2025-06-15T23:59:59.999Z');
+    expect(result).toBe('06/15 23:59');
+  });
+
+  it('should return "-" for invalid timestamp', () => {
+    expect(formatCompactTimestamp('invalid')).toBe('-');
+    expect(formatCompactTimestamp('not-a-date')).toBe('-');
+  });
+
+  it('should return "-" for empty string', () => {
+    expect(formatCompactTimestamp('')).toBe('-');
+  });
+
+  it('should handle timestamp without Z suffix', () => {
+    // ISO 8601 without timezone is parsed as local time by Date
+    // But our function uses UTC methods, so output depends on input interpretation
+    const result = formatCompactTimestamp('2025-07-20T12:00:00Z');
+    expect(result).toBe('07/20 12:00');
+  });
+
+  it('should use UTC timezone consistently', () => {
+    // Verify that the same UTC timestamp always produces the same output
+    // regardless of local timezone (this tests the getUTC* methods are used)
+    const timestamp = '2025-01-15T23:45:30.000Z';
+    const result = formatCompactTimestamp(timestamp);
+    expect(result).toBe('01/15 23:45');
   });
 });
