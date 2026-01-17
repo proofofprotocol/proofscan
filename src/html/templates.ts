@@ -1123,7 +1123,7 @@ function getConnectorReportStyles(): string {
     }
     .sessions-header-row {
       display: grid;
-      grid-template-columns: 70px 1fr 60px;
+      grid-template-columns: 70px 1fr 60px 50px;
       gap: 8px;
       padding: 4px 8px;
       font-size: 10px;
@@ -1134,7 +1134,7 @@ function getConnectorReportStyles(): string {
     }
     .session-item {
       display: grid;
-      grid-template-columns: 70px 1fr 60px;
+      grid-template-columns: 70px 1fr 60px 50px;
       gap: 8px;
       align-items: center;
       padding: 6px 8px;
@@ -1144,6 +1144,9 @@ function getConnectorReportStyles(): string {
       border: 1px solid transparent;
       background: var(--bg-primary);
       font-size: 11px;
+    }
+    .session-item .session-extra {
+      justify-self: end;
     }
     .session-item:hover {
       background: rgba(0, 212, 255, 0.1);
@@ -2297,6 +2300,7 @@ function renderConnectorSessionItem(session: HtmlConnectorSessionRow): string {
       <span class="session-id">[${escapeHtml(session.short_id)}]</span>
       <span class="session-timestamp">${timestamp}</span>
       <span class="session-latency">${latencyStr}</span>
+      <span class="session-extra"></span>
     </div>`;
 }
 
@@ -2556,6 +2560,7 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
         <span>ID</span>
         <span>Time (UTC)</span>
         <span style="text-align:right">Latency</span>
+        <span></span>
       </div>
       <div class="sessions-list">
 ${sessionItems}

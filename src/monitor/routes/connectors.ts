@@ -569,22 +569,22 @@ function renderPoplSection(entries: MonitorPoplSummary[]): string {
 
 /**
  * Add POPL badges to session rows in HTML
+ * Injects Ledger badge into the session-extra span for proper grid alignment
  */
 function addPoplBadgesToSessions(
   html: string,
   sessionPoplMap: Map<string, MonitorPoplSummary>
 ): string {
-  // Find all session rows and add POPL badge if entry exists
+  // Find all session rows and add POPL badge into session-extra span
   for (const [sessionId, popl] of sessionPoplMap) {
-    // Match session ID in the HTML (both full and short versions)
-    const shortId = sessionId.slice(0, 8);
-    // Look for the session link pattern and add badge after it
-    const sessionLinkPattern = new RegExp(
-      `(<span[^>]*class="[^"]*session-id[^"]*"[^>]*>[^<]*${shortId}[^<]*</span>)`,
+    // Match session-item div with this session ID and replace the empty session-extra span
+    const sessionPattern = new RegExp(
+      `(data-session-id="${sessionId}"[^>]*>)([\\s\\S]*?)(<span class="session-extra"></span>)`,
       'g'
     );
-    html = html.replace(sessionLinkPattern, (match) => {
-      return `${match}<a href="/popl/${encodeURIComponent(popl.id)}" class="session-popl-badge">Ledger</a>`;
+    html = html.replace(sessionPattern, (match, prefix, middle, extra) => {
+      const badge = `<span class="session-extra"><a href="/popl/${encodeURIComponent(popl.id)}" class="session-popl-badge">Ledger</a></span>`;
+      return `${prefix}${middle}${badge}`;
     });
   }
   return html;
