@@ -37,6 +37,7 @@ export function renderPoplDetailPage(entry: MonitorPoplEntry): string {
     content,
     extraStyles: getPoplDetailStyles(),
     dataPage: 'popl',
+    dataApp: 'monitor', // Phase 12.1: Enable auto-check script
   });
 }
 
@@ -64,6 +65,7 @@ export function renderPopl404Page(proofId: string): string {
     generatedAt: new Date().toISOString(),
     content,
     extraStyles: getPoplDetailStyles(),
+    dataApp: 'monitor', // Phase 12.1: Enable auto-check script
   });
 }
 
@@ -681,6 +683,7 @@ export function renderArtifactPage(options: ArtifactPageOptions): string {
     generatedAt: new Date().toISOString(),
     content: pageContent,
     extraStyles: getArtifactPageStyles(),
+    dataApp: 'monitor', // Phase 12.1: Enable auto-check script
   });
 }
 

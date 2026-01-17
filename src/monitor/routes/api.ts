@@ -4,13 +4,20 @@
 
 import { Hono } from 'hono';
 import type { MonitorEnv } from '../server.js';
-import { getHomeData, getConnectorDetail } from '../data/connectors.js';
+import { getHomeData, getConnectorDetail, getMonitorSummary } from '../data/connectors.js';
 import {
   getPoplEntry,
   getPoplEntriesByConnector,
 } from '../data/popl.js';
 
 export const apiRoutes = new Hono<MonitorEnv>();
+
+// GET /api/monitor/summary - Lightweight summary for change detection (Phase 12.1)
+apiRoutes.get('/monitor/summary', async (c) => {
+  const configPath = c.get('configPath');
+  const summary = await getMonitorSummary(configPath);
+  return c.json(summary);
+});
 
 // GET /api/connectors - List all connectors
 apiRoutes.get('/connectors', async (c) => {
