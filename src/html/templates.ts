@@ -1500,20 +1500,18 @@ function getConnectorReportStyles(): string {
       border: 1px solid var(--border-color);
     }
 
-    /* Event direction badges */
-    .direction-badge {
-      font-size: 9px;
-      padding: 1px 4px;
+    /* Event direction arrows */
+    .direction-arrow {
+      font-size: 18px;
+      font-weight: bold;
+      line-height: 1;
+      cursor: help;
     }
-    .direction-badge.outgoing {
-      background: rgba(0, 212, 255, 0.15);
+    .direction-arrow.outgoing {
       color: var(--accent-blue);
-      border: 1px solid rgba(0, 212, 255, 0.3);
     }
-    .direction-badge.incoming {
-      background: rgba(63, 185, 80, 0.15);
+    .direction-arrow.incoming {
       color: var(--accent-green);
-      border: 1px solid rgba(63, 185, 80, 0.3);
     }
 
     /* Events loading state */
@@ -2103,8 +2101,11 @@ function getConnectorReportScript(): string {
 
         const rows = events.map(function(event, idx) {
           const dirClass = event.direction === 'client_to_server' ? 'outgoing' : 'incoming';
-          // More readable direction labels: OUT (client→server), IN (server→client)
-          const dirLabel = event.direction === 'client_to_server' ? 'OUT' : 'IN';
+          // Large arrows with tooltip: ⇨ (blue) = Client→Server, ⇦ (green) = Server→Client
+          const dirArrow = event.direction === 'client_to_server' ? '\\u21E8' : '\\u21E6';
+          const dirTooltip = event.direction === 'client_to_server'
+            ? 'Client \\u2192 Server'
+            : 'Server \\u2192 Client';
           const kindClass = 'badge-kind-' + event.kind;
           const kindLabel = kindLabels[event.kind] || event.kind;
           const method = event.method || event.summary || '-';
@@ -2113,7 +2114,7 @@ function getConnectorReportScript(): string {
 
           return '<tr class="event-row" data-event-idx="' + idx + '" data-event-id="' + escapeHtml(event.event_id) + '">' +
             '<td>' + timeStr + '</td>' +
-            '<td><span class="badge direction-badge ' + dirClass + '">' + dirLabel + '</span></td>' +
+            '<td><span class="direction-arrow ' + dirClass + '" title="' + dirTooltip + '">' + dirArrow + '</span></td>' +
             '<td><span class="badge ' + kindClass + '">' + kindLabel + '</span></td>' +
             '<td>' + escapeHtml(method) + '</td>' +
             '<td>' + hasPayload + '</td>' +
@@ -2197,7 +2198,11 @@ function getConnectorReportScript(): string {
             const evt = data.event;
             const kindClass = 'badge-kind-' + evt.kind;
             const dirClass = evt.direction === 'client_to_server' ? 'outgoing' : 'incoming';
-            const dirLabel = evt.direction === 'client_to_server' ? 'OUT' : 'IN';
+            // Large arrows with tooltip: ⇨ (blue) = Client→Server, ⇦ (green) = Server→Client
+            const dirArrow = evt.direction === 'client_to_server' ? '\\u21E8' : '\\u21E6';
+            const dirTooltip = evt.direction === 'client_to_server'
+              ? 'Client \\u2192 Server'
+              : 'Server \\u2192 Client';
             const method = evt.method || evt.summary || '(unknown)';
             const rawJson = evt.raw_json ? JSON.parse(evt.raw_json) : null;
             const formattedJson = rawJson ? JSON.stringify(rawJson, null, 2) : '(no data)';
@@ -2205,7 +2210,7 @@ function getConnectorReportScript(): string {
             // Build summary section
             var summaryHtml = '<div class="summary-row summary-header">Event Info</div>';
             summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Kind</span><span class="summary-prop-value"><span class="badge ' + kindClass + '">' + evt.kind + '</span></span></div>';
-            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Direction</span><span class="summary-prop-value"><span class="badge direction-badge ' + dirClass + '">' + dirLabel + '</span></span></div>';
+            summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Direction</span><span class="summary-prop-value"><span class="direction-arrow ' + dirClass + '" title="' + dirTooltip + '">' + dirArrow + '</span> ' + dirTooltip + '</span></div>';
             summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Method</span><span class="summary-prop-value">' + escapeHtml(method) + '</span></div>';
             summaryHtml += '<div class="summary-row summary-property"><span class="summary-prop-name">Timestamp</span><span class="summary-prop-value">' + escapeHtml(evt.ts) + '</span></div>';
             if (evt.seq !== null) {
