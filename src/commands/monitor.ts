@@ -40,33 +40,34 @@ export function createMonitorCommand(getConfigPath: () => string): Command {
           await openInBrowser(url);
         }
 
-        // Keep server running until interrupted
-        let shutdownRequested = false;
-        const shutdown = () => {
-          if (shutdownRequested) {
-            // Force exit on second Ctrl+C
-            console.log('\nForce exit.');
-            process.exit(0);
-          }
-          shutdownRequested = true;
-          console.log('\nShutting down monitor...');
-          server.close(() => {
-            console.log('Monitor stopped.');
-            process.exit(0);
-          });
-          // Force exit after timeout if close doesn't complete
-          setTimeout(() => {
-            console.log('Force exit after timeout.');
-            process.exit(0);
-          }, 3000);
-        };
+        // Keep server running until interrupted with graceful shutdown
+        await new Promise<void>((resolve) => {
+          let shutdownRequested = false;
 
-        process.on('SIGINT', shutdown);
-        process.on('SIGTERM', shutdown);
+          const shutdown = () => {
+            if (shutdownRequested) {
+              // Force exit on second Ctrl+C
+              console.log('\nForce exit.');
+              process.exit(1);
+            }
+            shutdownRequested = true;
+            console.log('\nShutting down monitor...');
 
-        // Keep process alive
-        await new Promise<void>(() => {
-          // This promise never resolves - we exit via the signal handlers
+            // Set timeout for graceful shutdown (10 seconds)
+            const forceExitTimeout = setTimeout(() => {
+              console.log('Graceful shutdown timed out, forcing exit.');
+              process.exit(1);
+            }, 10000);
+
+            server.close(() => {
+              clearTimeout(forceExitTimeout);
+              console.log('Monitor stopped.');
+              resolve();
+            });
+          };
+
+          process.on('SIGINT', shutdown);
+          process.on('SIGTERM', shutdown);
         });
       } catch (error) {
         console.error('Failed to start monitor:', error);

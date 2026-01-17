@@ -323,6 +323,30 @@ export function getBaseStyles(): string {
       text-align: center;
       color: var(--accent-red);
     }
+
+    .modal-error-message {
+      margin-bottom: 12px;
+    }
+
+    .modal-retry-btn {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .modal-retry-btn:hover {
+      background: var(--bg-primary);
+    }
+
+    .modal-loading {
+      padding: 48px 24px;
+      text-align: center;
+      color: var(--text-secondary);
+    }
   `;
 }
 

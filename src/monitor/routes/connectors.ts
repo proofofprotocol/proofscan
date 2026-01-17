@@ -872,37 +872,37 @@ function buildSessionReport(
  */
 function getLedgerModalHtml(): string {
   return `
-<div class="modal-overlay" id="ledgerModal">
+<div class="modal-overlay" id="ledgerModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true">
   <div class="modal-container">
     <div class="modal-header">
-      <div class="modal-title">
+      <div class="modal-title" id="modalTitle">
         <span>Ledger Entry:</span>
         <span class="modal-entry-id" id="modalEntryId"></span>
       </div>
       <div class="modal-actions">
         <div style="position: relative;">
-          <button class="modal-menu-btn" id="modalMenuBtn">⋮</button>
-          <div class="modal-dropdown" id="modalDropdown">
-            <a class="modal-dropdown-item" id="modalOpenNew" target="_blank">
+          <button class="modal-menu-btn" id="modalMenuBtn" aria-label="More options" aria-haspopup="true">⋮</button>
+          <div class="modal-dropdown" id="modalDropdown" role="menu">
+            <a class="modal-dropdown-item" id="modalOpenNew" target="_blank" role="menuitem">
               <span>↗</span> Open in new window
             </a>
-            <div class="modal-dropdown-divider"></div>
-            <button class="modal-dropdown-item" id="modalDownloadJson">
+            <div class="modal-dropdown-divider" role="separator"></div>
+            <button class="modal-dropdown-item" id="modalDownloadJson" role="menuitem">
               <span>↓</span> Download JSON
             </button>
-            <button class="modal-dropdown-item" id="modalDownloadYaml">
+            <button class="modal-dropdown-item" id="modalDownloadYaml" role="menuitem">
               <span>↓</span> Download YAML
             </button>
-            <div class="modal-dropdown-divider"></div>
-            <button class="modal-dropdown-item" id="modalCopyLink">
+            <div class="modal-dropdown-divider" role="separator"></div>
+            <button class="modal-dropdown-item" id="modalCopyLink" role="menuitem">
               <span>🔗</span> Copy link
             </button>
           </div>
         </div>
-        <button class="modal-close-btn" id="modalCloseBtn">×</button>
+        <button class="modal-close-btn" id="modalCloseBtn" aria-label="Close modal">×</button>
       </div>
     </div>
-    <div class="modal-content" id="modalContent">
+    <div class="modal-content" id="modalContent" role="document">
       <!-- Loaded dynamically -->
     </div>
   </div>
@@ -929,14 +929,34 @@ function getLedgerModalScript(): string {
 
   if (!modal) return;
 
+  // ULID validation regex (26 chars: 0-9, A-Z excluding I, L, O, U)
+  var ULID_REGEX = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
+
+  // Validate ULID format
+  function isValidUlid(str) {
+    return str && typeof str === 'string' && ULID_REGEX.test(str);
+  }
+
+  // Track previous focus for accessibility
+  var previousFocus = null;
+
   // Open modal
   function openLedgerModal(ledgerId, options) {
     options = options || {};
+
+    // Validate ULID format before proceeding
+    if (!isValidUlid(ledgerId)) {
+      console.error('Invalid ULID format:', ledgerId);
+      return;
+    }
 
     // Prevent duplicate opens
     if (currentLedgerId === ledgerId) return;
 
     currentLedgerId = ledgerId;
+
+    // Store focus for accessibility restoration
+    previousFocus = document.activeElement;
 
     // Update URL (skip if from popstate to avoid loop)
     if (!options.fromPopstate) {
@@ -945,9 +965,17 @@ function getLedgerModalScript(): string {
       history.pushState({ ledger: ledgerId }, '', url);
     }
 
+    // Show loading state
+    modalContent.innerHTML = '<div class="modal-loading">Loading...</div>';
+
     // Load content via fetch
     fetch('/popl/' + encodeURIComponent(ledgerId))
-      .then(function(res) { return res.text(); })
+      .then(function(res) {
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status);
+        }
+        return res.text();
+      })
       .then(function(html) {
         var parser = new DOMParser();
         var doc = parser.parseFromString(html, 'text/html');
@@ -959,27 +987,63 @@ function getLedgerModalScript(): string {
           var backLink = modalContent.querySelector('.back-link');
           if (backLink) backLink.remove();
         } else {
-          modalContent.innerHTML = '<div class="modal-error">Failed to load content</div>';
+          modalContent.innerHTML = renderErrorWithRetry('Content not found');
         }
       })
-      .catch(function() {
-        modalContent.innerHTML = '<div class="modal-error">Failed to load content</div>';
+      .catch(function(err) {
+        console.error('Failed to load ledger entry:', err);
+        modalContent.innerHTML = renderErrorWithRetry('Failed to load: ' + err.message);
       });
 
     // Update modal UI
     modalEntryId.textContent = ledgerId.slice(0, 12) + '...';
     modalOpenNew.href = '/popl/' + encodeURIComponent(ledgerId);
     modal.classList.add('active');
+    modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
+
+    // Focus the close button for accessibility
+    setTimeout(function() { modalCloseBtn.focus(); }, 100);
   }
+
+  // Render error with retry button
+  function renderErrorWithRetry(message) {
+    return '<div class="modal-error">' +
+      '<div class="modal-error-message">' + escapeHtml(message) + '</div>' +
+      '<button class="modal-retry-btn" onclick="window.retryLedgerLoad()">Retry</button>' +
+      '</div>';
+  }
+
+  // Escape HTML for safe display
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // Retry function (exposed globally for onclick)
+  window.retryLedgerLoad = function() {
+    if (currentLedgerId) {
+      var ledgerId = currentLedgerId;
+      currentLedgerId = null; // Reset to allow reload
+      openLedgerModal(ledgerId, { fromPopstate: true });
+    }
+  };
 
   // Close modal
   function closeLedgerModal() {
     if (!currentLedgerId) return;
     currentLedgerId = null;
     modal.classList.remove('active');
+    modal.setAttribute('aria-hidden', 'true');
     document.body.style.overflow = '';
     modalDropdown.classList.remove('active');
+
+    // Restore focus for accessibility
+    if (previousFocus && typeof previousFocus.focus === 'function') {
+      previousFocus.focus();
+      previousFocus = null;
+    }
   }
 
   // Close and update URL
