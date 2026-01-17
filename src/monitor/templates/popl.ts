@@ -11,7 +11,7 @@ import { renderLayout, escapeHtml, formatTimestamp } from './layout.js';
 export function renderPoplDetailPage(entry: MonitorPoplEntry): string {
   const content = `
     <section class="section">
-      ${renderBackNavigation()}
+      ${renderBreadcrumb(entry)}
       ${renderEntryHeader(entry)}
     </section>
 
@@ -32,10 +32,11 @@ export function renderPoplDetailPage(entry: MonitorPoplEntry): string {
   `;
 
   return renderLayout({
-    title: `POPL: ${entry.id} - ProofScan Monitor`,
+    title: `Ledger: ${entry.id} - ProofScan Monitor`,
     generatedAt: new Date().toISOString(),
     content,
     extraStyles: getPoplDetailStyles(),
+    dataPage: 'popl',
   });
 }
 
@@ -47,9 +48,9 @@ export function renderPopl404Page(proofId: string): string {
     <section class="section">
       ${renderBackNavigation()}
       <div class="error-container">
-        <h1 class="error-title">POPL Entry Not Found</h1>
+        <h1 class="error-title">Ledger Entry Not Found</h1>
         <p class="error-message">
-          No POPL entry found with ID: <code>${escapeHtml(proofId)}</code>
+          No Ledger entry found with ID: <code>${escapeHtml(proofId)}</code>
         </p>
         <p class="error-hint">
           The entry may have been removed or the ID is incorrect.
@@ -59,7 +60,7 @@ export function renderPopl404Page(proofId: string): string {
   `;
 
   return renderLayout({
-    title: 'POPL Entry Not Found - ProofScan Monitor',
+    title: 'Ledger Entry Not Found - ProofScan Monitor',
     generatedAt: new Date().toISOString(),
     content,
     extraStyles: getPoplDetailStyles(),
@@ -67,7 +68,23 @@ export function renderPopl404Page(proofId: string): string {
 }
 
 /**
- * Render back navigation link
+ * Render breadcrumb navigation for Ledger Entry page
+ */
+function renderBreadcrumb(entry: MonitorPoplEntry): string {
+  const shortId = entry.id.slice(0, 10);
+  return `
+    <nav class="breadcrumb">
+      <a href="/" class="breadcrumb-item">Home</a>
+      <span class="breadcrumb-sep">/</span>
+      <a href="/connectors/${encodeURIComponent(entry.connector_id)}" class="breadcrumb-item">${escapeHtml(entry.connector_id)}</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">Ledger:${escapeHtml(shortId)}</span>
+    </nav>
+  `;
+}
+
+/**
+ * Render back navigation link (for 404 pages without entry context)
  */
 function renderBackNavigation(): string {
   return `
@@ -86,7 +103,7 @@ function renderEntryHeader(entry: MonitorPoplEntry): string {
     <div class="popl-header">
       <div class="popl-header-left">
         <h1 class="popl-title">
-          POPL Entry: <span class="popl-id">${escapeHtml(entry.id)}</span>
+          Ledger Entry: <span class="popl-id">${escapeHtml(entry.id)}</span>
         </h1>
         <p class="popl-subtitle">${escapeHtml(entry.title)}</p>
         <p class="popl-meta">
@@ -103,7 +120,7 @@ function renderEntryHeader(entry: MonitorPoplEntry): string {
 }
 
 /**
- * Render source links (Connector and Session)
+ * Render source links (Connector and Session) as a table
  */
 function renderSourceLinks(entry: MonitorPoplEntry): string {
   const connectorLink = `/connectors/${encodeURIComponent(entry.connector_id)}`;
@@ -113,41 +130,40 @@ function renderSourceLinks(entry: MonitorPoplEntry): string {
     : null;
 
   return `
-    <div class="source-links">
-      <div class="source-link-item">
-        <span class="source-label">Connector:</span>
-        <a href="${connectorLink}" class="source-link">
-          <span class="badge">${escapeHtml(entry.connector_id)}</span>
-        </a>
-      </div>
-      ${
-        sessionLink
-          ? `
-      <div class="source-link-item">
-        <span class="source-label">Session:</span>
-        <a href="${sessionLink}" class="source-link">
-          <span class="badge">${escapeHtml(sessionShort ?? '')}</span>
-          <span class="session-full">${escapeHtml(entry.session_id ?? '')}</span>
-        </a>
-      </div>
-      `
-          : `
-      <div class="source-link-item">
-        <span class="source-label">Session:</span>
-        <span class="no-session">(none)</span>
-      </div>
-      `
-      }
-      <div class="source-link-item">
-        <span class="source-label">Target Kind:</span>
-        <span class="badge badge-kind">${escapeHtml(entry.target_kind)}</span>
-      </div>
-    </div>
+    <table class="source-table">
+      <tbody>
+        <tr>
+          <th>Connector</th>
+          <td>
+            <a href="${connectorLink}" class="source-link">
+              ${escapeHtml(entry.connector_id)}
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <th>Session</th>
+          <td>
+            ${
+              sessionLink
+                ? `<a href="${sessionLink}" class="source-link">
+                    <code>${escapeHtml(sessionShort ?? '')}...</code>
+                    <span class="session-full">${escapeHtml(entry.session_id ?? '')}</span>
+                  </a>`
+                : `<span class="no-session">(none)</span>`
+            }
+          </td>
+        </tr>
+        <tr>
+          <th>Target Kind</th>
+          <td><span class="badge badge-kind">${escapeHtml(entry.target_kind)}</span></td>
+        </tr>
+      </tbody>
+    </table>
   `;
 }
 
 /**
- * Render capture summary
+ * Render capture summary as a table
  */
 function renderCaptureSummary(entry: MonitorPoplEntry): string {
   const { capture } = entry;
@@ -157,46 +173,38 @@ function renderCaptureSummary(entry: MonitorPoplEntry): string {
   const p95Display = capture.latency_ms_p95 !== null ? `${capture.latency_ms_p95}ms` : '-';
 
   return `
-    <div class="capture-summary">
-      <div class="capture-row">
-        <div class="capture-item">
-          <span class="capture-label">Window</span>
-          <span class="capture-value">${startFormatted} → ${endFormatted}</span>
-        </div>
-      </div>
-      <div class="capture-row">
-        <div class="capture-item">
-          <span class="capture-label">RPCs</span>
-          <span class="capture-value badge">${capture.rpc_total}</span>
-        </div>
-        <div class="capture-item">
-          <span class="capture-label">Errors</span>
-          <span class="capture-value badge ${capture.errors > 0 ? 'badge-error' : ''}">${capture.errors}</span>
-        </div>
-        <div class="capture-item">
-          <span class="capture-label">P50</span>
-          <span class="capture-value">${p50Display}</span>
-        </div>
-        <div class="capture-item">
-          <span class="capture-label">P95</span>
-          <span class="capture-value">${p95Display}</span>
-        </div>
-      </div>
-      ${
-        capture.mcp_servers.length > 0
-          ? `
-      <div class="capture-row">
-        <div class="capture-item">
-          <span class="capture-label">MCP Servers</span>
-          <span class="capture-value">
+    <table class="capture-table">
+      <tbody>
+        <tr>
+          <th>Window</th>
+          <td colspan="3">${startFormatted} → ${endFormatted}</td>
+        </tr>
+        <tr>
+          <th>RPCs</th>
+          <td><span class="capture-stat">${capture.rpc_total}</span></td>
+          <th>Errors</th>
+          <td><span class="capture-stat ${capture.errors > 0 ? 'stat-error' : ''}">${capture.errors}</span></td>
+        </tr>
+        <tr>
+          <th>P50 Latency</th>
+          <td><span class="capture-stat">${p50Display}</span></td>
+          <th>P95 Latency</th>
+          <td><span class="capture-stat">${p95Display}</span></td>
+        </tr>
+        ${
+          capture.mcp_servers.length > 0
+            ? `
+        <tr>
+          <th>MCP Servers</th>
+          <td colspan="3">
             ${capture.mcp_servers.map((s) => `<span class="badge">${escapeHtml(s)}</span>`).join(' ')}
-          </span>
-        </div>
-      </div>
-      `
-          : ''
-      }
-    </div>
+          </td>
+        </tr>
+        `
+            : ''
+        }
+      </tbody>
+    </table>
   `;
 }
 
@@ -247,6 +255,37 @@ function renderArtifacts(entry: MonitorPoplEntry): string {
  */
 function getPoplDetailStyles(): string {
   return `
+    /* Breadcrumb navigation */
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding: 8px 12px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .breadcrumb-item {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+
+    .breadcrumb-item:hover {
+      text-decoration: underline;
+    }
+
+    .breadcrumb-sep {
+      color: var(--text-secondary);
+    }
+
+    .breadcrumb-current {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
     .back-link {
       display: inline-block;
       margin-bottom: 16px;
@@ -332,48 +371,60 @@ function getPoplDetailStyles(): string {
       color: #ffd700;
     }
 
-    .source-links {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    /* Source Table */
+    .source-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow: hidden;
     }
 
-    .source-link-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .source-table th,
+    .source-table td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
     }
 
-    .source-label {
-      min-width: 100px;
+    .source-table tr:last-child th,
+    .source-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .source-table th {
+      width: 120px;
+      background: var(--bg-tertiary);
       color: var(--text-secondary);
-      font-size: 13px;
+      font-weight: 500;
+      font-size: 12px;
     }
 
     .source-link {
+      color: var(--accent-blue);
+      text-decoration: none;
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 6px 12px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      text-decoration: none;
-      color: var(--text-primary);
     }
 
     .source-link:hover {
-      border-color: var(--accent-blue);
+      text-decoration: underline;
     }
 
-    .source-link .badge {
-      color: var(--accent-blue);
+    .source-link code {
+      font-family: 'SF Mono', Consolas, monospace;
+      background: var(--bg-tertiary);
+      padding: 2px 6px;
+      border-radius: 4px;
     }
 
     .session-full {
       font-family: 'SF Mono', Consolas, monospace;
       font-size: 11px;
       color: var(--text-secondary);
+      margin-left: 4px;
     }
 
     .no-session {
@@ -386,39 +437,44 @@ function getPoplDetailStyles(): string {
       color: var(--text-secondary);
     }
 
-    .capture-summary {
+    /* Capture Table */
+    .capture-table {
+      width: 100%;
+      border-collapse: collapse;
       background: var(--bg-secondary);
       border: 1px solid var(--border-color);
       border-radius: 8px;
-      padding: 16px;
+      overflow: hidden;
     }
 
-    .capture-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 24px;
-      margin-bottom: 12px;
+    .capture-table th,
+    .capture-table td {
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
     }
 
-    .capture-row:last-child {
-      margin-bottom: 0;
+    .capture-table tr:last-child th,
+    .capture-table tr:last-child td {
+      border-bottom: none;
     }
 
-    .capture-item {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .capture-label {
-      font-size: 11px;
+    .capture-table th {
+      width: 120px;
+      background: var(--bg-tertiary);
       color: var(--text-secondary);
-      text-transform: uppercase;
+      font-weight: 500;
+      font-size: 12px;
     }
 
-    .capture-value {
-      font-size: 14px;
-      color: var(--text-primary);
+    .capture-stat {
+      font-family: 'SF Mono', Consolas, monospace;
+      font-weight: 600;
+      color: var(--accent-blue);
+    }
+
+    .capture-stat.stat-error {
+      color: var(--accent-red);
     }
 
     .badge-error {
@@ -527,6 +583,7 @@ function getPoplDetailStyles(): string {
 interface ArtifactPageOptions {
   proofId: string;
   artifactName: string;
+  connectorId?: string;
   artifact?: {
     name: string;
     path: string;
@@ -538,10 +595,46 @@ interface ArtifactPageOptions {
 }
 
 /**
+ * Render breadcrumb navigation for Artifact page
+ */
+function renderArtifactBreadcrumb(
+  connectorId: string | undefined,
+  proofId: string,
+  artifactName: string
+): string {
+  const shortId = proofId.slice(0, 10);
+
+  if (!connectorId) {
+    // Fallback: simpler breadcrumb without connector
+    return `
+      <nav class="breadcrumb">
+        <a href="/" class="breadcrumb-item">Home</a>
+        <span class="breadcrumb-sep">/</span>
+        <a href="/popl/${encodeURIComponent(proofId)}" class="breadcrumb-item">Ledger:${escapeHtml(shortId)}</a>
+        <span class="breadcrumb-sep">/</span>
+        <span class="breadcrumb-current">${escapeHtml(artifactName)}</span>
+      </nav>
+    `;
+  }
+
+  return `
+    <nav class="breadcrumb">
+      <a href="/" class="breadcrumb-item">Home</a>
+      <span class="breadcrumb-sep">/</span>
+      <a href="/connectors/${encodeURIComponent(connectorId)}" class="breadcrumb-item">${escapeHtml(connectorId)}</a>
+      <span class="breadcrumb-sep">/</span>
+      <a href="/popl/${encodeURIComponent(proofId)}" class="breadcrumb-item">Ledger:${escapeHtml(shortId)}</a>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current">${escapeHtml(artifactName)}</span>
+    </nav>
+  `;
+}
+
+/**
  * Render artifact content page
  */
 export function renderArtifactPage(options: ArtifactPageOptions): string {
-  const { proofId, artifactName, artifact, content, isJson, error } = options;
+  const { proofId, artifactName, connectorId, artifact, content, isJson, error } = options;
 
   let contentHtml: string;
 
@@ -572,10 +665,9 @@ export function renderArtifactPage(options: ArtifactPageOptions): string {
 
   const pageContent = `
     <section class="section">
-      <a href="/popl/${encodeURIComponent(proofId)}" class="back-link">← Back to POPL Entry</a>
+      ${renderArtifactBreadcrumb(connectorId, proofId, artifactName)}
       <div class="artifact-header">
         <h1 class="artifact-title">Artifact: ${escapeHtml(artifactName)}</h1>
-        <p class="artifact-entry">POPL Entry: <code>${escapeHtml(proofId)}</code></p>
       </div>
     </section>
 

@@ -40,11 +40,27 @@ export function createMonitorCommand(getConfigPath: () => string): Command {
           await openInBrowser(url);
         }
 
-        // Keep server running until interrupted
+        // Keep server running until interrupted with graceful shutdown
         await new Promise<void>((resolve) => {
+          let shutdownRequested = false;
+
           const shutdown = () => {
+            if (shutdownRequested) {
+              // Force exit on second Ctrl+C
+              console.log('\nForce exit.');
+              process.exit(1);
+            }
+            shutdownRequested = true;
             console.log('\nShutting down monitor...');
+
+            // Set timeout for graceful shutdown (10 seconds)
+            const forceExitTimeout = setTimeout(() => {
+              console.log('Graceful shutdown timed out, forcing exit.');
+              process.exit(1);
+            }, 10000);
+
             server.close(() => {
+              clearTimeout(forceExitTimeout);
               console.log('Monitor stopped.');
               resolve();
             });

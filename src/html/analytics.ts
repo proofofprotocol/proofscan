@@ -14,6 +14,8 @@ import type {
   HtmlHeatmapCell,
   HtmlLatencyHistogram,
   HtmlLatencyBucket,
+  HtmlMethodLatencyData,
+  HtmlMethodLatencyEntry,
   HtmlTopToolsData,
   HtmlTopTool,
   HtmlMethodDistribution,
@@ -70,12 +72,14 @@ export function computeConnectorAnalytics(args: {
   const kpis = computeKpis(allRpcs, sessionsTotal, sessionsDisplayed, topTools);
   const heatmap = computeHeatmap(allRpcs);
   const latency = computeLatencyHistogram(allRpcs);
+  const methodLatency = computeMethodLatency(allRpcs);
   const methodDistribution = computeMethodDistribution(allRpcs);
 
   return {
     kpis,
     heatmap,
     latency,
+    method_latency: methodLatency,
     top_tools: topTools,
     method_distribution: methodDistribution,
   };
@@ -277,6 +281,83 @@ function computeLatencyHistogram(rpcs: SessionRpcDetail[]): HtmlLatencyHistogram
     buckets,
     sample_size: sampleSize,
     excluded_count: excludedCount,
+  };
+}
+
+// ============================================================================
+// Method Latency Computation
+// ============================================================================
+
+/**
+ * Compute method-based latency data for bar chart.
+ * Groups latencies by method name (e.g., initialize, tools/list, tools/call).
+ */
+function computeMethodLatency(rpcs: SessionRpcDetail[]): HtmlMethodLatencyData {
+  if (rpcs.length === 0) {
+    return {
+      methods: [],
+      sample_size: 0,
+      max_latency_ms: 0,
+    };
+  }
+
+  // Group latencies by method
+  const methodLatencies = new Map<string, number[]>();
+  let sampleSize = 0;
+  let maxLatency = 0;
+
+  for (const rpc of rpcs) {
+    if (rpc.latency_ms === null) {
+      continue;
+    }
+
+    sampleSize++;
+    if (rpc.latency_ms > maxLatency) {
+      maxLatency = rpc.latency_ms;
+    }
+
+    const existing = methodLatencies.get(rpc.method);
+    if (existing) {
+      existing.push(rpc.latency_ms);
+    } else {
+      methodLatencies.set(rpc.method, [rpc.latency_ms]);
+    }
+  }
+
+  // Convert to entries with statistics
+  const methods: HtmlMethodLatencyEntry[] = [];
+
+  for (const [method, latencies] of methodLatencies.entries()) {
+    const sorted = [...latencies].sort((a, b) => a - b);
+    const count = latencies.length;
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / count);
+    // Median (P50)
+    const p50Idx = Math.floor(count / 2);
+    const p50 = count % 2 === 0
+      ? Math.round((sorted[p50Idx - 1] + sorted[p50Idx]) / 2)
+      : sorted[p50Idx];
+
+    methods.push({
+      method,
+      latencies: sorted,
+      min_ms: min,
+      max_ms: max,
+      avg_ms: avg,
+      p50_ms: p50,
+      count,
+    });
+  }
+
+  // Sort by total call count descending, take top 6 methods
+  methods.sort((a, b) => b.count - a.count);
+  const topMethods = methods.slice(0, 6);
+
+  return {
+    methods: topMethods,
+    sample_size: sampleSize,
+    max_latency_ms: maxLatency,
   };
 }
 

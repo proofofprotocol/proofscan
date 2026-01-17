@@ -560,6 +560,14 @@ describe('generateConnectorHtml', () => {
         sample_size: 5,
         excluded_count: 0,
       },
+      method_latency: {
+        methods: [
+          { method: 'tools/call', latencies: [10, 15, 25], min_ms: 10, max_ms: 25, avg_ms: 17, p50_ms: 15, count: 3 },
+          { method: 'tools/list', latencies: [5, 8], min_ms: 5, max_ms: 8, avg_ms: 7, p50_ms: 7, count: 2 },
+        ],
+        sample_size: 5,
+        max_latency_ms: 25,
+      },
       top_tools: {
         items: [
           { name: 'read_file', count: 3, pct: 60 },

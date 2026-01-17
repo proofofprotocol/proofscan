@@ -377,6 +377,28 @@ export interface HtmlLatencyHistogram {
 }
 
 /**
+ * Method latency entry for bar chart (one bar per method)
+ */
+export interface HtmlMethodLatencyEntry {
+  method: string;           // e.g., "initialize", "tools/list", "tools/call"
+  latencies: number[];      // All latency values for this method
+  min_ms: number | null;
+  max_ms: number | null;
+  avg_ms: number | null;
+  p50_ms: number | null;    // Median
+  count: number;            // Number of calls
+}
+
+/**
+ * Method-based latency chart data (logarithmic Y-axis)
+ */
+export interface HtmlMethodLatencyData {
+  methods: HtmlMethodLatencyEntry[];
+  sample_size: number;
+  max_latency_ms: number;   // For Y-axis scaling
+}
+
+/**
  * Top tool entry
  */
 export interface HtmlTopTool {
@@ -417,6 +439,8 @@ export interface HtmlConnectorAnalyticsV1 {
   kpis: HtmlConnectorKpis;
   heatmap: HtmlHeatmapData;
   latency: HtmlLatencyHistogram;
+  /** Method-based latency chart (X: methods, Y: log scale latency) */
+  method_latency: HtmlMethodLatencyData;
   top_tools: HtmlTopToolsData;
   method_distribution: HtmlMethodDistribution;
 }

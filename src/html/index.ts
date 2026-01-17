@@ -80,6 +80,8 @@ export {
   escapeJsonPointer,
   renderJsonWithPaths,
   renderMethodSummary,
+  renderRequestSummary,
+  renderResponseSummary,
   renderSummaryRowsHtml,
   registerMethodHandler,
   getRpcInspectorStyles,

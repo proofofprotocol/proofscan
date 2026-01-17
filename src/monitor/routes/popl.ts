@@ -43,6 +43,7 @@ poplRoutes.get('/:proof_id/artifacts/:name', async (c) => {
       renderArtifactPage({
         proofId,
         artifactName,
+        connectorId: entry.connector_id,
         error: `Artifact "${artifactName}" not found in POPL entry`,
       }),
       404
@@ -60,6 +61,7 @@ poplRoutes.get('/:proof_id/artifacts/:name', async (c) => {
       renderArtifactPage({
         proofId,
         artifactName,
+        connectorId: entry.connector_id,
         artifact,
         error: 'Invalid artifact path: access denied',
       }),
@@ -77,6 +79,7 @@ poplRoutes.get('/:proof_id/artifacts/:name', async (c) => {
         renderArtifactPage({
           proofId,
           artifactName,
+          connectorId: entry.connector_id,
           artifact,
           error: `File too large to display (${(fileStat.size / 1024 / 1024).toFixed(2)} MB). Maximum: 1 MB`,
         }),
@@ -94,6 +97,7 @@ poplRoutes.get('/:proof_id/artifacts/:name', async (c) => {
       renderArtifactPage({
         proofId,
         artifactName,
+        connectorId: entry.connector_id,
         artifact,
         content,
         isJson,
@@ -105,6 +109,7 @@ poplRoutes.get('/:proof_id/artifacts/:name', async (c) => {
       renderArtifactPage({
         proofId,
         artifactName,
+        connectorId: entry.connector_id,
         artifact,
         error: `Failed to read artifact: ${errorMessage}`,
       }),

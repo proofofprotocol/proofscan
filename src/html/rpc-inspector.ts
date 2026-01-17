@@ -231,7 +231,7 @@ export function registerMethodHandler(handler: MethodSummaryHandler): void {
 }
 
 /**
- * Render method-specific summary
+ * Render method-specific summary (combined request + response)
  */
 export function renderMethodSummary(
   method: string,
@@ -251,12 +251,84 @@ export function renderMethodSummary(
 }
 
 /**
- * Generic summary for unknown methods
+ * Render request-specific summary
+ */
+/**
+ * Extended method summary handler with separate request/response renderers
+ */
+interface MethodSummaryHandlerExtended extends MethodSummaryHandler {
+  renderRequest?: (request: unknown) => SummaryRow[];
+  renderResponse?: (response: unknown) => SummaryRow[];
+}
+
+export function renderRequestSummary(
+  method: string,
+  request: unknown
+): SummaryRow[] {
+  // Check for method-specific request handler
+  for (const handler of methodHandlers) {
+    const extended = handler as MethodSummaryHandlerExtended;
+    if (typeof handler.method === 'string' && handler.method === method) {
+      if (extended.renderRequest) {
+        return extended.renderRequest(request);
+      }
+    }
+    if (handler.method instanceof RegExp && handler.method.test(method)) {
+      if (extended.renderRequest) {
+        return extended.renderRequest(request);
+      }
+    }
+  }
+  // Default: show generic request summary
+  return renderGenericRequestSummary(method, request);
+}
+
+/**
+ * Render response-specific summary
+ */
+export function renderResponseSummary(
+  method: string,
+  response: unknown
+): SummaryRow[] {
+  // Check for method-specific response handler
+  for (const handler of methodHandlers) {
+    const extended = handler as MethodSummaryHandlerExtended;
+    if (typeof handler.method === 'string' && handler.method === method) {
+      if (extended.renderResponse) {
+        return extended.renderResponse(response);
+      }
+    }
+    if (handler.method instanceof RegExp && handler.method.test(method)) {
+      if (extended.renderResponse) {
+        return extended.renderResponse(response);
+      }
+    }
+  }
+  // Default: show generic response summary
+  return renderGenericResponseSummary(method, response);
+}
+
+/**
+ * Generic summary for unknown methods - returns separate request and response summaries
  */
 function renderGenericSummary(
   method: string,
   request: unknown,
   response: unknown
+): SummaryRow[] {
+  // This returns combined rows for backward compatibility
+  // New code should use renderGenericRequestSummary and renderGenericResponseSummary
+  const reqRows = renderGenericRequestSummary(method, request);
+  const resRows = renderGenericResponseSummary(method, response);
+  return [...reqRows, ...resRows];
+}
+
+/**
+ * Render request-only summary
+ */
+export function renderGenericRequestSummary(
+  method: string,
+  request: unknown
 ): SummaryRow[] {
   const rows: SummaryRow[] = [];
 
@@ -273,7 +345,7 @@ function renderGenericSummary(
     if (paramKeys.length > 0) {
       rows.push({
         type: 'header',
-        label: 'Request Parameters',
+        label: 'Parameters',
         cssClass: 'summary-section-header',
       });
       paramKeys.forEach((key) => {
@@ -288,25 +360,66 @@ function renderGenericSummary(
         });
       });
     }
+  } else {
+    rows.push({
+      type: 'property',
+      label: '(no parameters)',
+      cssClass: 'summary-empty',
+    });
   }
+
+  return rows;
+}
+
+/**
+ * Render response-only summary
+ */
+export function renderGenericResponseSummary(
+  method: string,
+  response: unknown
+): SummaryRow[] {
+  const rows: SummaryRow[] = [];
+
+  rows.push({
+    type: 'header',
+    label: `Method: ${method}`,
+    cssClass: 'summary-method-header',
+  });
 
   // Show response result summary
   const res = response as { result?: unknown; error?: unknown } | null;
   if (res?.result !== undefined) {
     rows.push({
       type: 'header',
-      label: 'Response Result',
+      label: 'Result',
       cssClass: 'summary-section-header',
     });
-    rows.push({
-      type: 'property',
-      label: 'result',
-      value: summarizeValue(res.result),
-      pointer: {
-        target: 'response',
-        path: '#/result',
-      },
-    });
+
+    // If result is an object, show its keys
+    if (res.result && typeof res.result === 'object' && !Array.isArray(res.result)) {
+      const resultObj = res.result as Record<string, unknown>;
+      Object.keys(resultObj).forEach((key) => {
+        rows.push({
+          type: 'property',
+          label: key,
+          value: summarizeValue(resultObj[key]),
+          pointer: {
+            target: 'response',
+            path: `#/result/${escapeJsonPointer(key)}`,
+          },
+        });
+      });
+    } else {
+      rows.push({
+        type: 'property',
+        label: 'result',
+        value: summarizeValue(res.result),
+        pointer: {
+          target: 'response',
+          path: '#/result',
+        },
+      });
+    }
   }
 
   if (res?.error !== undefined) {
@@ -315,15 +428,39 @@ function renderGenericSummary(
       label: 'Error',
       cssClass: 'summary-section-header summary-error',
     });
+    const errorObj = res.error as Record<string, unknown> | null;
+    if (errorObj && typeof errorObj === 'object') {
+      Object.keys(errorObj).forEach((key) => {
+        rows.push({
+          type: 'property',
+          label: key,
+          value: summarizeValue(errorObj[key]),
+          pointer: {
+            target: 'response',
+            path: `#/error/${escapeJsonPointer(key)}`,
+          },
+          cssClass: 'summary-error-item',
+        });
+      });
+    } else {
+      rows.push({
+        type: 'property',
+        label: 'error',
+        value: summarizeValue(res.error),
+        pointer: {
+          target: 'response',
+          path: '#/error',
+        },
+        cssClass: 'summary-error-item',
+      });
+    }
+  }
+
+  if (res?.result === undefined && res?.error === undefined) {
     rows.push({
       type: 'property',
-      label: 'error',
-      value: summarizeValue(res.error),
-      pointer: {
-        target: 'response',
-        path: '#/error',
-      },
-      cssClass: 'summary-error-item',
+      label: '(pending or no response)',
+      cssClass: 'summary-empty',
     });
   }
 
@@ -375,60 +512,92 @@ interface ToolInfo {
 }
 
 /**
- * Register tools/list handler
+ * Register tools/list handler with separate request/response renderers
  */
 registerMethodHandler({
   method: 'tools/list',
   render: (_request: unknown, response: unknown): SummaryRow[] => {
+    // Combined view - just show response (tools list)
+    return renderToolsListResponse(response);
+  },
+  renderRequest: (_request: unknown): SummaryRow[] => {
     const rows: SummaryRow[] = [];
-
-    // Extract tools from response.result.tools
-    const res = response as { result?: { tools?: ToolInfo[] } } | null;
-    const tools = res?.result?.tools ?? [];
-
-    if (tools.length === 0) {
-      rows.push({
-        type: 'header',
-        label: 'No tools available',
-      });
-      return rows;
-    }
-
-    // Table header with collapse controls (only if many tools)
-    const showCollapseControls = tools.length > 5;
     rows.push({
       type: 'header',
-      label: `Tools (${tools.length})`,
-      cssClass: `summary-table-header${showCollapseControls ? ' summary-collapsible-header' : ''}`,
+      label: 'Method: tools/list',
+      cssClass: 'summary-method-header',
     });
-
-    // Tool rows
-    tools.forEach((tool, idx) => {
-      const toolRow: SummaryRow = {
-        type: 'item',
-        label: tool.name,
-        value: tool.description || '(no description)',
-        pointer: {
-          target: 'response',
-          path: `#/result/tools/${idx}`,
-        },
-        cssClass: 'summary-tool-row',
-      };
-
-      // Add inputSchema properties as children
-      if (tool.inputSchema?.properties) {
-        toolRow.children = renderInputSchemaRows(
-          tool.inputSchema,
-          `#/result/tools/${idx}/inputSchema`
-        );
-      }
-
-      rows.push(toolRow);
+    rows.push({
+      type: 'property',
+      label: '(no parameters required)',
+      cssClass: 'summary-empty',
     });
-
     return rows;
   },
-});
+  renderResponse: (response: unknown): SummaryRow[] => {
+    return renderToolsListResponse(response);
+  },
+} as MethodSummaryHandlerExtended);
+
+/**
+ * Render tools/list response summary
+ */
+function renderToolsListResponse(response: unknown): SummaryRow[] {
+  const rows: SummaryRow[] = [];
+
+  rows.push({
+    type: 'header',
+    label: 'Method: tools/list',
+    cssClass: 'summary-method-header',
+  });
+
+  // Extract tools from response.result.tools
+  const res = response as { result?: { tools?: ToolInfo[] } } | null;
+  const tools = res?.result?.tools ?? [];
+
+  if (tools.length === 0) {
+    rows.push({
+      type: 'property',
+      label: '(no tools available)',
+      cssClass: 'summary-empty',
+    });
+    return rows;
+  }
+
+  // Table header with collapse controls (only if many tools)
+  const showCollapseControls = tools.length > 5;
+  rows.push({
+    type: 'header',
+    label: `Tools (${tools.length})`,
+    cssClass: `summary-table-header${showCollapseControls ? ' summary-collapsible-header' : ''}`,
+  });
+
+  // Tool rows
+  tools.forEach((tool, idx) => {
+    const toolRow: SummaryRow = {
+      type: 'item',
+      label: tool.name,
+      value: tool.description || '(no description)',
+      pointer: {
+        target: 'response',
+        path: `#/result/tools/${idx}`,
+      },
+      cssClass: 'summary-tool-row',
+    };
+
+    // Add inputSchema properties as children
+    if (tool.inputSchema?.properties) {
+      toolRow.children = renderInputSchemaRows(
+        tool.inputSchema,
+        `#/result/tools/${idx}/inputSchema`
+      );
+    }
+
+    rows.push(toolRow);
+  });
+
+  return rows;
+}
 
 /**
  * Render inputSchema properties as summary rows
@@ -475,6 +644,282 @@ function renderInputSchemaRows(
   });
 
   return rows;
+}
+
+// ============================================================================
+// initialize Summary Handler
+// ============================================================================
+
+interface InitializeResult {
+  protocolVersion?: string;
+  serverInfo?: {
+    name?: string;
+    version?: string;
+  };
+  capabilities?: Record<string, unknown>;
+}
+
+interface InitializeRequest {
+  params?: {
+    protocolVersion?: string;
+    capabilities?: Record<string, unknown>;
+    clientInfo?: {
+      name?: string;
+      version?: string;
+    };
+  };
+}
+
+/**
+ * Register initialize handler with separate request/response renderers
+ */
+registerMethodHandler({
+  method: 'initialize',
+  render: (request: unknown, response: unknown): SummaryRow[] => {
+    // Combined view (for backward compatibility)
+    const reqRows = renderInitializeRequest(request);
+    const resRows = renderInitializeResponse(response);
+    return [...reqRows, ...resRows];
+  },
+  renderRequest: (request: unknown): SummaryRow[] => {
+    return renderInitializeRequest(request);
+  },
+  renderResponse: (response: unknown): SummaryRow[] => {
+    return renderInitializeResponse(response);
+  },
+} as MethodSummaryHandlerExtended);
+
+/**
+ * Render initialize request summary
+ */
+function renderInitializeRequest(request: unknown): SummaryRow[] {
+  const rows: SummaryRow[] = [];
+  const req = request as InitializeRequest | null;
+
+  rows.push({
+    type: 'header',
+    label: 'Method: initialize',
+    cssClass: 'summary-method-header',
+  });
+
+  const params = req?.params;
+  if (!params) {
+    rows.push({
+      type: 'property',
+      label: '(no parameters)',
+      cssClass: 'summary-empty',
+    });
+    return rows;
+  }
+
+  // Protocol Version
+  if (params.protocolVersion) {
+    rows.push({
+      type: 'header',
+      label: 'Protocol',
+      cssClass: 'summary-section-header',
+    });
+    rows.push({
+      type: 'property',
+      label: 'protocolVersion',
+      value: params.protocolVersion,
+      pointer: {
+        target: 'request',
+        path: '#/params/protocolVersion',
+      },
+    });
+  }
+
+  // Client Info
+  if (params.clientInfo) {
+    rows.push({
+      type: 'header',
+      label: 'Client Info',
+      cssClass: 'summary-section-header',
+    });
+    if (params.clientInfo.name) {
+      rows.push({
+        type: 'property',
+        label: 'name',
+        value: params.clientInfo.name,
+        pointer: {
+          target: 'request',
+          path: '#/params/clientInfo/name',
+        },
+      });
+    }
+    if (params.clientInfo.version) {
+      rows.push({
+        type: 'property',
+        label: 'version',
+        value: params.clientInfo.version,
+        pointer: {
+          target: 'request',
+          path: '#/params/clientInfo/version',
+        },
+      });
+    }
+  }
+
+  // Client Capabilities
+  if (params.capabilities) {
+    rows.push({
+      type: 'header',
+      label: 'Client Capabilities',
+      cssClass: 'summary-section-header',
+    });
+    renderCapabilitiesRows(params.capabilities, '#/params/capabilities', 'request', rows);
+  }
+
+  return rows;
+}
+
+/**
+ * Render initialize response summary
+ */
+function renderInitializeResponse(response: unknown): SummaryRow[] {
+  const rows: SummaryRow[] = [];
+  const res = response as { result?: InitializeResult; error?: unknown } | null;
+
+  rows.push({
+    type: 'header',
+    label: 'Method: initialize',
+    cssClass: 'summary-method-header',
+  });
+
+  if (res?.error) {
+    rows.push({
+      type: 'header',
+      label: 'Error',
+      cssClass: 'summary-section-header summary-error',
+    });
+    rows.push({
+      type: 'property',
+      label: 'error',
+      value: summarizeValue(res.error),
+      pointer: {
+        target: 'response',
+        path: '#/error',
+      },
+      cssClass: 'summary-error-item',
+    });
+    return rows;
+  }
+
+  const result = res?.result;
+  if (!result) {
+    rows.push({
+      type: 'property',
+      label: '(pending or no response)',
+      cssClass: 'summary-empty',
+    });
+    return rows;
+  }
+
+  // Protocol Version
+  if (result.protocolVersion) {
+    rows.push({
+      type: 'header',
+      label: 'Protocol',
+      cssClass: 'summary-section-header',
+    });
+    rows.push({
+      type: 'property',
+      label: 'protocolVersion',
+      value: result.protocolVersion,
+      pointer: {
+        target: 'response',
+        path: '#/result/protocolVersion',
+      },
+    });
+  }
+
+  // Server Info
+  if (result.serverInfo) {
+    rows.push({
+      type: 'header',
+      label: 'Server Info',
+      cssClass: 'summary-section-header',
+    });
+    if (result.serverInfo.name) {
+      rows.push({
+        type: 'property',
+        label: 'name',
+        value: result.serverInfo.name,
+        pointer: {
+          target: 'response',
+          path: '#/result/serverInfo/name',
+        },
+      });
+    }
+    if (result.serverInfo.version) {
+      rows.push({
+        type: 'property',
+        label: 'version',
+        value: result.serverInfo.version,
+        pointer: {
+          target: 'response',
+          path: '#/result/serverInfo/version',
+        },
+      });
+    }
+  }
+
+  // Server Capabilities
+  if (result.capabilities) {
+    rows.push({
+      type: 'header',
+      label: 'Server Capabilities',
+      cssClass: 'summary-section-header',
+    });
+    renderCapabilitiesRows(result.capabilities, '#/result/capabilities', 'response', rows);
+  }
+
+  return rows;
+}
+
+/**
+ * Render capabilities object as summary rows
+ */
+function renderCapabilitiesRows(
+  capabilities: Record<string, unknown>,
+  basePath: string,
+  target: 'request' | 'response',
+  rows: SummaryRow[]
+): void {
+  Object.entries(capabilities).forEach(([key, value]) => {
+    const path = `${basePath}/${escapeJsonPointer(key)}`;
+
+    // Determine if capability is enabled
+    let displayValue: string;
+    let cssClass = '';
+
+    if (value === undefined || value === null) {
+      displayValue = 'disabled';
+      cssClass = 'capability-disabled';
+    } else if (typeof value === 'boolean') {
+      displayValue = value ? 'enabled' : 'disabled';
+      cssClass = value ? 'capability-enabled' : 'capability-disabled';
+    } else if (typeof value === 'object') {
+      // Has options - show as enabled with details
+      const optionCount = Object.keys(value as object).length;
+      displayValue = optionCount > 0 ? `enabled (${optionCount} options)` : 'enabled';
+      cssClass = 'capability-enabled';
+    } else {
+      displayValue = String(value);
+    }
+
+    rows.push({
+      type: 'property',
+      label: key,
+      value: displayValue,
+      pointer: {
+        target,
+        path,
+      },
+      cssClass,
+    });
+  });
 }
 
 // ============================================================================
@@ -898,6 +1343,26 @@ export function getRpcInspectorStyles(): string {
       border-left: 3px solid #f85149;
     }
 
+    /* Empty state styling */
+    .summary-empty {
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+
+    /* Capability styling (for initialize method) */
+    .capability-enabled {
+      color: var(--accent-blue);
+    }
+
+    .capability-enabled .summary-prop-value {
+      color: #3fb950;
+    }
+
+    .capability-disabled {
+      color: var(--text-secondary);
+      opacity: 0.6;
+    }
+
     /* No-JS fallback */
     noscript + .rpc-toggle-bar {
       display: none;
@@ -931,7 +1396,7 @@ export function getRpcInspectorScript(): string {
         }
       }
 
-      // Switch between request and response view
+      // Switch between request and response view (both Summary and Raw JSON)
       function switchTarget(target) {
         currentTarget = target;
 
@@ -941,10 +1406,15 @@ export function getRpcInspectorScript(): string {
         if (reqBtn) reqBtn.classList.toggle('active', target === 'request');
         if (resBtn) resBtn.classList.toggle('active', target === 'response');
 
+        // Update Summary display
+        const reqSummary = document.getElementById('summary-request');
+        const resSummary = document.getElementById('summary-response');
+        if (reqSummary) reqSummary.style.display = target === 'request' ? 'block' : 'none';
+        if (resSummary) resSummary.style.display = target === 'response' ? 'block' : 'none';
+
         // Update raw JSON display
         const reqJson = document.getElementById('raw-json-request');
         const resJson = document.getElementById('raw-json-response');
-
         if (reqJson) reqJson.style.display = target === 'request' ? 'block' : 'none';
         if (resJson) resJson.style.display = target === 'response' ? 'block' : 'none';
       }

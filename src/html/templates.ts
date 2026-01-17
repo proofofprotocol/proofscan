@@ -14,6 +14,7 @@ import type {
   HtmlHeatmapData,
   HtmlLatencyHistogram,
   HtmlMethodDistribution,
+  HtmlMethodLatencyData,
   HtmlRpcReportV1,
   HtmlSessionReportV1,
   HtmlTopToolsData,
@@ -27,6 +28,8 @@ import {
   getRpcInspectorScript,
   renderJsonWithPaths,
   renderMethodSummary,
+  renderRequestSummary,
+  renderResponseSummary,
   renderSummaryRowsHtml,
 } from './rpc-inspector.js';
 
@@ -476,6 +479,7 @@ function getSessionReportScript(): string {
     }
 
     // Show RPC detail in right pane (2-column Wireshark-style layout)
+    // Summary and Raw JSON now both toggle with Req/Res buttons
     function showRpcDetail(idx) {
       if (idx < 0 || idx >= rpcs.length) return;
 
@@ -492,13 +496,14 @@ function getSessionReportScript(): string {
       const statusSymbol = rpc.status === 'OK' ? '✓' : rpc.status === 'ERR' ? '✗' : '?';
       const latency = rpc.latency_ms !== null ? rpc.latency_ms + 'ms' : '(pending)';
 
-      // Get pre-rendered summary and raw JSON from data attributes
-      const summaryHtml = rpc._summaryHtml || '<div class="summary-row summary-header">No summary available</div>';
+      // Get pre-rendered summary and raw JSON (separate request/response)
+      const requestSummaryHtml = rpc._requestSummaryHtml || '<div class="summary-row summary-header">No summary available</div>';
+      const responseSummaryHtml = rpc._responseSummaryHtml || '<div class="summary-row summary-header">No summary available</div>';
       const requestRawHtml = rpc._requestRawHtml || '<span class="json-null">(no data)</span>';
       const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
 
-      // Determine default target based on method
-      const defaultTarget = (rpc.method === 'tools/list' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
+      // Determine default target based on method (response-focused methods default to response)
+      const defaultTarget = (rpc.method === 'tools/list' || rpc.method === 'initialize' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
 
       rightPane.innerHTML =
         '<div class="detail-section">' +
@@ -513,16 +518,17 @@ function getSessionReportScript(): string {
         '  </div>' +
         '</div>' +
         '<div class="detail-section">' +
+        '  <div class="rpc-toggle-bar">' +
+        '    <button id="toggle-req" class="rpc-toggle-btn' + (defaultTarget === 'request' ? ' active' : '') + '">[Req]</button>' +
+        '    <button id="toggle-res" class="rpc-toggle-btn' + (defaultTarget === 'response' ? ' active' : '') + '">[Res]</button>' +
+        '  </div>' +
         '  <div class="rpc-inspector">' +
         '    <div class="rpc-inspector-summary">' +
         '      <h3>Summary</h3>' +
-        summaryHtml +
+        '      <div id="summary-request" style="display:' + (defaultTarget === 'request' ? 'block' : 'none') + '">' + requestSummaryHtml + '</div>' +
+        '      <div id="summary-response" style="display:' + (defaultTarget === 'response' ? 'block' : 'none') + '">' + responseSummaryHtml + '</div>' +
         '    </div>' +
         '    <div class="rpc-inspector-raw">' +
-        '      <div class="rpc-toggle-bar">' +
-        '        <button id="toggle-req" class="rpc-toggle-btn' + (defaultTarget === 'request' ? ' active' : '') + '">[Req]</button>' +
-        '        <button id="toggle-res" class="rpc-toggle-btn' + (defaultTarget === 'response' ? ' active' : '') + '">[Res]</button>' +
-        '      </div>' +
         '      <div class="rpc-raw-json">' +
         '        <div id="raw-json-request" style="display:' + (defaultTarget === 'request' ? 'block' : 'none') + '">' + requestRawHtml + '</div>' +
         '        <div id="raw-json-response" style="display:' + (defaultTarget === 'response' ? 'block' : 'none') + '">' + responseRawHtml + '</div>' +
@@ -755,11 +761,14 @@ export function generateSessionHtml(report: HtmlSessionReportV1): string {
   const rpcRows = rpcs.map((rpc, idx) => renderRpcRow(rpc, idx)).join('\n');
 
   // Pre-render summary and raw JSON HTML for each RPC (for RPC Inspector)
+  // Now generates separate request/response summaries for Req/Res toggle
   const rpcsWithInspectorHtml = rpcs.map((rpc) => {
-    const summaryRows = renderMethodSummary(rpc.method, rpc.request.json, rpc.response.json);
+    const requestSummaryRows = renderRequestSummary(rpc.method, rpc.request.json);
+    const responseSummaryRows = renderResponseSummary(rpc.method, rpc.response.json);
     return {
       ...rpc,
-      _summaryHtml: renderSummaryRowsHtml(summaryRows),
+      _requestSummaryHtml: renderSummaryRowsHtml(requestSummaryRows),
+      _responseSummaryHtml: renderSummaryRowsHtml(responseSummaryRows),
       _requestRawHtml: renderJsonWithPaths(rpc.request.json, '#'),
       _responseRawHtml: renderJsonWithPaths(rpc.response.json, '#'),
     };
@@ -881,13 +890,102 @@ function getConnectorReportStyles(): string {
       display: flex;
       flex-direction: column;
     }
-    header {
+    /* Unified header (matches Home/Ledger/Artifact pages) */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       padding: 12px 20px;
+      background: var(--bg-secondary);
       border-bottom: 1px solid var(--border-color);
       flex-shrink: 0;
     }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .header-back {
+      color: var(--accent-blue);
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .header-back:hover {
+      text-decoration: underline;
+    }
+    .header-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .offline-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .offline-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: #6e7681;
+      border-radius: 50%;
+    }
+    /* Auto-refresh toggle */
+    .refresh-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 2px 4px;
+    }
+    .refresh-toggle .refresh-label {
+      font-size: 10px;
+      color: var(--text-secondary);
+      padding-left: 4px;
+    }
+    .refresh-toggle button {
+      background: transparent;
+      border: none;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .refresh-toggle button:hover {
+      color: var(--text-primary);
+    }
+    .refresh-toggle button.active {
+      background: rgba(0, 212, 255, 0.15);
+      color: var(--accent-blue);
+    }
+    /* Page header (Connector name + KPI row) */
+    .page-header {
+      padding: 8px 20px;
+      border-bottom: 1px solid var(--border-color);
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
     h1 {
-      margin: 0 0 4px 0;
+      margin: 0;
       font-size: 1.3em;
       font-weight: 600;
     }
@@ -923,6 +1021,21 @@ function getConnectorReportStyles(): string {
     .badge.status-ERR { border-color: var(--status-err); color: var(--status-err); }
     .badge.status-PENDING { border-color: var(--status-pending); color: var(--status-pending); }
     .badge.cap-enabled { border-color: var(--accent-blue); color: var(--accent-blue); background: rgba(0, 212, 255, 0.1); }
+    .badge.cap-disabled { border-color: var(--border-color); color: var(--text-secondary); background: transparent; opacity: 0.5; }
+
+    /* Connector info cards container (side by side) */
+    .connector-info-cards {
+      display: flex;
+      gap: 0;
+    }
+    .connector-info-cards > .connector-info {
+      flex: 1;
+      border-right: 1px solid var(--border-color);
+    }
+    .connector-info-cards > .connector-info:last-child {
+      border-right: none;
+      padding-left: 24px;
+    }
 
     /* Connector info section (collapsible) */
     .connector-info {
@@ -1215,35 +1328,15 @@ function getConnectorReportStyles(): string {
       flex-wrap: wrap;
       gap: 12px;
     }
-    .header-left {
+    .page-header-left {
       flex-shrink: 0;
     }
-    .header-server-row {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-    }
-    .header-caps {
-      display: flex;
-      gap: 4px;
-    }
-    .header-server-info {
-      display: flex;
-      gap: 12px;
-      font-size: 0.75em;
+    /* Capability badges - active (blue) / inactive (gray) */
+    .badge.cap-disabled {
+      border-color: var(--border-color);
       color: var(--text-secondary);
-    }
-    .header-server-info .server-name {
-      color: var(--text-primary);
-    }
-    .header-label {
-      color: var(--text-secondary);
-      font-size: 0.9em;
-    }
-    .no-caps {
-      color: var(--text-secondary);
-      font-style: italic;
+      background: transparent;
+      opacity: 0.5;
     }
     .kpi-row {
       display: flex;
@@ -1331,6 +1424,11 @@ function getConnectorReportStyles(): string {
       font-size: 0.75em;
       color: var(--text-secondary);
       margin-bottom: 4px;
+      line-height: 1.4;
+    }
+    .heatmap-range {
+      font-size: 0.9em;
+      opacity: 0.8;
     }
     .heatmap-level-0 { fill: var(--bg-tertiary); }
     .heatmap-level-1 { fill: #0a3d4d; }
@@ -1338,9 +1436,26 @@ function getConnectorReportStyles(): string {
     .heatmap-level-3 { fill: #0097b2; }
     .heatmap-level-4 { fill: #00d4ff; }
 
-    /* Histogram */
+    /* Histogram / Method Latency Heatmap */
     .histogram-bar { fill: var(--accent-blue); }
     .histogram-label { fill: var(--text-secondary); font-size: 9px; }
+    .latency-heatmap { font-size: 0.75em; }
+    .latency-heatmap-header, .latency-heatmap-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 3px;
+    }
+    .latency-heatmap-header { color: var(--text-secondary); margin-bottom: 6px; }
+    .latency-heatmap-method { width: 28px; flex-shrink: 0; text-align: right; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+    .latency-heatmap-cells { display: flex; gap: 1px; }
+    .latency-heatmap-cell { width: 30px; height: 12px; border-radius: 2px; cursor: default; }
+    .latency-heatmap-cell.heatmap-level-0 { background: #161b22; }
+    .latency-heatmap-cell.heatmap-level-1 { background: #0e4429; }
+    .latency-heatmap-cell.heatmap-level-2 { background: #006d32; }
+    .latency-heatmap-cell.heatmap-level-3 { background: #0097b2; }
+    .latency-heatmap-cell.heatmap-level-4 { background: #00d4ff; }
+    .latency-heatmap-header-cell { width: 30px; font-size: 8px; text-align: center; color: var(--text-secondary); white-space: nowrap; }
 
     /* Top Tools */
     .top-tool-row {
@@ -1434,6 +1549,50 @@ function getConnectorReportStyles(): string {
  */
 function getConnectorReportScript(): string {
   return `
+    // Auto-refresh functionality
+    (function() {
+      let refreshInterval = null;
+      const toggle = document.getElementById('refreshToggle');
+      if (!toggle) return;
+
+      const buttons = toggle.querySelectorAll('button');
+
+      // Load saved interval from localStorage
+      const savedInterval = localStorage.getItem('proofscan-refresh-interval');
+      if (savedInterval) {
+        setRefreshInterval(parseInt(savedInterval, 10));
+      }
+
+      function setRefreshInterval(seconds) {
+        // Clear existing interval
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+          refreshInterval = null;
+        }
+
+        // Update button states
+        buttons.forEach(function(btn) {
+          btn.classList.toggle('active', parseInt(btn.dataset.interval, 10) === seconds);
+        });
+
+        // Save preference
+        localStorage.setItem('proofscan-refresh-interval', String(seconds));
+
+        // Set new interval if not OFF
+        if (seconds > 0) {
+          refreshInterval = setInterval(function() {
+            location.reload();
+          }, seconds * 1000);
+        }
+      }
+
+      buttons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          setRefreshInterval(parseInt(btn.dataset.interval, 10));
+        });
+      });
+    })();
+
     // Report data
     const reportData = JSON.parse(document.getElementById('report-data').textContent);
     const sessions = reportData.sessions;
@@ -1505,6 +1664,7 @@ function getConnectorReportScript(): string {
     }
 
     // Show RPC detail in right pane (2-column Wireshark-style layout)
+    // Summary and Raw JSON now both toggle with Req/Res buttons
     function showRpcDetail(sessionId, idx) {
       const report = sessionReports[sessionId];
       if (!report || idx < 0 || idx >= report.rpcs.length) return;
@@ -1526,13 +1686,14 @@ function getConnectorReportScript(): string {
       const statusSymbol = rpc.status === 'OK' ? '\\u2713' : rpc.status === 'ERR' ? '\\u2717' : '?';
       const latency = rpc.latency_ms !== null ? rpc.latency_ms + 'ms' : '(pending)';
 
-      // Get pre-rendered summary and raw JSON from data attributes
-      const summaryHtml = rpc._summaryHtml || '<div class="summary-row summary-header">No summary available</div>';
+      // Get pre-rendered summary and raw JSON (separate request/response)
+      const requestSummaryHtml = rpc._requestSummaryHtml || '<div class="summary-row summary-header">No summary available</div>';
+      const responseSummaryHtml = rpc._responseSummaryHtml || '<div class="summary-row summary-header">No summary available</div>';
       const requestRawHtml = rpc._requestRawHtml || '<span class="json-null">(no data)</span>';
       const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
 
-      // Determine default target based on method
-      const defaultTarget = (rpc.method === 'tools/list' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
+      // Determine default target based on method (response-focused methods default to response)
+      const defaultTarget = (rpc.method === 'tools/list' || rpc.method === 'initialize' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
 
       rightPane.innerHTML =
         '<div class="detail-section">' +
@@ -1547,16 +1708,17 @@ function getConnectorReportScript(): string {
         '  </div>' +
         '</div>' +
         '<div class="detail-section">' +
+        '  <div class="rpc-toggle-bar">' +
+        '    <button id="toggle-req" class="rpc-toggle-btn' + (defaultTarget === 'request' ? ' active' : '') + '">[Req]</button>' +
+        '    <button id="toggle-res" class="rpc-toggle-btn' + (defaultTarget === 'response' ? ' active' : '') + '">[Res]</button>' +
+        '  </div>' +
         '  <div class="rpc-inspector">' +
         '    <div class="rpc-inspector-summary">' +
         '      <h3>Summary</h3>' +
-        summaryHtml +
+        '      <div id="summary-request" style="display:' + (defaultTarget === 'request' ? 'block' : 'none') + '">' + requestSummaryHtml + '</div>' +
+        '      <div id="summary-response" style="display:' + (defaultTarget === 'response' ? 'block' : 'none') + '">' + responseSummaryHtml + '</div>' +
         '    </div>' +
         '    <div class="rpc-inspector-raw">' +
-        '      <div class="rpc-toggle-bar">' +
-        '        <button id="toggle-req" class="rpc-toggle-btn' + (defaultTarget === 'request' ? ' active' : '') + '">[Req]</button>' +
-        '        <button id="toggle-res" class="rpc-toggle-btn' + (defaultTarget === 'response' ? ' active' : '') + '">[Res]</button>' +
-        '      </div>' +
         '      <div class="rpc-raw-json">' +
         '        <div id="raw-json-request" style="display:' + (defaultTarget === 'request' ? 'block' : 'none') + '">' + requestRawHtml + '</div>' +
         '        <div id="raw-json-response" style="display:' + (defaultTarget === 'response' ? 'block' : 'none') + '">' + responseRawHtml + '</div>' +
@@ -1819,7 +1981,7 @@ export function renderHeatmap(heatmap: HtmlHeatmapData): string {
 
   return `
     <div class="heatmap-container">
-      <div class="heatmap-title">Activity (${escapeHtml(heatmap.start_date)} to ${escapeHtml(heatmap.end_date)})</div>
+      <div class="heatmap-title">Activity<br><span class="heatmap-range">${escapeHtml(heatmap.start_date)} to ${escapeHtml(heatmap.end_date)}</span></div>
       <svg width="${svgWidth}" height="${svgHeight}" viewBox="0 0 ${svgWidth} ${svgHeight}">
         ${rects}
       </svg>
@@ -1827,42 +1989,132 @@ export function renderHeatmap(heatmap: HtmlHeatmapData): string {
 }
 
 /**
- * Render latency histogram (SVG bar chart)
+ * Render method-based latency heatmap (Activity-style)
+ * Rows: method names
+ * Columns: latency buckets (log scale)
+ * Cell color: intensity based on count
  */
-function renderLatencyHistogram(latency: HtmlLatencyHistogram): string {
-  if (latency.sample_size === 0) {
+function renderMethodLatencyChart(methodLatency: HtmlMethodLatencyData): string {
+  if (methodLatency.sample_size === 0 || methodLatency.methods.length === 0) {
     return `
       <div class="latency-histogram">
-        <div class="chart-title">Latency Distribution</div>
+        <div class="chart-title">Latency by Method</div>
         <div class="no-data-message">No latency data</div>
       </div>`;
   }
 
-  const maxCount = Math.max(...latency.buckets.map((b) => b.count), 1);
-  const barWidth = 30;
-  const barGap = 4;
-  const chartWidth = latency.buckets.length * (barWidth + barGap);
-  const chartHeight = 60;
-  const labelHeight = 16;
+  // Latency buckets (log scale thresholds)
+  const buckets = [
+    { label: '<10ms', max: 10 },
+    { label: '<100ms', max: 100 },
+    { label: '<1s', max: 1000 },
+    { label: '<5s', max: 5000 },
+    { label: '5s+', max: Infinity },
+  ];
 
-  let bars = '';
-  latency.buckets.forEach((bucket, idx) => {
-    const barHeight = maxCount > 0 ? (bucket.count / maxCount) * chartHeight : 0;
-    const x = idx * (barWidth + barGap);
-    const y = chartHeight - barHeight;
-    const title = `${bucket.label}ms: ${bucket.count} RPCs`;
+  // Group latencies into buckets for each method
+  const methods = methodLatency.methods;
 
-    bars += `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" class="histogram-bar"><title>${escapeHtml(title)}</title></rect>`;
-    bars += `<text x="${x + barWidth / 2}" y="${chartHeight + labelHeight - 4}" text-anchor="middle" class="histogram-label">${escapeHtml(bucket.label)}</text>`;
-  });
+  // Find global max count for intensity scaling
+  let globalMaxCount = 0;
+  const methodBucketCounts: Map<string, number[]> = new Map();
+
+  for (const method of methods) {
+    const counts = buckets.map(() => 0);
+    for (const latency of method.latencies) {
+      for (let i = 0; i < buckets.length; i++) {
+        if (i === 0 && latency < buckets[i].max) {
+          counts[i]++;
+          break;
+        } else if (i > 0 && latency >= buckets[i - 1].max && latency < buckets[i].max) {
+          counts[i]++;
+          break;
+        } else if (i === buckets.length - 1 && latency >= buckets[i - 1].max) {
+          counts[i]++;
+          break;
+        }
+      }
+    }
+    methodBucketCounts.set(method.method, counts);
+    globalMaxCount = Math.max(globalMaxCount, ...counts);
+  }
+
+  // Get heatmap level (0-4)
+  const getLevel = (count: number): number => {
+    if (count === 0) return 0;
+    if (globalMaxCount === 0) return 0;
+    const ratio = count / globalMaxCount;
+    if (ratio <= 0.25) return 1;
+    if (ratio <= 0.5) return 2;
+    if (ratio <= 0.75) return 3;
+    return 4;
+  };
+
+  // Build HTML rows
+  let rows = '';
+  for (const method of methods) {
+    const shortName = shortenMethodName(method.method);
+    const counts = methodBucketCounts.get(method.method) || [];
+
+    let cells = '';
+    for (let i = 0; i < buckets.length; i++) {
+      const count = counts[i];
+      const level = getLevel(count);
+      const tooltip = `${method.method}\n${buckets[i].label}: ${count} calls`;
+      cells += `<div class="latency-heatmap-cell heatmap-level-${level}" title="${escapeHtml(tooltip)}"></div>`;
+    }
+
+    rows += `
+      <div class="latency-heatmap-row">
+        <div class="latency-heatmap-method">${escapeHtml(shortName)}</div>
+        <div class="latency-heatmap-cells">${cells}</div>
+      </div>`;
+  }
+
+  // Header row with bucket labels
+  let headerCells = '';
+  for (const bucket of buckets) {
+    headerCells += `<div class="latency-heatmap-header-cell">${bucket.label}</div>`;
+  }
 
   return `
     <div class="latency-histogram">
-      <div class="chart-title">Latency Distribution (${latency.sample_size} samples)</div>
-      <svg width="${chartWidth}" height="${chartHeight + labelHeight}" viewBox="0 0 ${chartWidth} ${chartHeight + labelHeight}">
-        ${bars}
-      </svg>
+      <div class="chart-title">Latency by Method (${methodLatency.sample_size} samples)</div>
+      <div class="latency-heatmap">
+        <div class="latency-heatmap-header">
+          <div class="latency-heatmap-method"></div>
+          <div class="latency-heatmap-cells">${headerCells}</div>
+        </div>
+        ${rows}
+      </div>
     </div>`;
+}
+
+/**
+ * Shorten method name for display (e.g., "tools/list" -> "list", "initialize" -> "init")
+ */
+function shortenMethodName(method: string): string {
+  // Remove prefix
+  if (method.startsWith('tools/')) {
+    return method.slice(6);
+  }
+  if (method.startsWith('resources/')) {
+    return 'r/' + method.slice(10);
+  }
+  if (method.startsWith('prompts/')) {
+    return 'p/' + method.slice(8);
+  }
+  if (method === 'initialize') {
+    return 'init';
+  }
+  if (method === 'notifications/initialized') {
+    return 'n/init';
+  }
+  // Truncate if too long
+  if (method.length > 6) {
+    return method.slice(0, 5) + '…';
+  }
+  return method;
 }
 
 /**
@@ -2009,7 +2261,7 @@ function renderAnalyticsPanel(analytics: HtmlConnectorAnalyticsV1): string {
   return `
     <div class="analytics-panel">
       ${renderHeatmap(analytics.heatmap)}
-      ${renderLatencyHistogram(analytics.latency)}
+      ${renderMethodLatencyChart(analytics.method_latency)}
       ${renderTopTools(analytics.top_tools)}
       ${renderMethodDistribution(analytics.method_distribution)}
     </div>`;
@@ -2137,27 +2389,37 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
     ? connector.transport.command || '(unknown command)'
     : connector.transport.url || '(unknown URL)';
 
-  // Server info for header (if available)
-  let headerServerHtml = '';
+  // Server Response Info card (if available, from initialize response)
+  let serverResponseInfoCard = '';
   if (connector.server) {
     const { name, version, protocolVersion, capabilities } = connector.server;
     const serverName = name || '(unknown)';
     const serverVersion = version ? `v${version}` : '';
-    const protocolDisplay = protocolVersion ? `MCP ${protocolVersion}` : '';
+    const protocolDisplay = protocolVersion ? `MCP ${protocolVersion}` : 'Unknown';
 
-    // Capabilities badges
-    const capBadges: string[] = [];
-    if (capabilities.tools) capBadges.push('<span class="badge cap-enabled">tools</span>');
-    if (capabilities.resources) capBadges.push('<span class="badge cap-enabled">resources</span>');
-    if (capabilities.prompts) capBadges.push('<span class="badge cap-enabled">prompts</span>');
-    const capsDisplay = capBadges.length > 0 ? capBadges.join(' ') : '';
+    // Capabilities badges with all options (active/inactive state)
+    const allCaps = ['tools', 'resources', 'prompts'] as const;
+    const capBadges = allCaps.map(cap => {
+      const isActive = capabilities[cap];
+      const cls = isActive ? 'badge cap-enabled' : 'badge cap-disabled';
+      return `<span class="${cls}">${cap}</span>`;
+    }).join(' ');
 
-    headerServerHtml = `
-    <div class="header-server-row">
-      <div class="header-caps"><span class="header-label">Capabilities:</span> ${capsDisplay || '<span class="no-caps">(none)</span>'}</div>
-      <div class="header-server-info">
-        <span class="server-name"><span class="header-label">Server:</span> ${escapeHtml(serverName)} ${escapeHtml(serverVersion)}</span>
-        <span class="server-protocol"><span class="header-label">Protocol:</span> ${escapeHtml(protocolDisplay)}</span>
+    serverResponseInfoCard = `
+    <div class="connector-info expanded">
+      <div class="connector-info-toggle">
+        <h2>Server Response Info</h2>
+        <span class="toggle-icon">▼</span>
+      </div>
+      <div class="connector-info-content">
+        <dl>
+          <dt>Server</dt>
+          <dd><code>${escapeHtml(serverName)} ${escapeHtml(serverVersion)}</code></dd>
+          <dt>Protocol</dt>
+          <dd><span class="badge">${escapeHtml(protocolDisplay)}</span></dd>
+          <dt>Capabilities</dt>
+          <dd>${capBadges}</dd>
+        </dl>
       </div>
     </div>`;
   }
@@ -2173,15 +2435,18 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
   }).join('\n');
 
   // Pre-render summary and raw JSON HTML for each RPC in each session (for RPC Inspector)
-  const sessionReportsWithInspectorHtml: Record<string, HtmlSessionReportV1 & { rpcs: Array<SessionRpcDetail & { _summaryHtml: string; _requestRawHtml: string; _responseRawHtml: string }> }> = {};
+  // Now generates separate request/response summaries for Req/Res toggle
+  const sessionReportsWithInspectorHtml: Record<string, HtmlSessionReportV1 & { rpcs: Array<SessionRpcDetail & { _requestSummaryHtml: string; _responseSummaryHtml: string; _requestRawHtml: string; _responseRawHtml: string }> }> = {};
   for (const [sessionId, sessionReport] of Object.entries(session_reports)) {
     sessionReportsWithInspectorHtml[sessionId] = {
       ...sessionReport,
       rpcs: sessionReport.rpcs.map((rpc) => {
-        const summaryRows = renderMethodSummary(rpc.method, rpc.request.json, rpc.response.json);
+        const requestSummaryRows = renderRequestSummary(rpc.method, rpc.request.json);
+        const responseSummaryRows = renderResponseSummary(rpc.method, rpc.response.json);
         return {
           ...rpc,
-          _summaryHtml: renderSummaryRowsHtml(summaryRows),
+          _requestSummaryHtml: renderSummaryRowsHtml(requestSummaryRows),
+          _responseSummaryHtml: renderSummaryRowsHtml(responseSummaryRows),
           _requestRawHtml: renderJsonWithPaths(rpc.request.json, '#'),
           _responseRawHtml: renderJsonWithPaths(rpc.response.json, '#'),
         };
@@ -2204,31 +2469,49 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
   <style>${getConnectorReportStyles()}</style>
 </head>
 <body>
-  <header>
+  <header class="header">
     <div class="header-left">
-      <h1>Connector: <span class="badge">${escapeHtml(connector.connector_id)}</span></h1>
-      <p class="meta">Generated by ${escapeHtml(meta.generatedBy)} at ${formatTimestamp(meta.generatedAt)}${meta.redacted ? ' (redacted)' : ''} | ${paginationInfo}</p>
+      <div class="header-title">ProofScan Monitor</div>
+      <a href="/" class="header-back">← Home</a>
     </div>
-    ${headerServerHtml}
-    ${renderKpiRow(analytics.kpis)}
+    <div class="header-meta">
+      <div class="refresh-toggle" id="refreshToggle">
+        <span class="refresh-label">Refresh:</span>
+        <button data-interval="0" class="active">OFF</button>
+        <button data-interval="5">5s</button>
+        <button data-interval="10">10s</button>
+        <button data-interval="30">30s</button>
+      </div>
+      <span class="offline-badge">Offline</span>
+      <span>Generated: ${formatTimestamp(meta.generatedAt)}</span>
+    </div>
   </header>
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>Connector: <span class="badge">${escapeHtml(connector.connector_id)}</span></h1>
+    </div>
+    ${renderKpiRow(analytics.kpis)}
+  </div>
 
   <div class="connector-top">
-    <div class="connector-info expanded">
-      <div class="connector-info-toggle">
-        <h2>Connector Info</h2>
-        <span class="toggle-icon">▼</span>
+    <div class="connector-info-cards">
+      <div class="connector-info expanded">
+        <div class="connector-info-toggle">
+          <h2>Connector Info</h2>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="connector-info-content">
+          <dl>
+            <dt>Transport</dt>
+            <dd><span class="badge">${escapeHtml(connector.transport.type)}</span></dd>
+            <dt>${connector.transport.type === 'stdio' ? 'Command' : 'URL'}</dt>
+            <dd><code>${escapeHtml(transportDisplay)}</code></dd>
+            <dt>Enabled</dt>
+            <dd>${connector.enabled ? '<span class="badge status-OK">yes</span>' : '<span class="badge status-ERR">no</span>'}</dd>
+          </dl>
+        </div>
       </div>
-      <div class="connector-info-content">
-        <dl>
-          <dt>Transport</dt>
-          <dd><span class="badge">${escapeHtml(connector.transport.type)}</span></dd>
-          <dt>${connector.transport.type === 'stdio' ? 'Command' : 'URL'}</dt>
-          <dd><code>${escapeHtml(transportDisplay)}</code></dd>
-          <dt>Enabled</dt>
-          <dd>${connector.enabled ? '<span class="badge status-OK">yes</span>' : '<span class="badge status-ERR">no</span>'}</dd>
-        </dl>
-      </div>
+      ${serverResponseInfoCard}
     </div>
     ${renderAnalyticsPanel(analytics)}
   </div>
