@@ -2137,6 +2137,8 @@ function getConnectorReportScript(): string {
       function loadEvents(sessionId, eventsList) {
         if (eventsCache[sessionId]) {
           eventsList.innerHTML = renderEventsTable(eventsCache[sessionId]);
+          // Attach click handlers even when using cached data
+          attachEventRowHandlers(eventsList, sessionId, eventsCache[sessionId]);
           return;
         }
 
