@@ -989,6 +989,77 @@ function renderSummaryRow(row: SummaryRow): string {
 }
 
 // ============================================================================
+// Sensitive Key Detection (Phase 12.x-c)
+// ============================================================================
+
+/**
+ * Patterns for detecting sensitive keys in JSON data
+ * These patterns match common names for authentication, secrets, and credentials
+ */
+const SENSITIVE_PATTERNS: RegExp[] = [
+  /authorization/i,
+  /api[_-]?key/i,
+  /token/i,
+  /secret/i,
+  /password/i,
+  /private[_-]?key/i,
+  /bearer/i,
+  /credential/i,
+  /signature/i,
+  /access[_-]?token/i,
+  /refresh[_-]?token/i,
+  /session[_-]?id/i,
+  /cookie/i,
+  /^auth$/i, // Exact match for 'auth' key (avoids 'author', 'authorized_users')
+  /^auth_/i, // Prefix match for auth_token, auth_header, etc.
+  /client[_-]?secret/i,
+  /jwt/i,
+  /oauth/i,
+  /x-api-key/i,
+  /x-auth/i,
+];
+
+/**
+ * Detect sensitive keys in JSON data
+ * Walks the object tree and returns paths to keys matching sensitive patterns
+ *
+ * @param json - The JSON object to scan
+ * @returns Array of paths to sensitive keys (e.g., "headers.authorization")
+ */
+export function detectSensitiveKeys(json: unknown): string[] {
+  const found: string[] = [];
+
+  function walk(obj: unknown, path: string = ''): void {
+    if (!obj || typeof obj !== 'object') return;
+
+    if (Array.isArray(obj)) {
+      obj.forEach((v, i) => walk(v, path ? `${path}[${i}]` : `[${i}]`));
+    } else {
+      Object.entries(obj as Record<string, unknown>).forEach(([k, v]) => {
+        const currentPath = path ? `${path}.${k}` : k;
+        if (SENSITIVE_PATTERNS.some((pat) => pat.test(k))) {
+          found.push(currentPath);
+        }
+        walk(v, currentPath);
+      });
+    }
+  }
+
+  walk(json);
+  return found;
+}
+
+/**
+ * Check if JSON contains any sensitive keys
+ *
+ * @param json - The JSON object to check
+ * @returns true if sensitive keys are detected
+ */
+export function hasSensitiveContent(json: unknown): boolean {
+  return detectSensitiveKeys(json).length > 0;
+}
+
+// ============================================================================
 // CSS Styles for RPC Inspector
 // ============================================================================
 
