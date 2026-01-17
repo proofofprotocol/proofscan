@@ -192,5 +192,6 @@ export interface MonitorSessionEvent {
   seq: number | null;
   summary: string | null;
   method: string | null; // Extracted from raw_json if available
+  payload_type: string | null; // Extracted from raw_json.type (for transport_event)
   has_payload: boolean; // Whether raw_json exists
 }

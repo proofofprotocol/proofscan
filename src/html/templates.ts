@@ -2148,8 +2148,8 @@ function getConnectorReportScript(): string {
             : 'Server \\u2192 Client';
           const kindClass = 'badge-kind-' + event.kind;
           const kindLabel = kindLabels[event.kind] || event.kind;
-          // Method/Summary fallback: method > summary > kind label (e.g., "connected")
-          const method = event.method || event.summary || kindLabel;
+          // Method/Summary fallback: method > summary > payload_type (e.g., "connected")
+          const method = event.method || event.summary || event.payload_type || '';
           const timeStr = formatEventTime(event.ts);
           const hasPayload = event.has_payload ? '\\u2713' : '';
 

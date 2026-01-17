@@ -53,12 +53,19 @@ export function getEventsBySession(
   }>;
 
   return rows.map((row) => {
-    // Try to extract method from raw_json if not available from rpc_calls
+    // Try to extract method and type from raw_json if not available from rpc_calls
     let method = row.method;
-    if (!method && row.raw_json) {
+    let payloadType: string | null = null;
+    if (row.raw_json) {
       try {
         const json = JSON.parse(row.raw_json);
-        method = json.method ?? null;
+        if (!method) {
+          method = json.method ?? null;
+        }
+        // Extract type field (commonly used in transport_event payloads)
+        if (typeof json.type === 'string') {
+          payloadType = json.type;
+        }
       } catch {
         // Ignore parse errors
       }
@@ -74,6 +81,7 @@ export function getEventsBySession(
       seq: row.seq,
       summary: row.summary,
       method,
+      payload_type: payloadType,
       has_payload: !!row.raw_json,
     };
   });
@@ -122,12 +130,19 @@ export function getEventDetail(
 
   if (!row) return null;
 
-  // Try to extract method from raw_json if not available
+  // Try to extract method and type from raw_json if not available
   let method = row.method;
-  if (!method && row.raw_json) {
+  let payloadType: string | null = null;
+  if (row.raw_json) {
     try {
       const json = JSON.parse(row.raw_json);
-      method = json.method ?? null;
+      if (!method) {
+        method = json.method ?? null;
+      }
+      // Extract type field (commonly used in transport_event payloads)
+      if (typeof json.type === 'string') {
+        payloadType = json.type;
+      }
     } catch {
       // Ignore parse errors
     }
@@ -143,6 +158,7 @@ export function getEventDetail(
     seq: row.seq,
     summary: row.summary,
     method,
+    payload_type: payloadType,
     has_payload: !!row.raw_json,
     raw_json: row.raw_json,
   };
