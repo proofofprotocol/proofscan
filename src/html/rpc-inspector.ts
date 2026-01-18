@@ -1113,43 +1113,57 @@ export function getRpcInspectorStyles(): string {
       margin-bottom: 0;
     }
 
-    /* 2-column RPC detail layout - fill available space */
+    /* 2-column RPC detail layout - CRITICAL: use absolute positioning for height */
     .rpc-inspector {
       display: flex;
       gap: 16px;
       flex: 1;
       min-height: 0;
-      max-height: 100%;
-      overflow: hidden;
+      position: relative;
     }
 
     .rpc-inspector-summary {
-      flex: 0 0 45%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 45%;
       min-width: 280px;
       max-width: 500px;
       overflow-y: auto;
       overflow-x: hidden;
       border-right: 1px solid var(--border-color);
       padding-right: 16px;
-      max-height: 100%;
     }
 
     .rpc-inspector-summary h3 {
       position: sticky;
       top: 0;
-      background: var(--bg-primary);
+      background: var(--bg-secondary);
       padding: 8px 0;
       margin: 0 0 8px 0;
       z-index: 1;
     }
 
     .rpc-inspector-raw {
-      flex: 1;
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: calc(45% + 16px);
       display: flex;
       flex-direction: column;
-      min-width: 0;
       overflow: hidden;
-      max-height: 100%;
+    }
+
+    /* Fallback for narrower summary panes */
+    @media (min-width: 1200px) {
+      .rpc-inspector-summary {
+        width: 400px;
+      }
+      .rpc-inspector-raw {
+        left: 416px;
+      }
     }
 
     /* Toggle buttons */
