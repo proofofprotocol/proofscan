@@ -19,14 +19,16 @@ import type { SummaryRow, MethodSummaryHandler } from './types.js';
  */
 function escapeHtml(text: string): string {
   return text
-    .replace(/\\/g, '\\\\')  // Escape backslashes first
+    .replace(/\\/g, '&#92;')   // Escape backslashes as HTML entity
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;')
-    .replace(/\n/g, '&#10;')  // Escape newlines for JS string safety
-    .replace(/\r/g, '&#13;'); // Escape carriage returns
+    .replace(/\n/g, '&#10;')   // Escape newlines for JS string safety
+    .replace(/\r/g, '&#13;')   // Escape carriage returns
+    .replace(/\u2028/g, '&#8232;')  // Line Separator (breaks JS strings)
+    .replace(/\u2029/g, '&#8233;'); // Paragraph Separator (breaks JS strings)
 }
 
 /**

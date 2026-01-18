@@ -48,9 +48,13 @@ export function escapeHtml(text: string): string {
 /**
  * Escape JSON for embedding in <script type="application/json">
  * Must escape </script> sequences to prevent premature tag closing
+ * Also escape U+2028/U+2029 which are valid in JSON but break JS string literals
  */
 export function escapeJsonForScript(json: string): string {
-  return json.replace(/<\/script/gi, '<\\/script');
+  return json
+    .replace(/<\/script/gi, '<\\/script')
+    .replace(/\u2028/g, '\\u2028')  // Line Separator - valid JSON but breaks JS
+    .replace(/\u2029/g, '\\u2029'); // Paragraph Separator - valid JSON but breaks JS
 }
 
 /**

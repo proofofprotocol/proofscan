@@ -63,8 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `session_id` filter to events query in `buildSessionReport()`
 - **JavaScript SyntaxError** in Web Monitor Connector detail page
   - Removed newline characters from `renderJsonWithPaths()` and `renderSummaryRowsHtml()` output
-  - Added escape for backslash, newline, and carriage return in `escapeHtml()` for JS string safety
-  - Prevents "Invalid regular expression flags" error when JSON contains regex-like strings
+  - Added escape for backslash, newline, carriage return, U+2028, U+2029 in `escapeHtml()` for JS string safety
+  - Added U+2028/U+2029 escape in `escapeJsonForScript()` (valid JSON but breaks JS string literals)
+  - Prevents "Invalid regular expression flags" error when JSON contains special characters
 - Catalog install now correctly uses npm registry versions instead of GitHub package.json versions
 
 ## [0.10.26] - 2026-01-15
