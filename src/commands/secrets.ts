@@ -14,9 +14,8 @@
 
 import { Command } from 'commander';
 import { output, outputError, getOutputOptions } from '../utils/output.js';
-import { getDefaultConfigDir, resolveConfigPath } from '../utils/config-path.js';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { dirname } from 'path';
 import type { Config, Connector } from '../types/index.js';
 import {
   SqliteSecretStore,
@@ -25,10 +24,6 @@ import {
   pruneOrphanSecrets,
   exportSecrets,
   importSecrets,
-  type SecretBindingInfo,
-  type PruneResult,
-  type ExportOptions,
-  type ImportOptions,
 } from '../secrets/index.js';
 import { detectSecret } from '../secrets/detection.js';
 import { readSecretHidden, readSecretFromClipboard } from '../utils/secret-input.js';

@@ -26,7 +26,7 @@ import {
   safeWriteFile,
 } from '../html/index.js';
 import type { HtmlSessionReportV1, SessionRpcDetail } from '../html/index.js';
-import type { SessionWithStats, RpcCall, Event } from '../db/types.js';
+import type { SessionWithStats, RpcCall } from '../db/types.js';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '-';

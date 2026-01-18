@@ -356,7 +356,7 @@ Examples:
           // Start polling - use seq/ts_ms for deduplication instead of just timestamp
           let lastTs = initialEvents.length > 0 ? initialEvents[initialEvents.length - 1].ts_ms : Date.now();
           const interval = parseInt(options.interval, 10);
-          let intervalId: ReturnType<typeof setInterval> | undefined;
+          let intervalId: ReturnType<typeof setInterval> | undefined = undefined;
 
           // Handle Ctrl+C gracefully with cleanup
           const cleanup = () => {
