@@ -1140,9 +1140,6 @@ export function getRpcInspectorStyles(): string {
       gap: 16px;
       flex: 1;
       min-height: 0;
-      overflow: hidden;
-      /* Force height constraint */
-      height: 0;
     }
 
     /* Summary pane - independent vertical scroll */
@@ -1153,9 +1150,7 @@ export function getRpcInspectorStyles(): string {
       overflow-x: hidden;
       border-right: 1px solid var(--border-color);
       padding-right: 16px;
-      /* Isolate scroll context - prevent scroll chaining */
       overscroll-behavior: contain;
-      -webkit-overflow-scrolling: touch;
     }
 
     .rpc-inspector-summary h3 {
@@ -1173,9 +1168,7 @@ export function getRpcInspectorStyles(): string {
       min-width: 0;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
-      /* Force height constraint */
-      height: 0;
+      min-height: 0;
     }
 
     /* Toggle buttons */
@@ -1213,11 +1206,9 @@ export function getRpcInspectorStyles(): string {
     .rpc-raw-json {
       flex: 1;
       min-height: 0;
-      height: 0;
       overflow-y: auto;
       overflow-x: auto;
       overscroll-behavior: contain;
-      -webkit-overflow-scrolling: touch;
       background: var(--bg-primary);
       border: 1px solid var(--border-color);
       border-radius: 6px;
