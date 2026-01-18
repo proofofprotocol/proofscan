@@ -1070,7 +1070,7 @@ function getLedgerModalScript(): string {
       // Check if this is a POPL entry link (not artifacts or other sub-paths)
       // Format: /popl/{ULID} where ULID is 26 chars
       var href = link.getAttribute('href');
-      var match = href.match(/^\/popl\/([^/]+)$/);
+      var match = href.match(new RegExp('^/popl/([^/]+)$'));
       if (!match) return; // Not a direct POPL entry link, let it navigate normally
 
       var ledgerId = match[1].split('?')[0];

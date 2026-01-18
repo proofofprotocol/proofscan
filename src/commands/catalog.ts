@@ -994,10 +994,12 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           const securityConfig = config.catalog?.security;
 
           spinner?.start();
-          let { servers, warnings } = await searchAllSources(query, spinner, {
+          const searchResult = await searchAllSources(query, spinner, {
             includeUntrusted,
             securityConfig,
           });
+          let servers = searchResult.servers;
+          const warnings = searchResult.warnings;
 
           // Apply transport filter if specified
           if (options.transport) {
