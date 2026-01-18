@@ -1119,6 +1119,8 @@ export function getRpcInspectorStyles(): string {
       gap: 16px;
       flex: 1;
       min-height: 0;
+      max-height: 100%;
+      overflow: hidden;
     }
 
     .rpc-inspector-summary {
@@ -1129,6 +1131,7 @@ export function getRpcInspectorStyles(): string {
       overflow-x: hidden;
       border-right: 1px solid var(--border-color);
       padding-right: 16px;
+      max-height: 100%;
     }
 
     .rpc-inspector-summary h3 {
@@ -1146,6 +1149,7 @@ export function getRpcInspectorStyles(): string {
       flex-direction: column;
       min-width: 0;
       overflow: hidden;
+      max-height: 100%;
     }
 
     /* Toggle buttons */
@@ -1182,6 +1186,7 @@ export function getRpcInspectorStyles(): string {
     /* Raw JSON container - independent scroll */
     .rpc-raw-json {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       background: var(--bg-primary);
       border: 1px solid var(--border-color);

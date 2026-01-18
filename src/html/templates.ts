@@ -1315,6 +1315,7 @@ function getConnectorReportStyles(): string {
       display: flex;
       flex: 1;
       overflow: hidden;
+      min-height: 0;
     }
     .left-pane {
       width: var(--left-pane-width);
