@@ -1141,19 +1141,21 @@ export function getRpcInspectorStyles(): string {
       flex: 1;
       min-height: 0;
       overflow: hidden;
+      /* Force height constraint */
+      height: 0;
     }
 
     /* Summary pane - independent vertical scroll */
     .rpc-inspector-summary {
-      flex: 0 0 45%;
-      min-width: 280px;
-      max-width: 500px;
+      flex: 0 0 320px;
+      max-width: 400px;
       overflow-y: auto;
       overflow-x: hidden;
       border-right: 1px solid var(--border-color);
       padding-right: 16px;
-      /* Isolate scroll context */
+      /* Isolate scroll context - prevent scroll chaining */
       overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
     }
 
     .rpc-inspector-summary h3 {
@@ -1172,6 +1174,8 @@ export function getRpcInspectorStyles(): string {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      /* Force height constraint */
+      height: 0;
     }
 
     /* Toggle buttons */
@@ -1209,9 +1213,11 @@ export function getRpcInspectorStyles(): string {
     .rpc-raw-json {
       flex: 1;
       min-height: 0;
+      height: 0;
       overflow-y: auto;
       overflow-x: auto;
       overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
       background: var(--bg-primary);
       border: 1px solid var(--border-color);
       border-radius: 6px;
