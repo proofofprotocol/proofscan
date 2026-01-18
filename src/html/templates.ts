@@ -2304,10 +2304,10 @@ function getConnectorReportScript(): string {
             // 2-column layout: Summary (left) + Raw JSON (right)
             rightPane.innerHTML =
               '<div class="rpc-inspector">' +
-                '<div class="rpc-inspector-summary" style="flex: 0 0 280px; max-width: 320px;">' +
+                '<div class="rpc-inspector-summary">' +
                   '<div class="summary-container">' + summaryHtml + '</div>' +
                 '</div>' +
-                '<div class="rpc-inspector-raw" style="flex: 1; min-width: 0;">' +
+                '<div class="rpc-inspector-raw">' +
                   '<div class="rpc-raw-header">' +
                     '<span class="rpc-raw-title">Payload</span>' +
                   '</div>' +
