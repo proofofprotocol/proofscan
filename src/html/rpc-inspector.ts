@@ -1100,14 +1100,32 @@ export function getRpcInspectorStyles(): string {
       overflow: hidden;
     }
 
+    /* Container for pre-rendered RPC details */
+    .rpc-details-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Individual RPC detail wrapper */
+    .rpc-detail-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
     /* RPC Info header section - fixed at top */
-    .right-pane .detail-section:first-child {
+    .rpc-detail-content > .detail-section:first-child {
       flex-shrink: 0;
       overflow: visible;
     }
 
     /* Inspector section - takes remaining space */
-    .right-pane .detail-section:last-child {
+    .rpc-detail-content > .detail-section:last-child {
       flex: 1;
       display: flex;
       flex-direction: column;
