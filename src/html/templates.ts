@@ -312,8 +312,15 @@ function getSessionReportStyles(): string {
     }
     .right-pane {
       flex: 1;
-      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
       padding: 16px;
+      min-height: 0;
+    }
+    .right-pane > .rpc-inspector {
+      flex: 1;
+      min-height: 0;
     }
     .session-info {
       background: var(--bg-secondary);
@@ -1320,8 +1327,15 @@ function getConnectorReportStyles(): string {
     }
     .right-pane {
       flex: 1;
-      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
       padding: 16px;
+      min-height: 0;
+    }
+    .right-pane > .rpc-inspector {
+      flex: 1;
+      min-height: 0;
     }
     .session-info {
       background: var(--bg-secondary);
@@ -2335,6 +2349,10 @@ function getConnectorReportScript(): string {
             } else {
               rpcList.classList.remove('hidden');
               eventsList.classList.remove('active');
+              // Re-show selected RPC detail when switching back to RPCs view
+              if (currentRpcIdx !== null && sessionId === currentSessionId) {
+                showRpcDetail(sessionId, currentRpcIdx);
+              }
             }
           });
         });
