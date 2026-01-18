@@ -1093,47 +1093,49 @@ export function getRpcInspectorStyles(): string {
       margin: 0;
     }
 
-    /* Right pane layout adjustments for RPC Inspector */
+    /* Right pane layout - RPC Info header fixed, inspector scrollable */
     .right-pane {
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      height: 100%;
     }
 
+    /* RPC Info header section - fixed at top */
     .right-pane .detail-section:first-child {
       flex-shrink: 0;
+      overflow: visible;
     }
 
+    /* Inspector section - takes remaining space */
     .right-pane .detail-section:last-child {
       flex: 1;
       display: flex;
       flex-direction: column;
       min-height: 0;
-      max-height: calc(100% - 60px);
       overflow: hidden;
       margin-bottom: 0;
     }
 
-    /* 2-column RPC detail layout */
+    /* 2-column RPC detail layout - each column scrolls independently */
     .rpc-inspector {
       display: flex;
       gap: 16px;
       flex: 1;
       min-height: 0;
-      height: 100%;
       overflow: hidden;
     }
 
+    /* Summary pane - independent vertical scroll */
     .rpc-inspector-summary {
       flex: 0 0 45%;
       min-width: 280px;
       max-width: 500px;
-      height: 100%;
       overflow-y: auto;
       overflow-x: hidden;
       border-right: 1px solid var(--border-color);
       padding-right: 16px;
+      /* Isolate scroll context */
+      overscroll-behavior: contain;
     }
 
     .rpc-inspector-summary h3 {
@@ -1145,10 +1147,10 @@ export function getRpcInspectorStyles(): string {
       z-index: 1;
     }
 
+    /* RAW pane - independent vertical scroll */
     .rpc-inspector-raw {
       flex: 1;
       min-width: 0;
-      height: 100%;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -1190,6 +1192,8 @@ export function getRpcInspectorStyles(): string {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
+      overflow-x: auto;
+      overscroll-behavior: contain;
       background: var(--bg-primary);
       border: 1px solid var(--border-color);
       border-radius: 6px;
