@@ -1103,18 +1103,20 @@ export function getRpcInspectorStyles(): string {
     /* Container for pre-rendered RPC details */
     .rpc-details-container {
       flex: 1;
-      display: flex;
-      flex-direction: column;
+      position: relative;
       min-height: 0;
       overflow: hidden;
     }
 
-    /* Individual RPC detail wrapper */
+    /* Individual RPC detail wrapper - absolute positioned */
     .rpc-detail-content {
-      flex: 1;
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       display: flex;
       flex-direction: column;
-      min-height: 0;
       overflow: hidden;
     }
 
@@ -1140,6 +1142,7 @@ export function getRpcInspectorStyles(): string {
       gap: 16px;
       flex: 1;
       min-height: 0;
+      overflow: hidden;
     }
 
     /* Summary pane - independent vertical scroll */
@@ -1657,6 +1660,25 @@ export function getRpcInspectorScript(): string {
         });
       }
 
+      // Set max-height dynamically based on available space
+      function initPaneHeights() {
+        function updateHeights() {
+          document.querySelectorAll('.rpc-inspector').forEach(function(inspector) {
+            var rect = inspector.getBoundingClientRect();
+            var availableHeight = window.innerHeight - rect.top - 20;
+            if (availableHeight > 200) {
+              inspector.style.maxHeight = availableHeight + 'px';
+              var summary = inspector.querySelector('.rpc-inspector-summary');
+              var rawJson = inspector.querySelector('.rpc-raw-json');
+              if (summary) summary.style.maxHeight = availableHeight + 'px';
+              if (rawJson) rawJson.style.maxHeight = (availableHeight - 50) + 'px';
+            }
+          });
+        }
+        updateHeights();
+        window.addEventListener('resize', updateHeights);
+      }
+
       // Expose for re-initialization after dynamic content update
       window.initRpcInspector = function() {
         initInspectorToggle();
@@ -1664,6 +1686,7 @@ export function getRpcInspectorScript(): string {
         initItemToggles();
         initCollapseControls();
         initScrollIsolation();
+        initPaneHeights();
       };
 
       // Initialize on DOM ready
