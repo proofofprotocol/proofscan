@@ -1935,13 +1935,12 @@ function getConnectorReportScript(): string {
       }
     }
 
-    // Show RPC detail in right pane (2-column Wireshark-style layout)
-    // Summary and Raw JSON now both toggle with Req/Res buttons
+    // Show RPC detail in right pane using pre-rendered HTML
+    // This approach avoids JavaScript string concatenation issues with special characters
     function showRpcDetail(sessionId, idx) {
       const report = sessionReports[sessionId];
       if (!report || idx < 0 || idx >= report.rpcs.length) return;
 
-      const rpc = report.rpcs[idx];
       const sessionContent = document.querySelector('.session-content[data-session-id="' + sessionId + '"]');
       if (!sessionContent) return;
 
@@ -1954,62 +1953,19 @@ function getConnectorReportScript(): string {
       });
       currentRpcIdx = idx;
 
-      const statusClass = 'status-' + rpc.status;
-      const statusSymbol = rpc.status === 'OK' ? '\\u2713' : rpc.status === 'ERR' ? '\\u2717' : '?';
-      const latency = rpc.latency_ms !== null ? rpc.latency_ms + 'ms' : '(pending)';
+      // Hide placeholder, show details container
+      const placeholder = rightPane.querySelector('.detail-placeholder');
+      const detailsContainer = rightPane.querySelector('.rpc-details-container');
+      if (placeholder) placeholder.style.display = 'none';
+      if (detailsContainer) detailsContainer.style.display = 'block';
 
-      // Get pre-rendered summary and raw JSON (separate request/response)
-      const requestSummaryHtml = rpc._requestSummaryHtml || '<div class="summary-row summary-header">No summary available</div>';
-      const responseSummaryHtml = rpc._responseSummaryHtml || '<div class="summary-row summary-header">No summary available</div>';
-      const requestRawHtml = rpc._requestRawHtml || '<span class="json-null">(no data)</span>';
-      const responseRawHtml = rpc._responseRawHtml || '<span class="json-null">(no data)</span>';
+      // Hide all RPC detail divs, show selected one
+      const allDetails = rightPane.querySelectorAll('.rpc-detail-content');
+      allDetails.forEach(function(detail) {
+        detail.style.display = detail.dataset.rpcIdx === String(idx) ? 'block' : 'none';
+      });
 
-      // Sensitive content warning badge (Phase 12.x-c)
-      // Escape keys to prevent XSS via malicious key names
-      const sensitiveKeys = (rpc._sensitiveKeys || []).map(function(k) { return escapeHtml(k); });
-      const sensitiveTooltip = sensitiveKeys.length > 5
-        ? 'Contains ' + sensitiveKeys.length + ' sensitive keys: ' + sensitiveKeys.slice(0, 5).join(', ') + '...'
-        : 'Contains sensitive keys: ' + sensitiveKeys.join(', ');
-      const sensitiveBadge = rpc._hasSensitive
-        ? '<span class="sensitive-badge" title="' + escapeHtml(sensitiveTooltip) + '">⚠ Sensitive</span>'
-        : '';
-
-      // Determine default target based on method (response-focused methods default to response)
-      const defaultTarget = (rpc.method === 'tools/list' || rpc.method === 'initialize' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
-
-      rightPane.innerHTML =
-        '<div class="detail-section">' +
-        '  <h2>RPC Info' + sensitiveBadge + '</h2>' +
-        '  <div class="rpc-info-grid">' +
-        '    <div class="rpc-info-item"><dt>RPC ID</dt><dd><span class="badge">' + escapeHtml(rpc.rpc_id) + '</span></dd></div>' +
-        '    <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">' + escapeHtml(rpc.method) + '</span></dd></div>' +
-        '    <div class="rpc-info-item"><dt>Status</dt><dd><span class="badge ' + statusClass + '">' + statusSymbol + ' ' + rpc.status + (rpc.error_code !== null ? ' (code: ' + rpc.error_code + ')' : '') + '</span></dd></div>' +
-        '    <div class="rpc-info-item"><dt>Latency</dt><dd><span class="badge">' + latency + '</span></dd></div>' +
-        '    <div class="rpc-info-item"><dt>Request</dt><dd>' + escapeHtml(rpc.request_ts) + '</dd></div>' +
-        '    <div class="rpc-info-item"><dt>Response</dt><dd>' + escapeHtml(rpc.response_ts || '-') + '</dd></div>' +
-        '  </div>' +
-        '</div>' +
-        '<div class="detail-section">' +
-        '  <div class="rpc-toggle-bar">' +
-        '    <button id="toggle-req" class="rpc-toggle-btn' + (defaultTarget === 'request' ? ' active' : '') + '">[Req]</button>' +
-        '    <button id="toggle-res" class="rpc-toggle-btn' + (defaultTarget === 'response' ? ' active' : '') + '">[Res]</button>' +
-        '  </div>' +
-        '  <div class="rpc-inspector">' +
-        '    <div class="rpc-inspector-summary">' +
-        '      <h3>Summary</h3>' +
-        '      <div id="summary-request" style="display:' + (defaultTarget === 'request' ? 'block' : 'none') + '">' + requestSummaryHtml + '</div>' +
-        '      <div id="summary-response" style="display:' + (defaultTarget === 'response' ? 'block' : 'none') + '">' + responseSummaryHtml + '</div>' +
-        '    </div>' +
-        '    <div class="rpc-inspector-raw">' +
-        '      <div class="rpc-raw-json">' +
-        '        <div id="raw-json-request" style="display:' + (defaultTarget === 'request' ? 'block' : 'none') + '">' + requestRawHtml + '</div>' +
-        '        <div id="raw-json-response" style="display:' + (defaultTarget === 'response' ? 'block' : 'none') + '">' + responseRawHtml + '</div>' +
-        '      </div>' +
-        '    </div>' +
-        '  </div>' +
-        '</div>';
-
-      // Re-initialize RPC Inspector handlers
+      // Re-initialize RPC Inspector handlers for the visible detail
       if (window.initRpcInspector) {
         window.initRpcInspector();
       }
@@ -2841,6 +2797,76 @@ export function formatCompactTimestamp(isoStr: string): string {
 /**
  * Render session detail content (reuses session HTML layout)
  */
+/**
+ * Render a single RPC detail HTML (pre-rendered for direct DOM insertion)
+ * This avoids JavaScript string concatenation issues with special characters
+ */
+function renderRpcDetailHtml(rpc: SessionRpcDetail, idx: number): string {
+  const statusClass = `status-${rpc.status}`;
+  const statusSymbol = getStatusSymbol(rpc.status);
+  const latency = rpc.latency_ms !== null ? `${rpc.latency_ms}ms` : '(pending)';
+
+  // Pre-render summary and raw JSON HTML
+  const requestSummaryRows = renderRequestSummary(rpc.method, rpc.request.json);
+  const responseSummaryRows = renderResponseSummary(rpc.method, rpc.response.json);
+  const requestSummaryHtml = renderSummaryRowsHtml(requestSummaryRows);
+  const responseSummaryHtml = renderSummaryRowsHtml(responseSummaryRows);
+  const requestRawHtml = renderJsonWithPaths(rpc.request.json, '#');
+  const responseRawHtml = renderJsonWithPaths(rpc.response.json, '#');
+
+  // Detect sensitive keys
+  const reqSensitiveKeys = detectSensitiveKeys(rpc.request.json);
+  const resSensitiveKeys = detectSensitiveKeys(rpc.response.json);
+  const allSensitiveKeys = [...reqSensitiveKeys, ...resSensitiveKeys];
+  const hasSensitive = allSensitiveKeys.length > 0;
+
+  // Sensitive badge
+  let sensitiveBadge = '';
+  if (hasSensitive) {
+    const escapedKeys = allSensitiveKeys.map(k => escapeHtml(k));
+    const sensitiveTooltip = escapedKeys.length > 5
+      ? `Contains ${escapedKeys.length} sensitive keys: ${escapedKeys.slice(0, 5).join(', ')}...`
+      : `Contains sensitive keys: ${escapedKeys.join(', ')}`;
+    sensitiveBadge = `<span class="sensitive-badge" title="${escapeHtml(sensitiveTooltip)}">⚠ Sensitive</span>`;
+  }
+
+  // Determine default target based on method
+  const defaultTarget = (rpc.method === 'tools/list' || rpc.method === 'initialize' || rpc.method.startsWith('resources/') || rpc.method.startsWith('prompts/')) ? 'response' : 'request';
+
+  return `<div class="rpc-detail-content" data-rpc-idx="${idx}" style="display: none;">
+  <div class="detail-section">
+    <h2>RPC Info${sensitiveBadge}</h2>
+    <div class="rpc-info-grid">
+      <div class="rpc-info-item"><dt>RPC ID</dt><dd><span class="badge">${escapeHtml(rpc.rpc_id)}</span></dd></div>
+      <div class="rpc-info-item"><dt>Method</dt><dd><span class="badge">${escapeHtml(rpc.method)}</span></dd></div>
+      <div class="rpc-info-item"><dt>Status</dt><dd><span class="badge ${statusClass}">${statusSymbol} ${rpc.status}${rpc.error_code !== null ? ` (code: ${rpc.error_code})` : ''}</span></dd></div>
+      <div class="rpc-info-item"><dt>Latency</dt><dd><span class="badge">${latency}</span></dd></div>
+      <div class="rpc-info-item"><dt>Request</dt><dd>${escapeHtml(rpc.request_ts)}</dd></div>
+      <div class="rpc-info-item"><dt>Response</dt><dd>${escapeHtml(rpc.response_ts || '-')}</dd></div>
+    </div>
+  </div>
+  <div class="detail-section">
+    <div class="rpc-toggle-bar">
+      <button class="rpc-toggle-btn${defaultTarget === 'request' ? ' active' : ''}" data-target="request">[Req]</button>
+      <button class="rpc-toggle-btn${defaultTarget === 'response' ? ' active' : ''}" data-target="response">[Res]</button>
+    </div>
+    <div class="rpc-inspector">
+      <div class="rpc-inspector-summary">
+        <h3>Summary</h3>
+        <div class="summary-request" style="display: ${defaultTarget === 'request' ? 'block' : 'none'}">${requestSummaryHtml}</div>
+        <div class="summary-response" style="display: ${defaultTarget === 'response' ? 'block' : 'none'}">${responseSummaryHtml}</div>
+      </div>
+      <div class="rpc-inspector-raw">
+        <div class="rpc-raw-json">
+          <div class="raw-json-request" style="display: ${defaultTarget === 'request' ? 'block' : 'none'}">${requestRawHtml}</div>
+          <div class="raw-json-response" style="display: ${defaultTarget === 'response' ? 'block' : 'none'}">${responseRawHtml}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
 function renderSessionDetailContent(
   sessionId: string,
   report: HtmlSessionReportV1
@@ -2867,6 +2893,9 @@ function renderSessionDetailContent(
         <td>${latency}</td>
       </tr>`;
   }).join('\n');
+
+  // Pre-render all RPC detail HTML (avoids JS string concatenation issues)
+  const rpcDetailDivs = rpcs.map((rpc, idx) => renderRpcDetailHtml(rpc, idx)).join('\n');
 
   return `
     <div class="session-content" data-session-id="${escapeHtml(sessionId)}">
@@ -2923,6 +2952,9 @@ ${rpcRows}
         <div class="right-pane">
           <div class="detail-placeholder">
             ${rpcs.length > 0 ? 'Select an RPC call from the list to view details' : 'No RPC calls in this session'}
+          </div>
+          <div class="rpc-details-container" style="display: none;">
+${rpcDetailDivs}
           </div>
         </div>
       </div>

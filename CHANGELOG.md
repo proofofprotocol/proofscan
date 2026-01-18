@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `session_id` to JOIN conditions in `getServerInfo()`, `getProtocolInfo()`
   - Added `session_id` filter to events query in `buildSessionReport()`
 - **JavaScript SyntaxError** in Web Monitor Connector detail page
+  - **Root cause**: RPC detail HTML was built via JS string concatenation, special chars in JSON broke strings
+  - **Solution**: Pre-render all RPC detail HTML on server-side, JS only toggles visibility
+  - Added `renderRpcDetailHtml()` function for server-side HTML generation
+  - Updated `getRpcInspectorScript()` to support both ID-based and class-based DOM structures
   - Removed newline characters from `renderJsonWithPaths()` and `renderSummaryRowsHtml()` output
   - Added escape for backslash, newline, carriage return, U+2028, U+2029 in `escapeHtml()` for JS string safety
   - Added U+2028/U+2029 escape in `escapeJsonForScript()` (valid JSON but breaks JS string literals)

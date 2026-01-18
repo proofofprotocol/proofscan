@@ -1447,6 +1447,7 @@ export function getRpcInspectorStyles(): string {
 
 /**
  * Get RPC Inspector JavaScript
+ * Updated to work with both ID-based (single RPC) and class-based (pre-rendered) DOM structures
  */
 export function getRpcInspectorScript(): string {
   return `
@@ -1454,59 +1455,104 @@ export function getRpcInspectorScript(): string {
     (function() {
       let currentTarget = 'request';
 
-      // Initialize toggle buttons
-      function initInspectorToggle() {
-        const reqBtn = document.getElementById('toggle-req');
-        const resBtn = document.getElementById('toggle-res');
-
-        if (reqBtn) {
-          reqBtn.addEventListener('click', function() { switchTarget('request'); });
-        }
-        if (resBtn) {
-          resBtn.addEventListener('click', function() { switchTarget('response'); });
-        }
+      // Get the currently visible RPC detail container
+      function getVisibleDetail() {
+        // For pre-rendered multiple RPC details (Connector page)
+        const visibleDetail = document.querySelector('.rpc-detail-content[style*="display: block"]');
+        if (visibleDetail) return visibleDetail;
+        // Fallback for single RPC view
+        return document;
       }
 
-      // Switch between request and response view (both Summary and Raw JSON)
+      // Initialize toggle buttons
+      function initInspectorToggle() {
+        // ID-based (legacy single-RPC view)
+        const reqBtnById = document.getElementById('toggle-req');
+        const resBtnById = document.getElementById('toggle-res');
+        if (reqBtnById) {
+          reqBtnById.addEventListener('click', function() { switchTarget('request'); });
+        }
+        if (resBtnById) {
+          resBtnById.addEventListener('click', function() { switchTarget('response'); });
+        }
+
+        // Class-based with data-target (pre-rendered multi-RPC view)
+        document.querySelectorAll('.rpc-toggle-btn[data-target]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const target = btn.dataset.target;
+            const container = btn.closest('.rpc-detail-content') || document;
+            switchTargetInContainer(target, container);
+          });
+        });
+      }
+
+      // Switch between request and response view (both Summary and Raw JSON) - global
       function switchTarget(target) {
         currentTarget = target;
 
-        // Update button states
+        // Update button states (ID-based)
         const reqBtn = document.getElementById('toggle-req');
         const resBtn = document.getElementById('toggle-res');
         if (reqBtn) reqBtn.classList.toggle('active', target === 'request');
         if (resBtn) resBtn.classList.toggle('active', target === 'response');
 
-        // Update Summary display
+        // Update Summary display (ID-based)
         const reqSummary = document.getElementById('summary-request');
         const resSummary = document.getElementById('summary-response');
         if (reqSummary) reqSummary.style.display = target === 'request' ? 'block' : 'none';
         if (resSummary) resSummary.style.display = target === 'response' ? 'block' : 'none';
 
-        // Update raw JSON display
+        // Update raw JSON display (ID-based)
         const reqJson = document.getElementById('raw-json-request');
         const resJson = document.getElementById('raw-json-response');
         if (reqJson) reqJson.style.display = target === 'request' ? 'block' : 'none';
         if (resJson) resJson.style.display = target === 'response' ? 'block' : 'none';
       }
 
-      // Navigate to JSON path and highlight
-      function navigateToPath(target, path) {
-        // Switch to correct target first
-        switchTarget(target);
+      // Switch target within a specific container (for pre-rendered multi-RPC)
+      function switchTargetInContainer(target, container) {
+        currentTarget = target;
 
-        // Find container for this target
-        const container = document.getElementById('raw-json-' + target);
-        if (!container) return;
+        // Update button states within container
+        container.querySelectorAll('.rpc-toggle-btn[data-target]').forEach(function(btn) {
+          btn.classList.toggle('active', btn.dataset.target === target);
+        });
+
+        // Update Summary display (class-based)
+        const reqSummary = container.querySelector('.summary-request');
+        const resSummary = container.querySelector('.summary-response');
+        if (reqSummary) reqSummary.style.display = target === 'request' ? 'block' : 'none';
+        if (resSummary) resSummary.style.display = target === 'response' ? 'block' : 'none';
+
+        // Update raw JSON display (class-based)
+        const reqJson = container.querySelector('.raw-json-request');
+        const resJson = container.querySelector('.raw-json-response');
+        if (reqJson) reqJson.style.display = target === 'request' ? 'block' : 'none';
+        if (resJson) resJson.style.display = target === 'response' ? 'block' : 'none';
+      }
+
+      // Navigate to JSON path and highlight
+      function navigateToPath(target, path, container) {
+        container = container || getVisibleDetail();
+
+        // Switch to correct target first
+        if (container === document) {
+          switchTarget(target);
+        } else {
+          switchTargetInContainer(target, container);
+        }
+
+        // Find container for this target (class-based or ID-based)
+        var jsonContainer = container.querySelector('.raw-json-' + target) || document.getElementById('raw-json-' + target);
+        if (!jsonContainer) return;
 
         // Clear previous highlights
-        container.querySelectorAll('.highlighted').forEach(function(el) {
+        jsonContainer.querySelectorAll('.highlighted').forEach(function(el) {
           el.classList.remove('highlighted');
         });
 
         // Find and highlight the target line
-        const escapedPath = CSS.escape(path);
-        const targetLine = container.querySelector('[data-path="' + path + '"]');
+        var targetLine = jsonContainer.querySelector('[data-path="' + path + '"]');
         if (targetLine) {
           targetLine.classList.add('highlighted');
           targetLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1520,13 +1566,14 @@ export function getRpcInspectorScript(): string {
             // Don't navigate if clicking on toggle
             if (e.target.classList.contains('item-toggle')) return;
 
-            const target = el.dataset.pointerTarget;
-            const path = el.dataset.pointerPath;
+            var target = el.dataset.pointerTarget;
+            var path = el.dataset.pointerPath;
             if (target && path) {
-              navigateToPath(target, path);
+              var container = el.closest('.rpc-detail-content') || document;
+              navigateToPath(target, path, container);
 
-              // Mark as selected
-              document.querySelectorAll('.summary-item.selected, .summary-property.selected').forEach(function(s) {
+              // Mark as selected within the same container
+              container.querySelectorAll('.summary-item.selected, .summary-property.selected').forEach(function(s) {
                 s.classList.remove('selected');
               });
               el.classList.add('selected');
@@ -1540,7 +1587,7 @@ export function getRpcInspectorScript(): string {
         document.querySelectorAll('.summary-item.has-children .item-toggle').forEach(function(toggle) {
           toggle.addEventListener('click', function(e) {
             e.stopPropagation();
-            const item = toggle.closest('.summary-item');
+            var item = toggle.closest('.summary-item');
             if (item) {
               item.classList.toggle('collapsed');
             }
@@ -1552,7 +1599,8 @@ export function getRpcInspectorScript(): string {
       function initCollapseControls() {
         document.querySelectorAll('.collapse-all').forEach(function(btn) {
           btn.addEventListener('click', function() {
-            document.querySelectorAll('.summary-item.has-children').forEach(function(item) {
+            var container = btn.closest('.rpc-detail-content') || document;
+            container.querySelectorAll('.summary-item.has-children').forEach(function(item) {
               item.classList.add('collapsed');
             });
           });
@@ -1560,7 +1608,8 @@ export function getRpcInspectorScript(): string {
 
         document.querySelectorAll('.expand-all').forEach(function(btn) {
           btn.addEventListener('click', function() {
-            document.querySelectorAll('.summary-item.has-children').forEach(function(item) {
+            var container = btn.closest('.rpc-detail-content') || document;
+            container.querySelectorAll('.summary-item.has-children').forEach(function(item) {
               item.classList.remove('collapsed');
             });
           });
