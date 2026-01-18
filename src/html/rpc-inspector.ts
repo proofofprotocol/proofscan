@@ -1642,12 +1642,28 @@ export function getRpcInspectorScript(): string {
         });
       }
 
+      // Prevent scroll chaining between Summary and RAW panes
+      function initScrollIsolation() {
+        document.querySelectorAll('.rpc-inspector-summary, .rpc-raw-json').forEach(function(pane) {
+          pane.addEventListener('wheel', function(e) {
+            var atTop = pane.scrollTop === 0;
+            var atBottom = pane.scrollTop + pane.clientHeight >= pane.scrollHeight;
+
+            // If scrolling up at top or scrolling down at bottom, prevent propagation
+            if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
+              e.preventDefault();
+            }
+          }, { passive: false });
+        });
+      }
+
       // Expose for re-initialization after dynamic content update
       window.initRpcInspector = function() {
         initInspectorToggle();
         initSummaryClicks();
         initItemToggles();
         initCollapseControls();
+        initScrollIsolation();
       };
 
       // Initialize on DOM ready
