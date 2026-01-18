@@ -14,15 +14,19 @@ import type { SummaryRow, MethodSummaryHandler } from './types.js';
 // ============================================================================
 
 /**
- * Escape HTML special characters
+ * Escape HTML special characters and JavaScript string special chars
+ * This is critical because the rendered HTML is embedded in JavaScript string concatenation
  */
 function escapeHtml(text: string): string {
   return text
+    .replace(/\\/g, '\\\\')  // Escape backslashes first
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;');
+    .replace(/'/g, '&#x27;')
+    .replace(/\n/g, '&#10;')  // Escape newlines for JS string safety
+    .replace(/\r/g, '&#13;'); // Escape carriage returns
 }
 
 /**
@@ -211,7 +215,9 @@ export function renderJsonWithPaths(
 
   const lines: string[] = [];
   renderValue(json, pathPrefix, 0, lines);
-  return lines.join('\n');
+  // Join without newlines - each json-line span has display:block in CSS
+  // This avoids JavaScript syntax errors when HTML is embedded in string concatenation
+  return lines.join('');
 }
 
 // ============================================================================
@@ -928,6 +934,7 @@ function renderCapabilitiesRows(
 
 /**
  * Render summary rows to HTML
+ * Note: Join without newlines to avoid JS string syntax errors when embedded in templates
  */
 export function renderSummaryRowsHtml(rows: SummaryRow[]): string {
   const html: string[] = [];
@@ -936,7 +943,7 @@ export function renderSummaryRowsHtml(rows: SummaryRow[]): string {
     html.push(renderSummaryRow(row));
   }
 
-  return html.join('\n');
+  return html.join('');
 }
 
 /**
@@ -954,13 +961,8 @@ function renderSummaryRow(row: SummaryRow): string {
   if (row.type === 'header') {
     // Add collapse controls if header has collapsible class
     if (cssClass.includes('summary-collapsible-header')) {
-      return `<div class="summary-row summary-header ${cssClass}">
-  <span>${escapeHtml(row.label)}</span>
-  <span class="collapse-controls">
-    <button class="collapse-btn collapse-all" title="Collapse all">−</button>
-    <button class="collapse-btn expand-all" title="Expand all">+</button>
-  </span>
-</div>`;
+      // Single line to avoid JS string syntax issues when embedded in templates
+      return `<div class="summary-row summary-header ${cssClass}"><span>${escapeHtml(row.label)}</span><span class="collapse-controls"><button class="collapse-btn collapse-all" title="Collapse all">−</button><button class="collapse-btn expand-all" title="Expand all">+</button></span></div>`;
     }
     return `<div class="summary-row summary-header ${cssClass}">${escapeHtml(row.label)}</div>`;
   }
@@ -971,21 +973,17 @@ function renderSummaryRow(row: SummaryRow): string {
     let toggleHtml = '';
 
     if (hasChildren) {
-      childHtml = `<div class="summary-children">${row.children!.map((c) => renderSummaryRow(c)).join('\n')}</div>`;
+      // Join without newlines to avoid JS string syntax errors
+      childHtml = `<div class="summary-children">${row.children!.map((c) => renderSummaryRow(c)).join('')}</div>`;
       toggleHtml = '<span class="item-toggle" title="Toggle properties">▼</span>';
     }
 
-    return `<div class="summary-row summary-item ${cssClass}${clickable}${hasChildren ? ' has-children' : ''}"${pointerAttrs}>
-  ${toggleHtml}<span class="summary-label">${escapeHtml(row.label)}</span>
-  <span class="summary-value"${valueTitle}>${escapeHtml(row.value || '')}</span>
-</div>${childHtml}`;
+    // Single line to avoid JS string syntax issues
+    return `<div class="summary-row summary-item ${cssClass}${clickable}${hasChildren ? ' has-children' : ''}"${pointerAttrs}>${toggleHtml}<span class="summary-label">${escapeHtml(row.label)}</span><span class="summary-value"${valueTitle}>${escapeHtml(row.value || '')}</span></div>${childHtml}`;
   }
 
-  // property type
-  return `<div class="summary-row summary-property ${cssClass}${clickable}"${pointerAttrs}>
-  <span class="summary-prop-name">${escapeHtml(row.label)}</span>
-  <span class="summary-prop-value"${valueTitle}>${escapeHtml(row.value || '')}</span>
-</div>`;
+  // property type - single line to avoid JS string syntax issues
+  return `<div class="summary-row summary-property ${cssClass}${clickable}"${pointerAttrs}><span class="summary-prop-name">${escapeHtml(row.label)}</span><span class="summary-prop-value"${valueTitle}>${escapeHtml(row.value || '')}</span></div>`;
 }
 
 // ============================================================================

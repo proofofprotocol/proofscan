@@ -61,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `rpc_id` is only unique within a session (composite PK with `session_id`)
   - Added `session_id` to JOIN conditions in `getServerInfo()`, `getProtocolInfo()`
   - Added `session_id` filter to events query in `buildSessionReport()`
+- **JavaScript SyntaxError** in Web Monitor Connector detail page
+  - Removed newline characters from `renderJsonWithPaths()` and `renderSummaryRowsHtml()` output
+  - Added escape for backslash, newline, and carriage return in `escapeHtml()` for JS string safety
+  - Prevents "Invalid regular expression flags" error when JSON contains regex-like strings
 - Catalog install now correctly uses npm registry versions instead of GitHub package.json versions
 
 ## [0.10.26] - 2026-01-15
