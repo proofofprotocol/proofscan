@@ -25,7 +25,6 @@ import {
   getCategoryLabel,
   ToolInfo,
   CategoryStats,
-  ToolPermission,
   classifyTool,
   extractToolsFromSession,
   extractToolCallCounts,

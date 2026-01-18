@@ -4,7 +4,7 @@
 
 import { Command } from 'commander';
 import { ConfigManager } from '../config/index.js';
-import { diagnoseEventsDb, fixEventsDb, diagnoseProofsDb, fixProofsDb, getDbPaths } from '../db/connection.js';
+import { diagnoseEventsDb, fixEventsDb, diagnoseProofsDb, fixProofsDb } from '../db/connection.js';
 import { output, getOutputOptions, outputSuccess, outputError } from '../utils/output.js';
 
 export function createDoctorCommand(getConfigPath: () => string): Command {
@@ -14,7 +14,6 @@ export function createDoctorCommand(getConfigPath: () => string): Command {
     .action((options) => {
       const manager = new ConfigManager(getConfigPath());
       const configDir = manager.getConfigDir();
-      const dbPaths = getDbPaths(configDir);
 
       // Run diagnostics
       const eventsDiag = diagnoseEventsDb(configDir);

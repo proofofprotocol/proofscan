@@ -24,7 +24,6 @@ import {
   createSessionPoplEntry,
   listPoplEntries,
   readPoplEntry,
-  getPoplEntriesDir,
 } from '../popl/index.js';
 import type { PoplDocument } from '../popl/types.js';
 

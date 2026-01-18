@@ -16,7 +16,6 @@ import {
   setVerbose,
   logger,
   RuntimeStateManager,
-  type ProxyRuntimeState,
 } from '../proxy/index.js';
 import { output, getOutputOptions } from '../utils/output.js';
 import { formatRelativeTime } from '../utils/time.js';

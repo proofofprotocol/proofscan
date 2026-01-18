@@ -31,7 +31,6 @@ import {
 import type {
   HtmlConnectorReportV1,
   HtmlConnectorInfo,
-  HtmlConnectorSessionRow,
   HtmlMcpServerInfo,
   HtmlSessionReportV1,
   SessionRpcDetail,

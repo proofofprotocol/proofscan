@@ -1337,16 +1337,12 @@ export function createCatalogCommand(getConfigPath: () => string): Command {
           // 2. transport.command/args (fallback - parsePackageRef)
           let pkgRef: PackageRef | null = null;
           let runnerHint: RunnerName | undefined;
-          let packageEnv: Record<string, string> | undefined;
 
           // First, try packages[] array (official registry provides this)
           const packageInfo = extractPackageRefFromPackages(server.packages);
           if (packageInfo) {
             pkgRef = packageInfo.ref;
             runnerHint = packageInfo.runnerHint;
-            // Extract environment variables from package info (for later use)
-            // Note: packages[].environmentVariables is schema info, not actual values
-            // We'll use transport.env if available, packages[].environmentVariables is for documentation
           }
 
           // Fallback: try parsing from transport.command/args

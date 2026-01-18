@@ -3,7 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { detectAll, listRunnerNames, type RunnerStatus } from '../runners/index.js';
+import { detectAll, type RunnerStatus } from '../runners/index.js';
 import { output, getOutputOptions } from '../utils/output.js';
 
 /**
@@ -22,7 +22,7 @@ function formatRunnerStatus(status: RunnerStatus): string {
   return `  ${icon} ${status.name}: ${statusText}`;
 }
 
-export function createRunnersCommand(_getConfigPath: () => string): Command {
+export function createRunnersCommand(): Command {
   const cmd = new Command('runners').description('Manage package runners (npx, uvx)');
 
   // runners list

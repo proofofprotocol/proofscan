@@ -200,7 +200,7 @@ catCmd.name('cat').description('Alias for catalog');
 program.addCommand(catCmd);
 
 // runners (Phase 7.x: Package runners)
-program.addCommand(createRunnersCommand(getConfigPath));
+program.addCommand(createRunnersCommand());
 
 // plans (Phase 5.2: Validation plans)
 program.addCommand(createPlansCommand(getConfigPath));
