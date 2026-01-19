@@ -683,6 +683,16 @@ function getFilterScript(): string {
   var selectedIndex = -1;
   var debounceTimer = null;
 
+  // HTML escape for XSS prevention
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   // AST cache for performance (avoid re-parsing same input)
   var cachedInput = null;
   var cachedResult = null;
@@ -854,9 +864,9 @@ function getFilterScript(): string {
 
     autocomplete.innerHTML = matches.map(function(f, i) {
       var cls = 'autocomplete-item' + (i === selectedIndex ? ' selected' : '');
-      return '<div class="' + cls + '" data-field="' + f.name + '">' +
-        '<span class="autocomplete-field">' + f.name + '</span>' +
-        '<span class="autocomplete-desc">' + f.desc + '</span>' +
+      return '<div class="' + cls + '" data-field="' + escapeHtml(f.name) + '">' +
+        '<span class="autocomplete-field">' + escapeHtml(f.name) + '</span>' +
+        '<span class="autocomplete-desc">' + escapeHtml(f.desc) + '</span>' +
         '</div>';
     }).join('');
     autocomplete.classList.add('active');
@@ -930,7 +940,7 @@ function getFilterScript(): string {
     var result = parseFilter(input);
     if (!result.ok) {
       filterInput.classList.add('error');
-      filterStatus.innerHTML = '<span class="filter-error">' + result.error + '</span>';
+      filterStatus.innerHTML = '<span class="filter-error">' + escapeHtml(result.error) + '</span>';
       return;
     }
 
