@@ -6,6 +6,7 @@
  */
 
 import type { ShellContext, ProtoType } from './types.js';
+import { PIPELINE_SESSION_LIMIT } from './types.js';
 import { printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
 import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
@@ -1348,7 +1349,7 @@ function getRpcRowsInternal(store: EventLineStore, sessionId: string): RpcRow[] 
  * Get session rows for a connector (internal helper)
  */
 function getSessionRowsInternal(store: EventLineStore, connectorId: string): SessionRow[] {
-  const sessions = store.getSessions(connectorId, 100);
+  const sessions = store.getSessions(connectorId, PIPELINE_SESSION_LIMIT);
 
   return sessions.map((session) => ({
     session_id: session.session_id,

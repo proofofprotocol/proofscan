@@ -34,12 +34,12 @@ describe('rpcRowToFilterContext', () => {
     expect(rpcRowToFilterContext({ ...baseRow, status: 'pending' })['rpc.status']).toBe('pending');
   });
 
-  it('maps tools.name to tool_name (案A)', () => {
+  it('maps tools.name to tool_name (Option A)', () => {
     const ctx = rpcRowToFilterContext(baseRow);
     expect(ctx['tools.name']).toBe('convert_time');
   });
 
-  it('maps tools.method to rpc method (案A)', () => {
+  it('maps tools.method to rpc method (Option A)', () => {
     const ctx = rpcRowToFilterContext(baseRow);
     expect(ctx['tools.method']).toBe('tools/call');
   });

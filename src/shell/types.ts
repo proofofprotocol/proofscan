@@ -237,6 +237,11 @@ export const DEFAULT_COMPLETION_LIMIT = 50;
 export const SESSION_SEARCH_LIMIT = 100;
 
 /**
+ * Default limit for pipeline session rows (ls | where at connector level)
+ */
+export const PIPELINE_SESSION_LIMIT = 100;
+
+/**
  * Get commands allowed in shell mode (TOP_LEVEL_COMMANDS minus BLOCKED_IN_SHELL)
  */
 export function getAllowedCommands(): string[] {

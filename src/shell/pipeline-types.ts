@@ -34,6 +34,7 @@ export interface SessionRow {
   ended_at: string | null;
   event_count: number;
   rpc_count: number;
+  /** Total latency across all RPCs (not yet implemented - reserved for future use) */
   total_latency_ms?: number;
 }
 

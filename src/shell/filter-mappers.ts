@@ -11,7 +11,7 @@ import type { RpcRow, SessionRow } from './pipeline-types.js';
 /**
  * Convert RPC row to FilterContext
  *
- * Field mapping (案A adopted):
+ * Field mapping (Option A adopted):
  *   tools.method = rpc.method ("tools/call", "tools/list", etc.)
  *   tools.name   = tool_name (the actual tool being called, e.g., "convert_time")
  *
