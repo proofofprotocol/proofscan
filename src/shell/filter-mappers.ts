@@ -21,7 +21,7 @@ export function rpcRowToFilterContext(row: RpcRow): FilterContext {
   return {
     'rpc.id': row.rpc_id,
     'rpc.method': row.method,
-    'rpc.status': row.status.toLowerCase(), // OK|ERR|pending → ok|err|pending
+    'rpc.status': row.status?.toLowerCase() ?? 'pending', // OK|ERR|pending → ok|err|pending
     'rpc.latency': row.latency_ms,
     'session.id': row.session_id,
     'tools.name': row.tool_name ?? null, // Tool name for tools/call

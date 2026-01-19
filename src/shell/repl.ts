@@ -38,6 +38,7 @@ import { handleRef } from './ref-commands.js';
 import { handleInscribe } from './inscribe-commands.js';
 import { handlePopl, getPoplEntryIdsSync } from './popl-commands.js';
 import { resolveCommand } from './command-resolver.js';
+import type { PipelineValue, RpcRow, SessionRow } from './pipeline-types.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -457,7 +458,7 @@ References & Tool Calls:
 
 Pipes & Filters:
   ls | where <expr> Filter rows (e.g., rpc.method == "tools/call")
-  ls | grep <expr>  Alias for where
+  ls | grep <expr>  Alias for where (not regex)
 
 Session Control:
   reset             Clear all context
@@ -521,7 +522,7 @@ Inscribe:
 
 Pipes & Filters (Filter DSL v0.1):
   ls | where <expr>       Filter rows by expression
-  ls | grep <expr>        Alias for where
+  ls | grep <expr>        Alias for where (not regex)
 
   Fields:
     rpc.method            RPC method name (e.g., "tools/call")
@@ -710,7 +711,7 @@ Tips:
   /**
    * Render pipeline output (rows or text)
    */
-  private renderPipelineOutput(output: import('./pipeline-types.js').PipelineValue): void {
+  private renderPipelineOutput(output: PipelineValue): void {
     if (output.kind === 'text') {
       console.log(output.text);
       return;
@@ -724,16 +725,16 @@ Tips:
     const isTTY = process.stdout.isTTY;
 
     if (output.rowType === 'rpc') {
-      this.renderRpcTable(output.rows as import('./pipeline-types.js').RpcRow[], isTTY);
+      this.renderRpcTable(output.rows as RpcRow[], isTTY);
     } else if (output.rowType === 'session') {
-      this.renderSessionTable(output.rows as import('./pipeline-types.js').SessionRow[], isTTY);
+      this.renderSessionTable(output.rows as SessionRow[], isTTY);
     }
   }
 
   /**
    * Render RPC rows as table
    */
-  private renderRpcTable(rows: import('./pipeline-types.js').RpcRow[], isTTY: boolean): void {
+  private renderRpcTable(rows: RpcRow[], isTTY: boolean): void {
     const dimText = (text: string) => isTTY ? `\x1b[2m${text}\x1b[0m` : text;
     const statusColor = (status: string) => {
       if (!isTTY) return status;
@@ -767,7 +768,7 @@ Tips:
   /**
    * Render Session rows as table
    */
-  private renderSessionTable(rows: import('./pipeline-types.js').SessionRow[], isTTY: boolean): void {
+  private renderSessionTable(rows: SessionRow[], isTTY: boolean): void {
     const dimText = (text: string) => isTTY ? `\x1b[2m${text}\x1b[0m` : text;
 
     console.log();

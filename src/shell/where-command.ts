@@ -69,9 +69,12 @@ export function applyWhere(input: PipelineValue, expr: string): WhereResult {
     return { ok: false, error: `Unsupported row type: ${rowType}` };
   }
 
-  // Filter rows
+  // Filter rows with proper type handling
   const filtered = rows.filter((row) => {
-    const ctx = mapper(row as RpcRow & SessionRow);
+    // Use conditional mapper call instead of intersection type cast
+    const ctx = rowType === 'rpc'
+      ? rpcRowToFilterContext(row as RpcRow)
+      : sessionRowToFilterContext(row as SessionRow);
     return evaluateFilter(parseResult.ast, ctx);
   });
 
