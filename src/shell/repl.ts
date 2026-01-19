@@ -455,6 +455,10 @@ References & Tool Calls:
   send <tool>       Call MCP tool interactively
   inscribe @...     Inscribe RPC to blockchain
 
+Pipes & Filters:
+  ls | where <expr> Filter rows (e.g., rpc.method == "tools/call")
+  ls | grep <expr>  Alias for where
+
 Session Control:
   reset             Clear all context
   help [-a]         Show help (-a for details)
@@ -515,6 +519,28 @@ Inscribe:
   inscribe @last          Inscribe latest RPC
   show @... --json | inscribe   Inscribe via pipe
 
+Pipes & Filters (Filter DSL v0.1):
+  ls | where <expr>       Filter rows by expression
+  ls | grep <expr>        Alias for where
+
+  Fields:
+    rpc.method            RPC method name (e.g., "tools/call")
+    rpc.status            Status: ok, err, pending
+    rpc.latency           Response latency in ms
+    tools.name            Tool name for tools/call (e.g., "read_file")
+    session.id            Session ID
+
+  Operators:
+    ==, !=                Equality (case-insensitive for status)
+    ~=                    Substring match
+    >, <                  Numeric comparison
+
+  Examples:
+    ls | where rpc.method == "tools/call"
+    ls | where rpc.status != ok
+    ls | where rpc.latency > 1000
+    ls | where tools.name ~= "read"
+
 Session Control:
   reset                   Clear all context
   help [topic]            Show help
@@ -544,7 +570,7 @@ Tips:
   - @ is the dereference operator (e.g., @this, @last, @ref:<name>)
   - show = resource details (data), ref = address resolution (RefStruct)
   - Press TAB for auto-completion
-  - Use pipes: pwd --json | ref add myname
+  - Pipes: pwd --json | ref add myname, ls | where rpc.status != ok
 `);
   }
 

@@ -1268,6 +1268,35 @@ export function getLsRows(context: ShellContext, configPath: string): PipelineVa
 }
 
 /**
+ * Extract tool name from request JSON.
+ * Fallback chain: params.name ?? params.tool ?? params.toolName
+ */
+function extractToolName(rawJson: string | null | undefined): string | undefined {
+  if (!rawJson) return undefined;
+
+  try {
+    const parsed = JSON.parse(rawJson);
+    const params = parsed?.params;
+    if (!params || typeof params !== 'object') return undefined;
+
+    // Fallback chain matches analytics.ts implementation
+    if (typeof params.name === 'string' && params.name.length > 0) {
+      return params.name;
+    }
+    if (typeof params.tool === 'string' && params.tool.length > 0) {
+      return params.tool;
+    }
+    if (typeof params.toolName === 'string' && params.toolName.length > 0) {
+      return params.toolName;
+    }
+  } catch {
+    // JSON parse error - return undefined
+  }
+
+  return undefined;
+}
+
+/**
  * Get RPC rows for a session (internal helper)
  */
 function getRpcRowsInternal(store: EventLineStore, sessionId: string): RpcRow[] {
@@ -1293,8 +1322,13 @@ function getRpcRowsInternal(store: EventLineStore, sessionId: string): RpcRow[] 
     }
 
     // Extract tool_name for tools/call method
-    // Note: Would need to parse request JSON to get actual tool name
-    // For now, leave undefined (can be enhanced later)
+    let tool_name: string | undefined;
+    if (rpc.method === 'tools/call') {
+      const rawEvent = store.getRawEvent(sessionId, rpc.rpc_id);
+      if (rawEvent?.request?.raw_json) {
+        tool_name = extractToolName(rawEvent.request.raw_json);
+      }
+    }
 
     return {
       rpc_id: rpc.rpc_id,
@@ -1305,6 +1339,7 @@ function getRpcRowsInternal(store: EventLineStore, sessionId: string): RpcRow[] 
       request_ts: rpc.request_ts,
       response_ts: rpc.response_ts,
       error_code: rpc.error_code,
+      tool_name,
     };
   });
 }
