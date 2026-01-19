@@ -501,7 +501,127 @@ connectorsRoutes.get('/:id', async (c) => {
       color: var(--text-secondary);
       font-style: italic;
     }
+
+    /* Filter Bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      position: relative;
+      flex-shrink: 0;
+      margin: 0 0 0 0;
+    }
+    .filter-prefix {
+      color: var(--text-secondary);
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .filter-input {
+      flex: 1;
+      max-width: 500px;
+      padding: 6px 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-primary);
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 12px;
+    }
+    .filter-input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+    .filter-input.error {
+      border-color: var(--status-err);
+      background: rgba(248, 81, 73, 0.1);
+    }
+    .filter-clear {
+      padding: 4px 8px;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .filter-clear:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+    .filter-status {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .filter-count {
+      color: var(--accent-blue);
+    }
+    .filter-error {
+      color: var(--status-err);
+    }
+
+    /* Autocomplete dropdown */
+    .filter-autocomplete {
+      position: absolute;
+      top: 100%;
+      left: 60px;
+      width: 320px;
+      max-height: 280px;
+      overflow-y: auto;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 100;
+      display: none;
+    }
+    .filter-autocomplete.active {
+      display: block;
+    }
+    .autocomplete-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .autocomplete-item:hover,
+    .autocomplete-item.selected {
+      background: var(--bg-secondary);
+    }
+    .autocomplete-field {
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 12px;
+      color: var(--accent-blue);
+    }
+    .autocomplete-desc {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-align: right;
+      flex-shrink: 0;
+    }
     </style>`
+  );
+
+  // Insert filter bar before main-container (applies to both sessions and RPCs)
+  html = html.replace(
+    '<div class="main-container">',
+    `<div class="filter-bar" id="filterBar">
+      <span class="filter-prefix">filter:</span>
+      <input type="text" class="filter-input" id="filterInput"
+             placeholder='rpc.method == "tools/call" rpc.status == "ok"'
+             autocomplete="off">
+      <button class="filter-clear" id="filterClear" title="Clear filter (Esc)">&times;</button>
+      <div class="filter-status" id="filterStatus"></div>
+      <div class="filter-autocomplete" id="filterAutocomplete"></div>
+    </div>
+    <div class="main-container">`
   );
 
   // Insert Related POPL Entries section before Sessions section
@@ -521,12 +641,460 @@ connectorsRoutes.get('/:id', async (c) => {
   html = html.replace(
     '</body>',
     `${getLedgerModalHtml()}
+<script>${getFilterScript()}</script>
 <script>${getLedgerModalScript()}</script>
 </body>`
   );
 
   return c.html(html);
 });
+
+/**
+ * Get Filter DSL JavaScript
+ */
+function getFilterScript(): string {
+  return `
+(function() {
+  var filterInput = document.getElementById('filterInput');
+  var filterClear = document.getElementById('filterClear');
+  var filterStatus = document.getElementById('filterStatus');
+  var autocomplete = document.getElementById('filterAutocomplete');
+
+  if (!filterInput) return;
+
+  // Field definitions for autocomplete
+  var FIELDS = [
+    { name: 'session.id', desc: 'Session ID' },
+    { name: 'session.latency', desc: 'Total latency (ms)' },
+    { name: 'rpc.id', desc: 'RPC call ID' },
+    { name: 'rpc.method', desc: 'RPC method name' },
+    { name: 'rpc.status', desc: 'ok/err/pending' },
+    { name: 'rpc.latency', desc: 'RPC latency (ms)' },
+    { name: 'tools.method', desc: 'Tool method' },
+    { name: 'tools.name', desc: 'Called tool name' },
+    { name: 'event.kind', desc: 'Event kind' },
+    { name: 'event.type', desc: 'Transport event type' },
+    { name: 'direction', desc: 'req/res/trans' }
+  ];
+
+  var VALID_FIELDS = new Set(FIELDS.map(function(f) { return f.name; }));
+  var OPERATORS = ['==', '!=', '~=', '>', '<'];
+
+  var selectedIndex = -1;
+  var debounceTimer = null;
+
+  // HTML escape for XSS prevention
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // AST cache for performance (avoid re-parsing same input)
+  var cachedInput = null;
+  var cachedResult = null;
+
+  // ============ Parser ============
+  function parseFilter(input) {
+    // Return cached result if input unchanged
+    if (input === cachedInput && cachedResult !== null) {
+      return cachedResult;
+    }
+    var trimmed = input.trim().replace(/^filter:\\s*/i, '');
+    if (!trimmed) {
+      cachedInput = input;
+      cachedResult = { ok: true, ast: { conditions: [] } };
+      return cachedResult;
+    }
+
+    var conditions = [];
+    var pos = 0;
+
+    while (pos < trimmed.length) {
+      // Skip whitespace
+      while (pos < trimmed.length && /\\s/.test(trimmed[pos])) pos++;
+      if (pos >= trimmed.length) break;
+
+      // Parse field
+      var fieldStart = pos;
+      while (pos < trimmed.length && /[a-zA-Z0-9_.]/.test(trimmed[pos])) pos++;
+      if (pos === fieldStart) {
+        return { ok: false, error: 'Expected field at char ' + (fieldStart + 1) };
+      }
+      var field = trimmed.slice(fieldStart, pos);
+      if (!VALID_FIELDS.has(field)) {
+        return { ok: false, error: "Unknown field '" + field + "' at char " + (fieldStart + 1) };
+      }
+
+      // Skip whitespace
+      while (pos < trimmed.length && /\\s/.test(trimmed[pos])) pos++;
+
+      // Parse operator
+      var op = null;
+      for (var i = 0; i < OPERATORS.length; i++) {
+        if (trimmed.slice(pos, pos + OPERATORS[i].length) === OPERATORS[i]) {
+          op = OPERATORS[i];
+          pos += op.length;
+          break;
+        }
+      }
+      if (!op) {
+        return { ok: false, error: 'Expected operator at char ' + (pos + 1) };
+      }
+
+      // Skip whitespace
+      while (pos < trimmed.length && /\\s/.test(trimmed[pos])) pos++;
+
+      // Parse value
+      var value;
+      var char = trimmed[pos];
+      if (char === '"' || char === "'") {
+        var quote = char;
+        var valueStart = pos;
+        pos++;
+        var str = '';
+        while (pos < trimmed.length && trimmed[pos] !== quote) {
+          if (trimmed[pos] === '\\\\' && pos + 1 < trimmed.length) {
+            var next = trimmed[pos + 1];
+            // Only escape quote or backslash (same as TypeScript version)
+            if (next === quote || next === '\\\\') {
+              str += next;
+              pos += 2;
+              continue;
+            }
+          }
+          str += trimmed[pos];
+          pos++;
+        }
+        if (pos >= trimmed.length) {
+          return { ok: false, error: 'Unterminated string at char ' + (valueStart + 1) };
+        }
+        pos++; // Skip closing quote
+        value = str;
+      } else if (/[0-9\\-]/.test(char)) {
+        var numStart = pos;
+        if (trimmed[pos] === '-') pos++;
+        while (pos < trimmed.length && /[0-9]/.test(trimmed[pos])) pos++;
+        if (pos < trimmed.length && trimmed[pos] === '.') {
+          pos++;
+          while (pos < trimmed.length && /[0-9]/.test(trimmed[pos])) pos++;
+        }
+        value = Number(trimmed.slice(numStart, pos));
+        if (isNaN(value)) {
+          return { ok: false, error: 'Invalid number at char ' + (numStart + 1) };
+        }
+      } else if (/[a-zA-Z_]/.test(char)) {
+        var unquotedStart = pos;
+        while (pos < trimmed.length && /[a-zA-Z0-9_/\\-]/.test(trimmed[pos])) pos++;
+        value = trimmed.slice(unquotedStart, pos);
+      } else {
+        return { ok: false, error: 'Expected value at char ' + (pos + 1) };
+      }
+
+      conditions.push({ field: field, operator: op, value: value });
+    }
+
+    cachedInput = input;
+    cachedResult = { ok: true, ast: { conditions: conditions } };
+    return cachedResult;
+  }
+
+  // ============ Evaluator ============
+  function evaluateFilter(ast, ctx) {
+    if (ast.conditions.length === 0) return true;
+    return ast.conditions.every(function(cond) {
+      return evaluateCondition(cond, ctx);
+    });
+  }
+
+  function evaluateCondition(cond, ctx) {
+    var val = ctx[cond.field];
+    if (val === null || val === undefined) {
+      return cond.operator === '!=';
+    }
+
+    var strVal = String(val).toLowerCase();
+    var strCond = String(cond.value).toLowerCase();
+
+    switch (cond.operator) {
+      case '==': return strVal === strCond;
+      case '!=': return strVal !== strCond;
+      case '~=': return strVal.indexOf(strCond) !== -1;
+      case '>':
+      case '<':
+        var numVal = Number(val);
+        var numCond = Number(cond.value);
+        if (isNaN(numVal) || isNaN(numCond)) return false;
+        return cond.operator === '>' ? numVal > numCond : numVal < numCond;
+      default: return false;
+    }
+  }
+
+  // ============ Context Builder ============
+  function rpcToContext(rpc, sessionId, sessionLatency) {
+    var toolsName = null;
+    if (rpc.method === 'tools/call' && rpc.request && rpc.request.json) {
+      var params = rpc.request.json.params;
+      if (params && params.name) toolsName = params.name;
+    }
+    return {
+      'session.id': sessionId,
+      'session.latency': sessionLatency,
+      'rpc.id': rpc.rpc_id,
+      'rpc.method': rpc.method,
+      'rpc.status': rpc.status ? rpc.status.toLowerCase() : null,
+      'rpc.latency': rpc.latency_ms,
+      'tools.name': toolsName,
+      'tools.method': toolsName
+    };
+  }
+
+  // ============ Autocomplete ============
+  function showAutocomplete(prefix) {
+    var matches = FIELDS.filter(function(f) {
+      return f.name.toLowerCase().indexOf(prefix.toLowerCase()) === 0;
+    });
+    if (matches.length === 0 || prefix === '') {
+      hideAutocomplete();
+      return;
+    }
+
+    autocomplete.innerHTML = matches.map(function(f, i) {
+      var cls = 'autocomplete-item' + (i === selectedIndex ? ' selected' : '');
+      return '<div class="' + cls + '" data-field="' + escapeHtml(f.name) + '">' +
+        '<span class="autocomplete-field">' + escapeHtml(f.name) + '</span>' +
+        '<span class="autocomplete-desc">' + escapeHtml(f.desc) + '</span>' +
+        '</div>';
+    }).join('');
+    autocomplete.classList.add('active');
+    selectedIndex = -1;
+  }
+
+  function hideAutocomplete() {
+    autocomplete.classList.remove('active');
+    selectedIndex = -1;
+  }
+
+  function getCurrentWord() {
+    var value = filterInput.value;
+    var pos = filterInput.selectionStart;
+    var beforeCursor = value.slice(0, pos);
+    var match = beforeCursor.match(/([a-z_.]+)$/i);
+    return match ? { word: match[1], start: pos - match[1].length } : null;
+  }
+
+  function insertCompletion(fieldName) {
+    var current = getCurrentWord();
+    if (!current) return;
+    var value = filterInput.value;
+    var before = value.slice(0, current.start);
+    var after = value.slice(filterInput.selectionStart);
+    filterInput.value = before + fieldName + ' ' + after;
+    filterInput.focus();
+    hideAutocomplete();
+  }
+
+  function updateSelection(items) {
+    items.forEach(function(item, i) {
+      if (i === selectedIndex) {
+        item.classList.add('selected');
+      } else {
+        item.classList.remove('selected');
+      }
+    });
+  }
+
+  // ============ Filter Application ============
+  function applyFilter() {
+    var input = filterInput.value.trim().replace(/^filter:\\s*/i, '');
+
+    // Get report data
+    var reportDataEl = document.getElementById('report-data');
+    if (!reportDataEl) return;
+    var reportData;
+    try {
+      reportData = JSON.parse(reportDataEl.textContent);
+    } catch (e) {
+      return;
+    }
+
+    // Get all session items
+    var sessionItems = document.querySelectorAll('.session-item');
+    var sessionContents = document.querySelectorAll('.session-content');
+
+    if (!input) {
+      // Show all sessions and all RPCs
+      filterInput.classList.remove('error');
+      filterStatus.innerHTML = '';
+      sessionItems.forEach(function(item) { item.style.display = ''; });
+      sessionContents.forEach(function(content) {
+        var rpcRows = content.querySelectorAll('.rpc-table tbody tr[data-rpc-idx]');
+        rpcRows.forEach(function(row) { row.style.display = ''; });
+      });
+      return;
+    }
+
+    var result = parseFilter(input);
+    if (!result.ok) {
+      filterInput.classList.add('error');
+      filterStatus.innerHTML = '<span class="filter-error">' + escapeHtml(result.error) + '</span>';
+      return;
+    }
+
+    filterInput.classList.remove('error');
+
+    var totalRpcs = 0;
+    var matchedRpcs = 0;
+    var matchedSessions = 0;
+    var totalSessions = sessionItems.length;
+
+    // Filter each session
+    sessionItems.forEach(function(item) {
+      var sessionId = item.dataset.sessionId;
+      var sessionReport = reportData.session_reports && reportData.session_reports[sessionId];
+      if (!sessionReport || !sessionReport.rpcs) {
+        item.style.display = 'none';
+        return;
+      }
+
+      var allRpcs = sessionReport.rpcs;
+      var sessionLatency = sessionReport.session && sessionReport.session.total_latency_ms;
+      totalRpcs += allRpcs.length;
+
+      // Find matching RPCs for this session
+      var visibleIndices = [];
+      allRpcs.forEach(function(rpc, idx) {
+        var ctx = rpcToContext(rpc, sessionId, sessionLatency);
+        if (evaluateFilter(result.ast, ctx)) {
+          visibleIndices.push(idx);
+        }
+      });
+
+      matchedRpcs += visibleIndices.length;
+
+      // Show/hide session based on whether any RPC matched
+      if (visibleIndices.length > 0) {
+        item.style.display = '';
+        matchedSessions++;
+      } else {
+        item.style.display = 'none';
+      }
+
+      // Update RPC rows in corresponding session content
+      var content = document.querySelector('.session-content[data-session-id="' + sessionId + '"]');
+      if (content) {
+        showRpcs(content, visibleIndices);
+      }
+    });
+
+    filterStatus.innerHTML = '<span class="filter-count">Sessions: ' +
+      matchedSessions + '/' + totalSessions + ', RPCs: ' + matchedRpcs + '/' + totalRpcs + '</span>';
+  }
+
+  function showRpcs(sessionEl, visibleIndices) {
+    var visibleSet = new Set(visibleIndices);
+    var rpcRows = sessionEl.querySelectorAll('.rpc-table tbody tr[data-rpc-idx]');
+    rpcRows.forEach(function(row) {
+      var idx = parseInt(row.dataset.rpcIdx, 10);
+      row.style.display = visibleSet.has(idx) ? '' : 'none';
+    });
+  }
+
+  // ============ Event Listeners ============
+  filterInput.addEventListener('input', function() {
+    var current = getCurrentWord();
+    // Show autocomplete only when typing field names (not inside quotes)
+    var inQuote = (filterInput.value.split('"').length - 1) % 2 === 1;
+    if (current && !inQuote) {
+      showAutocomplete(current.word);
+    } else {
+      hideAutocomplete();
+    }
+
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(applyFilter, 200);
+  });
+
+  filterInput.addEventListener('keydown', function(e) {
+    var items = autocomplete.querySelectorAll('.autocomplete-item');
+
+    if (e.key === 'Escape') {
+      if (autocomplete.classList.contains('active')) {
+        hideAutocomplete();
+      } else {
+        filterInput.value = '';
+        applyFilter();
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (autocomplete.classList.contains('active')) {
+      if (e.key === 'ArrowDown') {
+        selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        updateSelection(items);
+        e.preventDefault();
+      } else if (e.key === 'ArrowUp') {
+        selectedIndex = Math.max(selectedIndex - 1, 0);
+        updateSelection(items);
+        e.preventDefault();
+      } else if (e.key === 'Tab' || e.key === 'Enter') {
+        if (selectedIndex >= 0 && items[selectedIndex]) {
+          insertCompletion(items[selectedIndex].dataset.field);
+          e.preventDefault();
+        }
+      }
+    } else if (e.key === 'Enter') {
+      // Apply filter immediately when Enter is pressed (autocomplete closed)
+      clearTimeout(debounceTimer);
+      applyFilter();
+      e.preventDefault();
+    }
+  });
+
+  autocomplete.addEventListener('click', function(e) {
+    var item = e.target.closest('.autocomplete-item');
+    if (item) insertCompletion(item.dataset.field);
+  });
+
+  filterClear.addEventListener('click', function() {
+    filterInput.value = '';
+    applyFilter();
+    filterInput.focus();
+  });
+
+  // Re-apply filter when session changes
+  document.addEventListener('click', function(e) {
+    var sessionItem = e.target.closest('.session-item');
+    if (sessionItem) {
+      setTimeout(applyFilter, 50);
+    }
+  });
+
+  // Top Tools click -> auto-fill filter
+  document.querySelectorAll('.top-tool-row[data-tool-name]').forEach(function(row) {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function() {
+      var toolName = row.dataset.toolName;
+      if (toolName) {
+        filterInput.value = 'tools.name == "' + toolName + '"';
+        applyFilter();
+      }
+    });
+  });
+
+  // Click outside autocomplete to close
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.filter-bar')) {
+      hideAutocomplete();
+    }
+  });
+})();
+`;
+}
 
 /**
  * Render Related POPL Entries section

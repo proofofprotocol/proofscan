@@ -2635,7 +2635,7 @@ function renderTopTools(topTools: HtmlTopToolsData): string {
   const rows = topTools.items
     .map((tool, idx) => {
       return `
-      <div class="top-tool-row">
+      <div class="top-tool-row" data-tool-name="${escapeHtml(tool.name)}">
         <span class="top-tool-rank">${idx + 1}.</span>
         <span class="top-tool-name" title="${escapeHtml(tool.name)}">${escapeHtml(tool.name)}</span>
         <div class="top-tool-bar-container">
