@@ -284,4 +284,31 @@ describe('applyWhere', () => {
       }
     });
   });
+
+  describe('field compatibility', () => {
+    it('rejects RPC fields on session rows', () => {
+      const result = applyWhere(sessionInput, 'rpc.method == "tools/call"');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain("Field 'rpc.method' is only available at session level");
+        expect(result.error).toContain('cd into a session first');
+      }
+    });
+
+    it('rejects tools.name on session rows', () => {
+      const result = applyWhere(sessionInput, 'tools.name ~= "read"');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain("Field 'tools.name' is only available at session level");
+      }
+    });
+
+    it('allows session.id on both row types', () => {
+      const rpcResult = applyWhere(rpcInput, 'session.id == "session-1"');
+      expect(rpcResult.ok).toBe(true);
+
+      const sessionResult = applyWhere(sessionInput, 'session.id == "session-1"');
+      expect(sessionResult.ok).toBe(true);
+    });
+  });
 });

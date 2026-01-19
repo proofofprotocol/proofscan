@@ -7,8 +7,39 @@
 
 import { parseFilter } from '../filter/parser.js';
 import { evaluateFilter } from '../filter/evaluator.js';
-import type { PipelineValue, RpcRow, SessionRow } from './pipeline-types.js';
+import type { FilterAst } from '../filter/types.js';
+import type { PipelineValue, RpcRow, SessionRow, RowType } from './pipeline-types.js';
 import { rpcRowToFilterContext, sessionRowToFilterContext } from './filter-mappers.js';
+
+/** Fields that only apply to RPC rows */
+const RPC_ONLY_FIELDS = ['rpc.id', 'rpc.method', 'rpc.status', 'rpc.latency', 'tools.name', 'tools.method'];
+
+/** Fields that only apply to Session rows */
+const SESSION_ONLY_FIELDS = ['session.latency'];
+
+/**
+ * Check if filter uses fields incompatible with the row type
+ * Returns warning message if incompatible, null if OK
+ */
+function checkFieldCompatibility(ast: FilterAst, rowType: RowType): string | null {
+  const usedFields = ast.conditions.map(c => c.field);
+
+  if (rowType === 'session') {
+    const rpcFields = usedFields.filter(f => RPC_ONLY_FIELDS.includes(f));
+    if (rpcFields.length > 0) {
+      return `Field '${rpcFields[0]}' is only available at session level (cd into a session first)`;
+    }
+  }
+
+  if (rowType === 'rpc') {
+    const sessionFields = usedFields.filter(f => SESSION_ONLY_FIELDS.includes(f));
+    if (sessionFields.length > 0) {
+      return `Field '${sessionFields[0]}' is only available at connector level`;
+    }
+  }
+
+  return null;
+}
 
 /**
  * Result of applying where filter
@@ -56,6 +87,12 @@ export function applyWhere(input: PipelineValue, expr: string): WhereResult {
   }
 
   const { rows, rowType } = input;
+
+  // Check for field/rowType compatibility
+  const compatError = checkFieldCompatibility(parseResult.ast, rowType);
+  if (compatError) {
+    return { ok: false, error: compatError };
+  }
 
   // Get appropriate mapper for row type
   const mapper =
