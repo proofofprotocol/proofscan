@@ -577,22 +577,48 @@ Tips:
   }
 
   /**
+   * Extract command name and raw args from pipe right side
+   * Uses raw string to preserve quoted values
+   */
+  private extractCommand(input: string): { cmd: string; rest: string } {
+    const trimmed = input.trim();
+    const spaceIdx = trimmed.search(/\s/);
+    if (spaceIdx === -1) {
+      return { cmd: trimmed, rest: '' };
+    }
+    return {
+      cmd: trimmed.slice(0, spaceIdx),
+      rest: trimmed.slice(spaceIdx + 1), // Keep rest as raw string
+    };
+  }
+
+  /**
    * Handle piped commands
    * Supports:
    *   pwd --json | ref add <name>
    *   show @rpc:<id> --json | inscribe
+   *   ls | where <filter-expr>
+   *   ls | grep <filter-expr>
    */
   private async handlePipe(leftCmd: string, rightCmd: string): Promise<void> {
     const leftTokens = leftCmd.split(/\s+/).filter(t => t !== '');
-    const rightTokens = rightCmd.split(/\s+/).filter(t => t !== '');
 
-    if (leftTokens.length === 0 || rightTokens.length === 0) {
+    if (leftTokens.length === 0 || !rightCmd.trim()) {
       printError('Invalid pipe syntax');
       return;
     }
 
-    const leftCommand = leftTokens[0];
-    const rightCommand = rightTokens[0];
+    // Extract command name from right side (preserving raw args for where/grep)
+    const { cmd: rightCommand, rest: rawArgs } = this.extractCommand(rightCmd);
+
+    // Handle: ls | where <filter-expr> or ls | grep <filter-expr>
+    if (rightCommand === 'where' || rightCommand === 'grep') {
+      await this.handlePipeToWhere(leftCmd, rawArgs);
+      return;
+    }
+
+    // Parse right side for other commands
+    const rightTokens = rightCmd.split(/\s+/).filter(t => t !== '');
 
     // Handle: show --json | inscribe
     if (rightCommand === 'inscribe') {
@@ -610,6 +636,132 @@ Tips:
     printInfo('Supported pipes:');
     printInfo('  pwd --json | ref add <name>');
     printInfo('  show @rpc:<id> --json | inscribe');
+    printInfo('  ls | where <filter-expr>');
+    printInfo('  ls | grep <filter-expr>');
+  }
+
+  /**
+   * Handle: ls | where <filter-expr> or ls | grep <filter-expr>
+   */
+  private async handlePipeToWhere(leftCmd: string, expr: string): Promise<void> {
+    const leftTokens = leftCmd.trim().split(/\s+/);
+
+    // Currently only ls is supported as input
+    if (leftTokens[0] !== 'ls') {
+      printError('where/grep currently only supports "ls" as input');
+      printInfo('Example: ls | where rpc.method == "tools/call"');
+      return;
+    }
+
+    // Get ls rows
+    const { getLsRows } = await import('./router-commands.js');
+    const input = getLsRows(this.context, this.configPath);
+
+    // Connector level is not supported
+    if (input.kind === 'rows' && input.rowType === 'connector') {
+      printError('where/grep is not supported for connectors');
+      printInfo('Navigate to a connector first: cd <connector-id>');
+      return;
+    }
+
+    // Apply where filter
+    const { applyWhere } = await import('./where-command.js');
+    const result = applyWhere(input, expr);
+
+    if (!result.ok) {
+      printError(`Filter error: ${result.error}`);
+      if (result.position !== undefined) {
+        printError(`  at position ${result.position + 1}`);
+      }
+      return;
+    }
+
+    // Render output
+    this.renderPipelineOutput(result.result);
+    printInfo(`rows: ${result.stats.matched} / ${result.stats.total}`);
+  }
+
+  /**
+   * Render pipeline output (rows or text)
+   */
+  private renderPipelineOutput(output: import('./pipeline-types.js').PipelineValue): void {
+    if (output.kind === 'text') {
+      console.log(output.text);
+      return;
+    }
+
+    if (output.rows.length === 0) {
+      printInfo('No matching results');
+      return;
+    }
+
+    const isTTY = process.stdout.isTTY;
+
+    if (output.rowType === 'rpc') {
+      this.renderRpcTable(output.rows as import('./pipeline-types.js').RpcRow[], isTTY);
+    } else if (output.rowType === 'session') {
+      this.renderSessionTable(output.rows as import('./pipeline-types.js').SessionRow[], isTTY);
+    }
+  }
+
+  /**
+   * Render RPC rows as table
+   */
+  private renderRpcTable(rows: import('./pipeline-types.js').RpcRow[], isTTY: boolean): void {
+    const dimText = (text: string) => isTTY ? `\x1b[2m${text}\x1b[0m` : text;
+    const statusColor = (status: string) => {
+      if (!isTTY) return status;
+      switch (status) {
+        case 'OK': return '\x1b[32mOK\x1b[0m';
+        case 'ERR': return '\x1b[31mERR\x1b[0m';
+        default: return '\x1b[33mpending\x1b[0m';
+      }
+    };
+
+    console.log();
+    console.log(
+      dimText('#'.padEnd(4)) + '  ' +
+      dimText('Method'.padEnd(20)) + '  ' +
+      dimText('Status'.padEnd(isTTY ? 16 : 8)) + '  ' +
+      dimText('Latency')
+    );
+    console.log(dimText('-'.repeat(55)));
+
+    rows.forEach((row, idx) => {
+      const num = String(idx + 1).padEnd(4);
+      const method = row.method.slice(0, 20).padEnd(20);
+      const status = statusColor(row.status).padEnd(isTTY ? 16 : 8);
+      const latency = row.latency_ms !== null ? `${row.latency_ms}ms` : '-';
+
+      console.log(`${num}  ${method}  ${status}  ${latency}`);
+    });
+    console.log();
+  }
+
+  /**
+   * Render Session rows as table
+   */
+  private renderSessionTable(rows: import('./pipeline-types.js').SessionRow[], isTTY: boolean): void {
+    const dimText = (text: string) => isTTY ? `\x1b[2m${text}\x1b[0m` : text;
+
+    console.log();
+    console.log(
+      dimText('Session'.padEnd(10)) + '  ' +
+      dimText('RPCs'.padEnd(6)) + '  ' +
+      dimText('Events'.padEnd(8)) + '  ' +
+      dimText('Started')
+    );
+    console.log(dimText('-'.repeat(45)));
+
+    rows.forEach((row) => {
+      const sessionShort = shortenSessionId(row.session_id);
+      const rpcs = String(row.rpc_count).padEnd(6);
+      const events = String(row.event_count).padEnd(8);
+      const started = row.started_at ? row.started_at.slice(0, 19).replace('T', ' ') : '-';
+
+      console.log(`${sessionShort}  ${rpcs}  ${events}  ${started}`);
+    });
+    console.log();
   }
 
   /**

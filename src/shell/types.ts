@@ -189,6 +189,12 @@ export const REF_COMMANDS = ['ref'];
 export const INSCRIBE_COMMANDS = ['inscribe'];
 
 /**
+ * Pipeline filter commands (Filter DSL v0.1)
+ * Used with pipe: ls | where rpc.method == "tools/call"
+ */
+export const FILTER_COMMANDS = ['where', 'grep'] as const;
+
+/**
  * Commands blocked in shell mode due to stdin conflicts.
  *
  * These commands have their own readline interface which conflicts
