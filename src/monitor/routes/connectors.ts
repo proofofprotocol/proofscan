@@ -683,10 +683,22 @@ function getFilterScript(): string {
   var selectedIndex = -1;
   var debounceTimer = null;
 
+  // AST cache for performance (avoid re-parsing same input)
+  var cachedInput = null;
+  var cachedResult = null;
+
   // ============ Parser ============
   function parseFilter(input) {
+    // Return cached result if input unchanged
+    if (input === cachedInput && cachedResult !== null) {
+      return cachedResult;
+    }
     var trimmed = input.trim().replace(/^filter:\\s*/i, '');
-    if (!trimmed) return { ok: true, ast: { conditions: [] } };
+    if (!trimmed) {
+      cachedInput = input;
+      cachedResult = { ok: true, ast: { conditions: [] } };
+      return cachedResult;
+    }
 
     var conditions = [];
     var pos = 0;
@@ -736,12 +748,16 @@ function getFilterScript(): string {
         var str = '';
         while (pos < trimmed.length && trimmed[pos] !== quote) {
           if (trimmed[pos] === '\\\\' && pos + 1 < trimmed.length) {
-            str += trimmed[pos + 1];
-            pos += 2;
-          } else {
-            str += trimmed[pos];
-            pos++;
+            var next = trimmed[pos + 1];
+            // Only escape quote or backslash (same as TypeScript version)
+            if (next === quote || next === '\\\\') {
+              str += next;
+              pos += 2;
+              continue;
+            }
           }
+          str += trimmed[pos];
+          pos++;
         }
         if (pos >= trimmed.length) {
           return { ok: false, error: 'Unterminated string at char ' + (valueStart + 1) };
@@ -771,7 +787,9 @@ function getFilterScript(): string {
       conditions.push({ field: field, operator: op, value: value });
     }
 
-    return { ok: true, ast: { conditions: conditions } };
+    cachedInput = input;
+    cachedResult = { ok: true, ast: { conditions: conditions } };
+    return cachedResult;
   }
 
   // ============ Evaluator ============
