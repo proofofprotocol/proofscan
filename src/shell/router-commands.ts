@@ -6,6 +6,7 @@
  */
 
 import type { ShellContext, ProtoType } from './types.js';
+import { PIPELINE_SESSION_LIMIT } from './types.js';
 import { printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
 import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
@@ -1232,4 +1233,145 @@ export async function getRpcDetailJson(
   };
 
   return JSON.stringify(detail, null, 2);
+}
+
+// ============ Pipeline Support (Filter DSL v0.1) ============
+
+import type {
+  PipelineValue,
+  RpcRow,
+  SessionRow,
+  ConnectorRow,
+} from './pipeline-types.js';
+
+/**
+ * Get ls result as pipeline rows for filtering
+ *
+ * Used by: ls | where <filter-expr>
+ */
+export function getLsRows(context: ShellContext, configPath: string): PipelineValue {
+  const level = getContextLevel(context);
+  const store = getStore(configPath);
+
+  if (level === 'session' && context.connector && context.session) {
+    const rpcs = getRpcRowsInternal(store, context.session);
+    return { kind: 'rows', rows: rpcs, rowType: 'rpc' };
+  }
+
+  if (level === 'connector' && context.connector) {
+    const sessions = getSessionRowsInternal(store, context.connector);
+    return { kind: 'rows', rows: sessions, rowType: 'session' };
+  }
+
+  // Root level - return connector rows
+  const connectors = getConnectorRowsInternal(store, configPath);
+  return { kind: 'rows', rows: connectors, rowType: 'connector' };
+}
+
+/**
+ * Extract tool name from request JSON.
+ * Fallback chain: params.name ?? params.tool ?? params.toolName
+ */
+function extractToolName(rawJson: string | null | undefined): string | undefined {
+  if (!rawJson) return undefined;
+
+  try {
+    const parsed = JSON.parse(rawJson);
+    const params = parsed?.params;
+    if (!params || typeof params !== 'object') return undefined;
+
+    // Fallback chain matches analytics.ts implementation
+    if (typeof params.name === 'string' && params.name.length > 0) {
+      return params.name;
+    }
+    if (typeof params.tool === 'string' && params.tool.length > 0) {
+      return params.tool;
+    }
+    if (typeof params.toolName === 'string' && params.toolName.length > 0) {
+      return params.toolName;
+    }
+  } catch {
+    // JSON parse error - return undefined
+  }
+
+  return undefined;
+}
+
+/**
+ * Get RPC rows for a session (internal helper)
+ */
+function getRpcRowsInternal(store: EventLineStore, sessionId: string): RpcRow[] {
+  const rpcs = store.getRpcCalls(sessionId);
+
+  return rpcs.map((rpc) => {
+    // Determine status from success field
+    let status: 'OK' | 'ERR' | 'pending';
+    if (rpc.success === 1) {
+      status = 'OK';
+    } else if (rpc.success === 0) {
+      status = 'ERR';
+    } else {
+      status = 'pending';
+    }
+
+    // Calculate latency
+    let latency_ms: number | null = null;
+    if (rpc.request_ts && rpc.response_ts) {
+      const requestTime = new Date(rpc.request_ts).getTime();
+      const responseTime = new Date(rpc.response_ts).getTime();
+      latency_ms = responseTime - requestTime;
+    }
+
+    // Extract tool_name for tools/call method
+    let tool_name: string | undefined;
+    if (rpc.method === 'tools/call') {
+      const rawEvent = store.getRawEvent(sessionId, rpc.rpc_id);
+      if (rawEvent?.request?.raw_json) {
+        tool_name = extractToolName(rawEvent.request.raw_json);
+      }
+    }
+
+    return {
+      rpc_id: rpc.rpc_id,
+      session_id: rpc.session_id,
+      method: rpc.method,
+      status,
+      latency_ms,
+      request_ts: rpc.request_ts,
+      response_ts: rpc.response_ts,
+      error_code: rpc.error_code,
+      tool_name,
+    };
+  });
+}
+
+/**
+ * Get session rows for a connector (internal helper)
+ */
+function getSessionRowsInternal(store: EventLineStore, connectorId: string): SessionRow[] {
+  const sessions = store.getSessions(connectorId, PIPELINE_SESSION_LIMIT);
+
+  return sessions.map((session) => ({
+    session_id: session.session_id,
+    connector_id: connectorId,
+    started_at: session.started_at,
+    ended_at: session.ended_at,
+    event_count: session.event_count ?? 0,
+    rpc_count: session.rpc_count ?? 0,
+    total_latency_ms: undefined, // Could be calculated if needed
+  }));
+}
+
+/**
+ * Get connector rows at root level (internal helper)
+ */
+function getConnectorRowsInternal(store: EventLineStore, configPath: string): ConnectorRow[] {
+  const historyConnectors = store.getConnectors();
+
+  return historyConnectors.map((c) => ({
+    connector_id: c.id,
+    name: c.id, // Use ID as name since we don't have a separate name field
+    session_count: c.session_count,
+    created_at: c.latest_session ?? new Date().toISOString(),
+  }));
 }

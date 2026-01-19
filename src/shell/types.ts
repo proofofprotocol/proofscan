@@ -189,6 +189,12 @@ export const REF_COMMANDS = ['ref'];
 export const INSCRIBE_COMMANDS = ['inscribe'];
 
 /**
+ * Pipeline filter commands (Filter DSL v0.1)
+ * Used with pipe: ls | where rpc.method == "tools/call"
+ */
+export const FILTER_COMMANDS = ['where', 'grep'] as const;
+
+/**
  * Commands blocked in shell mode due to stdin conflicts.
  *
  * These commands have their own readline interface which conflicts
@@ -229,6 +235,11 @@ export const DEFAULT_COMPLETION_LIMIT = 50;
  * Higher than completion limit since we need to find partial matches
  */
 export const SESSION_SEARCH_LIMIT = 100;
+
+/**
+ * Default limit for pipeline session rows (ls | where at connector level)
+ */
+export const PIPELINE_SESSION_LIMIT = 100;
 
 /**
  * Get commands allowed in shell mode (TOP_LEVEL_COMMANDS minus BLOCKED_IN_SHELL)
