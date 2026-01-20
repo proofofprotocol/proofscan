@@ -492,6 +492,8 @@ References & Tool Calls:
 Pipes & Filters:
   ls | where <expr> Filter rows (e.g., rpc.method == "tools/call")
   ls | grep <expr>  Alias for where (not regex)
+  ls | less         Page through results (j/k scroll, q quit)
+  find rpc | more   Simple page-by-page view
 
 Session Control:
   reset             Clear all context
@@ -591,6 +593,17 @@ Pipes & Filters (Filter DSL v0.1):
     ls | where rpc.status != ok
     ls | where rpc.latency > 1000
     ls | where tools.name ~= "read"
+
+Pager (less/more):
+  ls | less               Interactive pager (j/k scroll, q quit)
+  find rpc | less         Page through cross-session results
+  ls | more               Simple page-by-page view (Enter/q)
+
+  less keys:
+    j/k, ↑/↓              Scroll one line
+    space, b              Page down/up
+    g, G                  First/last line
+    q, Ctrl+C             Quit
 
 Session Control:
   reset                   Clear all context
@@ -694,6 +707,12 @@ Tips:
       return;
     }
 
+    // Handle: ls | less or find rpc | more
+    if (rightCommand === 'less' || rightCommand === 'more') {
+      await this.handlePipeToPager(leftCmd, rightCommand as 'less' | 'more');
+      return;
+    }
+
     // Parse right side for other commands
     const rightTokens = rightCmd.split(/\s+/).filter(t => t !== '');
 
@@ -715,6 +734,8 @@ Tips:
     printInfo('  show @rpc:<id> --json | inscribe');
     printInfo('  ls | where <filter-expr>');
     printInfo('  find rpc | where <filter-expr>');
+    printInfo('  ls | less');
+    printInfo('  find rpc | more');
   }
 
   /**
@@ -783,6 +804,61 @@ Tips:
     // Render output
     this.renderPipelineOutput(result.result);
     printInfo(`${statsLabel}: ${result.stats.matched} / ${result.stats.total}`);
+  }
+
+  /**
+   * Handle: ls | less or find rpc | more
+   */
+  private async handlePipeToPager(leftCmd: string, pagerCmd: 'less' | 'more'): Promise<void> {
+    const leftTokens = leftCmd.trim().split(/\s+/);
+    const leftCommand = leftTokens[0];
+
+    // Get pipeline input based on left command
+    let input: PipelineValue;
+
+    if (leftCommand === 'ls') {
+      const { getLsRows } = await import('./router-commands.js');
+      input = getLsRows(this.context, this.configPath);
+    } else if (leftCommand === 'find') {
+      const findArgs = leftTokens.slice(1);
+      const parseResult = parseFindArgs(findArgs);
+
+      if (!parseResult.ok) {
+        // Help text is not an error
+        if ('help' in parseResult && parseResult.help) {
+          console.log(parseResult.error);
+        } else {
+          printError(parseResult.error);
+        }
+        return;
+      }
+
+      const findResult = executeFind(this.context, this.configPath, parseResult.options);
+
+      if (!findResult.ok) {
+        printError(findResult.error);
+        return;
+      }
+
+      input = findResult.result;
+    } else {
+      printError(`${pagerCmd} only supports "ls" or "find" as input`);
+      printInfo('Examples:');
+      printInfo('  ls | less');
+      printInfo('  find rpc | less');
+      return;
+    }
+
+    // Text input is an error
+    if (input.kind === 'text') {
+      printError(`${pagerCmd} expects structured rows; got text`);
+      return;
+    }
+
+    // Run pager
+    const { LessPager, MorePager } = await import('./pager/index.js');
+    const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
+    await pager.run(input);
   }
 
   /**
