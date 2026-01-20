@@ -190,11 +190,43 @@ describe('parseFindArgs', () => {
       }
     });
 
+    it('rejects --limit with zero', () => {
+      const result = parseFindArgs(['rpc', '--limit', '0']);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('--limit must be a positive number');
+      }
+    });
+
+    it('rejects --limit with negative number', () => {
+      const result = parseFindArgs(['rpc', '--limit', '-5']);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('--limit must be a positive number');
+      }
+    });
+
     it('rejects --sessions without number', () => {
       const result = parseFindArgs(['rpc', '--sessions']);
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error).toContain('--sessions requires a number');
+      }
+    });
+
+    it('rejects --sessions with zero', () => {
+      const result = parseFindArgs(['rpc', '--sessions', '0']);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('--sessions must be a positive number');
+      }
+    });
+
+    it('rejects --sessions with negative number', () => {
+      const result = parseFindArgs(['rpc', '--sessions', '-10']);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain('--sessions must be a positive number');
       }
     });
 

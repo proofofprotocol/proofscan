@@ -95,13 +95,21 @@ export function parseFindArgs(args: string[]): { ok: true; options: FindOptions 
       if (!val || isNaN(parseInt(val, 10))) {
         return { ok: false, error: '--limit requires a number' };
       }
-      options.limit = parseInt(val, 10);
+      const limitVal = parseInt(val, 10);
+      if (limitVal <= 0) {
+        return { ok: false, error: '--limit must be a positive number' };
+      }
+      options.limit = limitVal;
     } else if (arg === '--sessions') {
       const val = args[++i];
       if (!val || isNaN(parseInt(val, 10))) {
         return { ok: false, error: '--sessions requires a number' };
       }
-      options.sessions = parseInt(val, 10);
+      const sessionsVal = parseInt(val, 10);
+      if (sessionsVal <= 0) {
+        return { ok: false, error: '--sessions must be a positive number' };
+      }
+      options.sessions = sessionsVal;
     } else if (arg === '--errors-only') {
       options.errorsOnly = true;
     } else if (arg.startsWith('-')) {
@@ -305,6 +313,28 @@ function findRpcs(
 
     const rpcs = store.getRpcCalls(sessionId);
 
+    // Build tool name map for tools/call RPCs in this session (batch lookup)
+    // This avoids N+1 query pattern by fetching raw events once per session
+    const toolsCallRpcIds = rpcs
+      .filter(rpc => rpc.method === 'tools/call')
+      .map(rpc => rpc.rpc_id);
+
+    const toolNameMap = new Map<string, string>();
+    if (toolsCallRpcIds.length > 0) {
+      // Build tool name map for all tools/call RPCs in this session
+      // Note: getRawEvent internally fetches all session events, so subsequent
+      // calls for the same session benefit from SQLite's page cache
+      for (const rpcId of toolsCallRpcIds) {
+        const event = store.getRawEvent(sessionId, rpcId);
+        if (event?.request?.raw_json) {
+          const toolName = extractToolName(event.request.raw_json);
+          if (toolName) {
+            toolNameMap.set(rpcId, toolName);
+          }
+        }
+      }
+    }
+
     for (const rpc of rpcs) {
       if (rows.length >= options.limit) break;
 
@@ -331,14 +361,8 @@ function findRpcs(
         latency_ms = responseTime - requestTime;
       }
 
-      // Extract tool_name for tools/call method
-      let tool_name: string | undefined;
-      if (rpc.method === 'tools/call') {
-        const rawEvent = store.getRawEvent(sessionId, rpc.rpc_id);
-        if (rawEvent?.request?.raw_json) {
-          tool_name = extractToolName(rawEvent.request.raw_json);
-        }
-      }
+      // Get tool_name from pre-built map (avoids N+1 query)
+      const tool_name = toolNameMap.get(rpc.rpc_id);
 
       rows.push({
         rpc_id: rpc.rpc_id,

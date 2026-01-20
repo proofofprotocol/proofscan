@@ -893,7 +893,7 @@ Tips:
       console.log(dimText('-'.repeat(55)));
 
       rows.forEach((row) => {
-        const connector = row.connector_id.slice(0, 12).padEnd(12);
+        const connector = (row.connector_id ?? '').slice(0, 12).padEnd(12);
         const sessionShort = shortenSessionId(row.session_id);
         const rpcs = String(row.rpc_count).padEnd(6);
         const started = row.started_at ? row.started_at.slice(0, 19).replace('T', ' ') : '-';
