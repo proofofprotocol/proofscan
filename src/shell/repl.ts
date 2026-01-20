@@ -855,10 +855,19 @@ Tips:
       return;
     }
 
-    // Run pager
-    const { LessPager, MorePager } = await import('./pager/index.js');
-    const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
-    await pager.run(input);
+    // Pause readline before running pager (to avoid stdin conflicts)
+    // The pager needs exclusive access to stdin for raw mode key handling
+    this.rl?.pause();
+
+    try {
+      // Run pager
+      const { LessPager, MorePager } = await import('./pager/index.js');
+      const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
+      await pager.run(input);
+    } finally {
+      // Resume readline after pager exits
+      this.rl?.resume();
+    }
   }
 
   /**
