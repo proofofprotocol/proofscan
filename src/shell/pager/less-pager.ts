@@ -39,9 +39,14 @@ export class LessPager implements Pager {
     process.stdin.setRawMode(true);
     process.stdin.resume();
 
+    // Hide cursor while in pager mode
+    process.stdout.write('\x1B[?25l');
+
     try {
       await this.runLoop(lines, pageSize);
     } finally {
+      // Show cursor again
+      process.stdout.write('\x1B[?25h');
       // Restore raw mode but do NOT pause stdin
       // The shell's readline interface manages stdin and pausing would disrupt it
       process.stdin.setRawMode(false);
@@ -69,8 +74,8 @@ export class LessPager implements Pager {
 
       const cleanup = () => {
         process.stdin.removeListener('data', onKey);
-        // Clear screen before returning to shell
-        process.stdout.write('\x1B[2J\x1B[H');
+        // Show cursor and clear screen before returning to shell
+        process.stdout.write('\x1B[?25h\x1B[2J\x1B[H');
       };
 
       const maxOffset = Math.max(0, lines.length - pageSize);
@@ -84,14 +89,14 @@ export class LessPager implements Pager {
             case '\x1B[B': // Down arrow
               if (offset < maxOffset) {
                 offset++;
-                render();
               }
+              render(); // Always re-render to clear any stray characters
               break;
             case '\x1B[A': // Up arrow
               if (offset > 0) {
                 offset--;
-                render();
               }
+              render();
               break;
             case '\x1B[6~': // Page Down
               offset = Math.min(offset + pageSize, maxOffset);
@@ -101,55 +106,52 @@ export class LessPager implements Pager {
               offset = Math.max(0, offset - pageSize);
               render();
               break;
+            default:
+              // Unknown escape sequence - re-render to clear
+              render();
           }
           return;
         }
 
-        // Single character commands
+        // Single character commands - always re-render to prevent stray chars
         switch (ch) {
           case 'q':
           case '\x03': // Ctrl+C
             cleanup();
             resolve();
-            break;
+            return; // Don't render after cleanup
           case 'j': // Down
             if (offset < maxOffset) {
               offset++;
-              render();
             }
             break;
           case 'k': // Up
             if (offset > 0) {
               offset--;
-              render();
             }
             break;
           case ' ': // Page down
           case 'f': // Forward (like less)
             offset = Math.min(offset + pageSize, maxOffset);
-            render();
             break;
           case 'b': // Page up / backward
             offset = Math.max(0, offset - pageSize);
-            render();
             break;
           case 'g': // First line
             offset = 0;
-            render();
             break;
           case 'G': // Last line
             offset = maxOffset;
-            render();
             break;
           case 'd': // Half page down (like vim)
             offset = Math.min(offset + Math.floor(pageSize / 2), maxOffset);
-            render();
             break;
           case 'u': // Half page up (like vim)
             offset = Math.max(0, offset - Math.floor(pageSize / 2));
-            render();
             break;
         }
+        // Re-render after any key to clear potential stray characters
+        render();
       };
 
       process.stdin.on('data', onKey);
