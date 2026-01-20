@@ -855,43 +855,82 @@ Tips:
       return;
     }
 
-    // Pause readline before running pager (to avoid stdin conflicts)
-    // The pager needs exclusive access to stdin for raw mode key handling
-    this.rl?.pause();
-
-    try {
-      // Run pager
-      const { LessPager, MorePager } = await import('./pager/index.js');
-      const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
-      await pager.run(input);
-
-      // Drain any remaining input in stdin buffer before resuming readline
-      // This prevents pager keystrokes from appearing in the shell prompt
-      await this.drainStdin();
-    } finally {
-      // Resume readline after pager exits
-      this.rl?.resume();
+    // Close readline completely before running pager
+    // This is necessary because readline's internal buffer would accumulate
+    // keystrokes during pager mode, which would appear in the prompt after exit
+    const oldRl = this.rl;
+    if (oldRl) {
+      // Remove listeners to prevent 'close' event from triggering exit
+      oldRl.removeAllListeners('close');
+      oldRl.close();
+      this.rl = null;
     }
+
+    // Run pager
+    const { LessPager, MorePager } = await import('./pager/index.js');
+    const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
+    await pager.run(input);
+
+    // Recreate readline after pager exits
+    this.recreateReadline();
   }
 
   /**
-   * Drain stdin buffer by consuming any pending input
-   * Used after pager to prevent leftover keystrokes from appearing in prompt
+   * Recreate the readline interface
+   * Used after pager to get a fresh readline without buffered input
    */
-  private drainStdin(): Promise<void> {
-    return new Promise((resolve) => {
-      // Set a short timeout to collect any buffered data
-      const drainHandler = () => {
-        // Consume and discard data
-      };
+  private recreateReadline(): void {
+    const dataProvider = this.getDataProvider();
+    const completer = createCompleter(this.context, dataProvider);
 
-      process.stdin.on('data', drainHandler);
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      prompt: generatePrompt(this.context),
+      completer: (line: string, callback: (err: Error | null, result: [string[], string]) => void) => {
+        const [completions, prefix] = completer(line);
+        callback(null, [completions, prefix]);
+      },
+      history: this.history,
+      historySize: 1000,
+    });
 
-      // Give a brief moment for any buffered data to be consumed
-      setTimeout(() => {
-        process.stdin.removeListener('data', drainHandler);
-        resolve();
-      }, 50);
+    // Re-attach event handlers
+    this.rl.on('line', async (line) => {
+      const trimmed = line.trim();
+
+      if (trimmed) {
+        const tokens = trimmed.split(/\s+/).filter(t => t !== '');
+        const resolution = resolveCommand(tokens, this.context);
+
+        if (!resolution.success) {
+          printError(resolution.error!);
+          if (resolution.candidates) {
+            printInfo(`Did you mean: ${resolution.candidates.join(', ')}?`);
+          }
+        } else {
+          const normalizedLine = resolution.resolved.join(' ') || trimmed;
+          this.history = addToHistory(this.history, normalizedLine);
+          await this.processLine(normalizedLine);
+        }
+      }
+
+      if (this.running && this.rl) {
+        this.rl.setPrompt(generatePrompt(this.context));
+        this.rl.prompt();
+      }
+    });
+
+    this.rl.on('close', () => {
+      this.running = false;
+      saveHistory(this.history);
+      console.log();
+      printInfo('Goodbye!');
+    });
+
+    this.rl.on('SIGINT', () => {
+      console.log();
+      this.rl?.prompt();
     });
   }
 
