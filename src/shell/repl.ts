@@ -864,10 +864,35 @@ Tips:
       const { LessPager, MorePager } = await import('./pager/index.js');
       const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
       await pager.run(input);
+
+      // Drain any remaining input in stdin buffer before resuming readline
+      // This prevents pager keystrokes from appearing in the shell prompt
+      await this.drainStdin();
     } finally {
       // Resume readline after pager exits
       this.rl?.resume();
     }
+  }
+
+  /**
+   * Drain stdin buffer by consuming any pending input
+   * Used after pager to prevent leftover keystrokes from appearing in prompt
+   */
+  private drainStdin(): Promise<void> {
+    return new Promise((resolve) => {
+      // Set a short timeout to collect any buffered data
+      const drainHandler = () => {
+        // Consume and discard data
+      };
+
+      process.stdin.on('data', drainHandler);
+
+      // Give a brief moment for any buffered data to be consumed
+      setTimeout(() => {
+        process.stdin.removeListener('data', drainHandler);
+        resolve();
+      }, 50);
+    });
   }
 
   /**
