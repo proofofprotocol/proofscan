@@ -9,7 +9,7 @@
  */
 
 import type { ShellContext } from './types.js';
-import type { PipelineValue, RpcRow, SessionRow, ConnectorRow } from './pipeline-types.js';
+import type { PipelineValue, RpcRow, SessionRow } from './pipeline-types.js';
 import { getContextLevel, type ContextLevel } from './router-commands.js';
 import { EventLineStore } from '../eventline/store.js';
 import { ConfigManager } from '../config/index.js';
@@ -144,7 +144,7 @@ export function executeFind(
     case 'session':
       return findSessions(store, scope, options);
     case 'rpc':
-      return findRpcs(store, scope, options, configPath);
+      return findRpcs(store, scope, options);
     case 'event':
       // Event kind is reserved for future implementation
       return { ok: false, error: 'Event kind is not yet implemented' };
@@ -276,8 +276,7 @@ function extractToolName(rawJson: string | null | undefined): string | undefined
 function findRpcs(
   store: EventLineStore,
   scope: FindScope,
-  options: FindOptions,
-  _configPath: string
+  options: FindOptions
 ): FindResult {
   const rows: RpcRow[] = [];
   let sessionCount = 0;
