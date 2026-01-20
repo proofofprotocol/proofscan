@@ -17,6 +17,7 @@ export type PipelineValue =
 export interface RpcRow {
   rpc_id: string;
   session_id: string;
+  connector_id?: string; // Available in find results (cross-session search)
   method: string;
   status: 'OK' | 'ERR' | 'pending';
   latency_ms: number | null;
