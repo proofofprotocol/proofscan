@@ -107,6 +107,9 @@ export class ShellRepl {
   private configPath: string;
   private running = false;
 
+  // Flag to skip garbage input after pager
+  private skipNextLine = false;
+
   // Caches for completion data
   private connectorsCache: CacheEntry<string[]> | null = null;
   private sessionsCache: Map<string, CacheEntry<string[]>> = new Map();
@@ -876,6 +879,9 @@ Tips:
     // keystrokes from being processed
     await this.drainStdinBuffer();
 
+    // Set flag to skip the first line event (which may contain garbage)
+    this.skipNextLine = true;
+
     // Recreate readline after pager exits
     this.recreateReadline();
   }
@@ -931,6 +937,17 @@ Tips:
 
     // Re-attach event handlers
     this.rl.on('line', async (line) => {
+      // Skip garbage input after pager (buffered keystrokes)
+      if (this.skipNextLine) {
+        this.skipNextLine = false;
+        // Just show prompt again, ignore the garbage line
+        if (this.running && this.rl) {
+          this.rl.setPrompt(generatePrompt(this.context));
+          this.rl.prompt();
+        }
+        return;
+      }
+
       const trimmed = line.trim();
 
       if (trimmed) {
