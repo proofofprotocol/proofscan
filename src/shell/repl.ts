@@ -39,6 +39,7 @@ import { handleInscribe } from './inscribe-commands.js';
 import { handlePopl, getPoplEntryIdsSync } from './popl-commands.js';
 import { resolveCommand } from './command-resolver.js';
 import type { PipelineValue, RpcRow, SessionRow } from './pipeline-types.js';
+import { parseFindArgs, executeFind } from './find-command.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -385,7 +386,38 @@ export class ShellRepl {
       case 'show':
         await handleShow(args, this.context, this.configPath, (tokens) => this.executeCommand(tokens));
         break;
+      case 'find':
+        await this.handleFind(args);
+        break;
     }
+  }
+
+  /**
+   * Handle find command - cross-session search
+   */
+  private async handleFind(args: string[]): Promise<void> {
+    const parseResult = parseFindArgs(args);
+
+    if (!parseResult.ok) {
+      // Help text is not an error
+      if ('help' in parseResult && parseResult.help) {
+        console.log(parseResult.error);
+      } else {
+        printError(parseResult.error);
+      }
+      return;
+    }
+
+    const result = executeFind(this.context, this.configPath, parseResult.options);
+
+    if (!result.ok) {
+      printError(result.error);
+      return;
+    }
+
+    // Render output (reuse pipeline output renderer)
+    this.renderPipelineOutput(result.result);
+    printInfo(`rows: ${result.stats.count} (across ${result.stats.sessions} sessions)`);
   }
 
   /**
@@ -450,6 +482,7 @@ Navigation & Inspection:
   ls                List items at current level
   pwd               Show current path
   show [target]     Show resource details
+  find <kind>       Cross-session search (session|rpc|event)
 
 References & Tool Calls:
   ref <action>      Manage references (add, ls, rm)
@@ -494,6 +527,23 @@ Navigation:
     cd -                  Go to previous location
   ls [-l] [--json]        List items at current level
   pwd [--json]            Show current path (--json for RefStruct)
+
+Cross-Session Search:
+  find <kind> [options]   Search across sessions without cd
+    Kinds: session, rpc, event
+    Options:
+      --limit N           Max rows to return (default: 200)
+      --sessions N        Max sessions to search (default: 50)
+      --errors-only       Only return error RPCs
+    Scope:
+      /                   Search all connectors
+      /<connector>:       Search that connector
+      /<conn>/<sess>:     Search that session only
+    Examples:
+      find rpc                      All RPCs across sessions
+      find rpc --errors-only        Errors only
+      find rpc | where tools.name ~= "read"   Chain with filter
+      find session --limit 10       Latest sessions
 
 Resource Details:
   show [target] [--json]  Show resource details (request/response data)
@@ -664,30 +714,57 @@ Tips:
     printInfo('  pwd --json | ref add <name>');
     printInfo('  show @rpc:<id> --json | inscribe');
     printInfo('  ls | where <filter-expr>');
-    printInfo('  ls | grep <filter-expr>');
+    printInfo('  find rpc | where <filter-expr>');
   }
 
   /**
    * Handle: ls | where <filter-expr> or ls | grep <filter-expr>
+   * Also supports: find <kind> | where <filter-expr>
    */
   private async handlePipeToWhere(leftCmd: string, expr: string): Promise<void> {
     const leftTokens = leftCmd.trim().split(/\s+/);
+    const leftCommand = leftTokens[0];
 
-    // Currently only ls is supported as input
-    if (leftTokens[0] !== 'ls') {
-      printError('where/grep currently only supports "ls" as input');
-      printInfo('Example: ls | where rpc.method == "tools/call"');
-      return;
-    }
+    // Get pipeline input based on left command
+    let input: PipelineValue;
+    let statsLabel: string;
 
-    // Get ls rows
-    const { getLsRows } = await import('./router-commands.js');
-    const input = getLsRows(this.context, this.configPath);
+    if (leftCommand === 'ls') {
+      // Get ls rows
+      const { getLsRows } = await import('./router-commands.js');
+      input = getLsRows(this.context, this.configPath);
 
-    // Connector level is not supported
-    if (input.kind === 'rows' && input.rowType === 'connector') {
-      printError('where/grep is not supported for connectors');
-      printInfo('Navigate to a connector first: cd <connector-id>');
+      // Connector level is not supported for ls
+      if (input.kind === 'rows' && input.rowType === 'connector') {
+        printError('where/grep is not supported for connectors');
+        printInfo('Navigate to a connector first: cd <connector-id>');
+        return;
+      }
+      statsLabel = 'rows';
+    } else if (leftCommand === 'find') {
+      // Parse find args
+      const findArgs = leftTokens.slice(1);
+      const parseResult = parseFindArgs(findArgs);
+
+      if (!parseResult.ok) {
+        printError(parseResult.error);
+        return;
+      }
+
+      const findResult = executeFind(this.context, this.configPath, parseResult.options);
+
+      if (!findResult.ok) {
+        printError(findResult.error);
+        return;
+      }
+
+      input = findResult.result;
+      statsLabel = `rows (across ${findResult.stats.sessions} sessions)`;
+    } else {
+      printError('where/grep only supports "ls" or "find" as input');
+      printInfo('Examples:');
+      printInfo('  ls | where rpc.method == "tools/call"');
+      printInfo('  find rpc | where tools.name ~= "read"');
       return;
     }
 
@@ -705,7 +782,7 @@ Tips:
 
     // Render output
     this.renderPipelineOutput(result.result);
-    printInfo(`rows: ${result.stats.matched} / ${result.stats.total}`);
+    printInfo(`${statsLabel}: ${result.stats.matched} / ${result.stats.total}`);
   }
 
   /**
@@ -745,23 +822,52 @@ Tips:
       }
     };
 
+    // Check if rows have connector_id (find results have it, ls does not)
+    const hasConnector = rows.some(r => r.connector_id);
+
     console.log();
-    console.log(
-      dimText('#'.padEnd(4)) + '  ' +
-      dimText('Method'.padEnd(20)) + '  ' +
-      dimText('Status'.padEnd(isTTY ? 16 : 8)) + '  ' +
-      dimText('Latency')
-    );
-    console.log(dimText('-'.repeat(55)));
+    if (hasConnector) {
+      // Extended format for find results: Connector, Session, Method, Status, Latency, Time
+      console.log(
+        dimText('Connector'.padEnd(10)) + '  ' +
+        dimText('Session'.padEnd(10)) + '  ' +
+        dimText('Method'.padEnd(16)) + '  ' +
+        dimText('Status'.padEnd(isTTY ? 16 : 8)) + '  ' +
+        dimText('Latency'.padEnd(8)) + '  ' +
+        dimText('Time')
+      );
+      console.log(dimText('-'.repeat(90)));
 
-    rows.forEach((row, idx) => {
-      const num = String(idx + 1).padEnd(4);
-      const method = row.method.slice(0, 20).padEnd(20);
-      const status = statusColor(row.status).padEnd(isTTY ? 16 : 8);
-      const latency = row.latency_ms !== null ? `${row.latency_ms}ms` : '-';
+      rows.forEach((row) => {
+        const connector = (row.connector_id ?? '').slice(0, 10).padEnd(10);
+        const sessionShort = shortenSessionId(row.session_id);
+        const method = row.method.slice(0, 16).padEnd(16);
+        const status = statusColor(row.status).padEnd(isTTY ? 16 : 8);
+        const latency = (row.latency_ms !== null ? `${row.latency_ms}ms` : '-').padEnd(8);
+        // MM-DD HH:MM:SS format
+        const time = row.request_ts ? row.request_ts.slice(5, 19).replace('T', ' ') : '-';
 
-      console.log(`${num}  ${method}  ${status}  ${latency}`);
-    });
+        console.log(`${connector}  ${sessionShort}  ${method}  ${status}  ${latency}  ${time}`);
+      });
+    } else {
+      // Simple format for ls results (within a session)
+      console.log(
+        dimText('#'.padEnd(4)) + '  ' +
+        dimText('Method'.padEnd(20)) + '  ' +
+        dimText('Status'.padEnd(isTTY ? 16 : 8)) + '  ' +
+        dimText('Latency')
+      );
+      console.log(dimText('-'.repeat(55)));
+
+      rows.forEach((row, idx) => {
+        const num = String(idx + 1).padEnd(4);
+        const method = row.method.slice(0, 20).padEnd(20);
+        const status = statusColor(row.status).padEnd(isTTY ? 16 : 8);
+        const latency = row.latency_ms !== null ? `${row.latency_ms}ms` : '-';
+
+        console.log(`${num}  ${method}  ${status}  ${latency}`);
+      });
+    }
     console.log();
   }
 
@@ -771,23 +877,48 @@ Tips:
   private renderSessionTable(rows: SessionRow[], isTTY: boolean): void {
     const dimText = (text: string) => isTTY ? `\x1b[2m${text}\x1b[0m` : text;
 
+    // Check if rows span multiple connectors (find at root level)
+    const connectorIds = new Set(rows.map(r => r.connector_id));
+    const multiConnector = connectorIds.size > 1;
+
     console.log();
-    console.log(
-      dimText('Session'.padEnd(10)) + '  ' +
-      dimText('RPCs'.padEnd(6)) + '  ' +
-      dimText('Events'.padEnd(8)) + '  ' +
-      dimText('Started')
-    );
-    console.log(dimText('-'.repeat(45)));
+    if (multiConnector) {
+      // Extended format with connector column
+      console.log(
+        dimText('Connector'.padEnd(12)) + '  ' +
+        dimText('Session'.padEnd(10)) + '  ' +
+        dimText('RPCs'.padEnd(6)) + '  ' +
+        dimText('Started')
+      );
+      console.log(dimText('-'.repeat(55)));
 
-    rows.forEach((row) => {
-      const sessionShort = shortenSessionId(row.session_id);
-      const rpcs = String(row.rpc_count).padEnd(6);
-      const events = String(row.event_count).padEnd(8);
-      const started = row.started_at ? row.started_at.slice(0, 19).replace('T', ' ') : '-';
+      rows.forEach((row) => {
+        const connector = row.connector_id.slice(0, 12).padEnd(12);
+        const sessionShort = shortenSessionId(row.session_id);
+        const rpcs = String(row.rpc_count).padEnd(6);
+        const started = row.started_at ? row.started_at.slice(0, 19).replace('T', ' ') : '-';
 
-      console.log(`${sessionShort}  ${rpcs}  ${events}  ${started}`);
-    });
+        console.log(`${connector}  ${sessionShort}  ${rpcs}  ${started}`);
+      });
+    } else {
+      // Simple format (within a connector)
+      console.log(
+        dimText('Session'.padEnd(10)) + '  ' +
+        dimText('RPCs'.padEnd(6)) + '  ' +
+        dimText('Events'.padEnd(8)) + '  ' +
+        dimText('Started')
+      );
+      console.log(dimText('-'.repeat(50)));
+
+      rows.forEach((row) => {
+        const sessionShort = shortenSessionId(row.session_id);
+        const rpcs = String(row.rpc_count).padEnd(6);
+        const events = String(row.event_count).padEnd(8);
+        const started = row.started_at ? row.started_at.slice(0, 19).replace('T', ' ') : '-';
+
+        console.log(`${sessionShort}  ${rpcs}  ${events}  ${started}`);
+      });
+    }
     console.log();
   }
 

@@ -158,6 +158,7 @@ export const COMMAND_OPTIONS: Record<string, string[]> = {
   'plans run-show': ['--json'],
   // Shell router commands (no --id: context-dependent is shell's strength)
   show: ['--html', '--out', '--open', '--redact', '--embed-max-bytes', '--spill', '--json', '--max-sessions', '--offset'],
+  find: ['--limit', '--sessions', '--errors-only'],
 };
 
 /**
@@ -168,7 +169,7 @@ export const SHELL_BUILTINS = ['reset', 'pwd', 'help', 'exit', 'quit', 'clear'];
 /**
  * Router-style navigation commands
  */
-export const ROUTER_COMMANDS = ['cd', 'ls', 'show', '..'];
+export const ROUTER_COMMANDS = ['cd', 'ls', 'show', '..', 'find'];
 
 /**
  * Shell-native tool commands (Phase 4.0)
