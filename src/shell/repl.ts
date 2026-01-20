@@ -885,11 +885,6 @@ Tips:
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
     await pager.run(input);
 
-    // Drain stdin buffer before recreating readline
-    // This must happen BEFORE creating new readline to prevent buffered
-    // keystrokes from being processed
-    await this.drainStdinBuffer();
-
     // Set flag to skip the first line event (which may contain garbage)
     this.skipNextLine = true;
 
@@ -901,35 +896,6 @@ Tips:
     if (this.running && this.rl) {
       this.rl.prompt();
     }
-  }
-
-  /**
-   * Drain any pending data from stdin buffer
-   * Must be called before creating a new readline to prevent buffered input
-   */
-  private drainStdinBuffer(): Promise<void> {
-    return new Promise((resolve) => {
-      // Use raw mode to read and discard any buffered data
-      if (process.stdin.isTTY) {
-        process.stdin.setRawMode(true);
-      }
-      process.stdin.resume();
-
-      const drain = () => {
-        // Just consume and discard
-      };
-
-      process.stdin.on('data', drain);
-
-      // Wait a bit for any buffered data to arrive, then stop
-      setTimeout(() => {
-        process.stdin.removeListener('data', drain);
-        if (process.stdin.isTTY) {
-          process.stdin.setRawMode(false);
-        }
-        resolve();
-      }, 100);
-    });
   }
 
   /**

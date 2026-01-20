@@ -5,7 +5,6 @@
  * Supports j/k scrolling, page up/down, and g/G for first/last.
  */
 
-import { execSync } from 'child_process';
 import type { Pager, PagerOptions } from './types.js';
 import type { PipelineValue } from '../pipeline-types.js';
 import { renderRowsToLines } from './renderer.js';
@@ -49,33 +48,8 @@ export class LessPager implements Pager {
       // Show cursor again
       process.stdout.write('\x1B[?25h');
 
-      // Restore raw mode first
+      // Restore raw mode
       process.stdin.setRawMode(false);
-
-      // Flush terminal input buffer at OS level
-      // This clears any pending keystrokes that would otherwise appear in shell
-      this.flushTerminalInput();
-    }
-  }
-
-  /**
-   * Flush terminal input buffer using stty
-   * This clears any pending keystrokes at the OS level
-   */
-  private flushTerminalInput(): void {
-    try {
-      // Use Python to call tcflush which flushes the terminal input queue
-      // This works on Linux/macOS
-      execSync('python3 -c "import termios; termios.tcflush(0, termios.TCIFLUSH)"', {
-        stdio: 'ignore',
-      });
-    } catch {
-      // Fallback: try stty (may not work on all systems)
-      try {
-        execSync('stty sane', { stdio: 'ignore' });
-      } catch {
-        // Ignore errors - best effort
-      }
     }
   }
 
