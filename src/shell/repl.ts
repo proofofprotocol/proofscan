@@ -869,103 +869,19 @@ Tips:
       return;
     }
 
-    // Close readline completely before running pager
-    // This is necessary because readline's internal buffer would accumulate
-    // keystrokes during pager mode, which would appear in the prompt after exit
-    const oldRl = this.rl;
-    if (oldRl) {
-      // Remove listeners to prevent 'close' event from triggering exit
-      oldRl.removeAllListeners('close');
-      oldRl.close();
-      this.rl = null;
-    }
+    // Pause readline during pager
+    this.rl?.pause();
 
     // Run pager
     const { LessPager, MorePager } = await import('./pager/index.js');
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
     await pager.run(input);
 
-    // Set flag to skip the first line event (which may contain garbage)
+    // Set flag to skip the first line event (which may contain garbage from pager)
     this.skipNextLine = true;
 
-    // Recreate readline after pager exits
-    this.recreateReadline();
-
-    // Wait a bit and show prompt (delayed to let any garbage line events fire first)
-    await new Promise(resolve => setTimeout(resolve, 150));
-    if (this.running && this.rl) {
-      this.rl.prompt();
-    }
-  }
-
-  /**
-   * Recreate the readline interface
-   * Used after pager to get a fresh readline without buffered input
-   */
-  private recreateReadline(): void {
-    const dataProvider = this.getDataProvider();
-    const completer = createCompleter(this.context, dataProvider);
-
-    this.rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      prompt: generatePrompt(this.context),
-      completer: (line: string, callback: (err: Error | null, result: [string[], string]) => void) => {
-        const [completions, prefix] = completer(line);
-        callback(null, [completions, prefix]);
-      },
-      history: this.history,
-      historySize: 1000,
-    });
-
-    // Re-attach event handlers
-    this.rl.on('line', async (line) => {
-      // Skip garbage input after pager (buffered keystrokes)
-      if (this.skipNextLine) {
-        this.skipNextLine = false;
-        // Just show prompt again, ignore the garbage line
-        if (this.running && this.rl) {
-          this.rl.setPrompt(generatePrompt(this.context));
-          this.rl.prompt();
-        }
-        return;
-      }
-
-      const trimmed = line.trim();
-
-      if (trimmed) {
-        const tokens = trimmed.split(/\s+/).filter(t => t !== '');
-        const resolution = resolveCommand(tokens, this.context);
-
-        if (!resolution.success) {
-          printError(resolution.error!);
-          if (resolution.candidates) {
-            printInfo(`Did you mean: ${resolution.candidates.join(', ')}?`);
-          }
-        } else {
-          const normalizedLine = resolution.resolved.join(' ') || trimmed;
-          this.history = addToHistory(this.history, normalizedLine);
-          await this.processLine(normalizedLine);
-        }
-      }
-
-      if (this.running && this.rl) {
-        this.rl.setPrompt(generatePrompt(this.context));
-        this.rl.prompt();
-      }
-    });
-
-    this.rl.on('close', () => {
-      this.running = false;
-      saveHistory(this.history);
-      console.log();
-      printInfo('Goodbye!');
-    });
-
-    this.rl.on('SIGINT', () => {
-      console.log();
-      this.rl?.prompt();
-    });
+    // Resume readline after pager exits
+    this.rl?.resume();
   }
 
   /**
