@@ -245,6 +245,17 @@ export class ShellRepl {
     this.rl.prompt();
 
     this.rl.on('line', async (line) => {
+      // Skip garbage input after pager (buffered keystrokes)
+      if (this.skipNextLine) {
+        this.skipNextLine = false;
+        // Just show prompt again, ignore the garbage line
+        if (this.running && this.rl) {
+          this.rl.setPrompt(generatePrompt(this.context));
+          this.rl.prompt();
+        }
+        return;
+      }
+
       const trimmed = line.trim();
 
       if (trimmed) {
@@ -884,6 +895,12 @@ Tips:
 
     // Recreate readline after pager exits
     this.recreateReadline();
+
+    // Wait a bit and show prompt (delayed to let any garbage line events fire first)
+    await new Promise(resolve => setTimeout(resolve, 150));
+    if (this.running && this.rl) {
+      this.rl.prompt();
+    }
   }
 
   /**
