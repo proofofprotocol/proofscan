@@ -47,10 +47,47 @@ export class LessPager implements Pager {
     } finally {
       // Show cursor again
       process.stdout.write('\x1B[?25h');
-      // Restore raw mode but do NOT pause stdin
-      // The shell's readline interface manages stdin and pausing would disrupt it
+
+      // Drain stdin buffer while still in raw mode
+      // This prevents buffered keystrokes from appearing in shell prompt
+      await this.drainStdin();
+
+      // Restore raw mode
       process.stdin.setRawMode(false);
     }
+  }
+
+  /**
+   * Drain stdin buffer by reading until no more data arrives
+   * Must be called while still in raw mode
+   */
+  private drainStdin(): Promise<void> {
+    return new Promise((resolve) => {
+      let lastDataTime = Date.now();
+      let resolved = false;
+
+      const checkDone = () => {
+        if (resolved) return;
+        // If no data received for 50ms, consider buffer drained
+        if (Date.now() - lastDataTime >= 50) {
+          resolved = true;
+          process.stdin.removeListener('data', onData);
+          resolve();
+        } else {
+          setTimeout(checkDone, 10);
+        }
+      };
+
+      const onData = () => {
+        // Reset timer each time data arrives
+        lastDataTime = Date.now();
+      };
+
+      process.stdin.on('data', onData);
+
+      // Start checking
+      setTimeout(checkDone, 50);
+    });
   }
 
   private async runLoop(lines: string[], pageSize: number): Promise<void> {
