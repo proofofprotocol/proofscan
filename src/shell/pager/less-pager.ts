@@ -42,9 +42,9 @@ export class LessPager implements Pager {
     try {
       await this.runLoop(lines, pageSize);
     } finally {
-      // Always restore raw mode
+      // Restore raw mode but do NOT pause stdin
+      // The shell's readline interface manages stdin and pausing would disrupt it
       process.stdin.setRawMode(false);
-      process.stdin.pause();
     }
   }
 

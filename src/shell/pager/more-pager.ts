@@ -60,9 +60,9 @@ export class MorePager implements Pager {
       process.stdin.resume();
 
       const onKey = (key: Buffer) => {
-        // Restore mode
+        // Restore raw mode but do NOT pause stdin
+        // The shell's readline interface manages stdin and pausing would disrupt it
         process.stdin.setRawMode(false);
-        process.stdin.pause();
         process.stdin.removeListener('data', onKey);
 
         // Clear the prompt line
