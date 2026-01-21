@@ -107,9 +107,6 @@ export class ShellRepl {
   private configPath: string;
   private running = false;
 
-  // Flag to skip garbage input after pager
-  private skipNextLine = false;
-
   // Caches for completion data
   private connectorsCache: CacheEntry<string[]> | null = null;
   private sessionsCache: Map<string, CacheEntry<string[]>> = new Map();
@@ -245,17 +242,6 @@ export class ShellRepl {
     this.rl.prompt();
 
     this.rl.on('line', async (line) => {
-      // Skip garbage input after pager (buffered keystrokes)
-      if (this.skipNextLine) {
-        this.skipNextLine = false;
-        // Just show prompt again, ignore the garbage line
-        if (this.running && this.rl) {
-          this.rl.setPrompt(generatePrompt(this.context));
-          this.rl.prompt();
-        }
-        return;
-      }
-
       const trimmed = line.trim();
 
       if (trimmed) {
@@ -869,19 +855,83 @@ Tips:
       return;
     }
 
-    // Pause readline during pager
-    this.rl?.pause();
+    // Close readline before pager to avoid stdin conflicts
+    // External pager uses stdio: ['pipe', inherit, inherit] so no stdin conflict,
+    // but built-in fallback uses raw mode which conflicts with readline
+    this.rl?.close();
+    this.rl = null;
 
     // Run pager
     const { LessPager, MorePager } = await import('./pager/index.js');
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
     await pager.run(input);
 
-    // Set flag to skip the first line event (which may contain garbage from pager)
-    this.skipNextLine = true;
+    // Recreate readline after pager exits
+    this.resetReadline();
+  }
 
-    // Resume readline after pager exits
-    this.rl?.resume();
+  /**
+   * Reset readline interface (recreate after pager or other stdin-consuming operations)
+   */
+  private resetReadline(): void {
+    // Create new readline interface
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      completer: createCompleter(this.context, this.getDataProvider()),
+      history: this.history,
+      historySize: 1000,
+    });
+
+    // Set prompt
+    this.rl.setPrompt(generatePrompt(this.context));
+
+    // Re-attach line handler (same logic as start())
+    this.rl.on('line', async (line) => {
+      const trimmed = line.trim();
+
+      if (trimmed) {
+        const tokens = trimmed.split(/\s+/).filter(t => t !== '');
+        const resolution = resolveCommand(tokens, this.context);
+
+        if (!resolution.success) {
+          printError(resolution.error!);
+          if (resolution.candidates) {
+            printInfo(`Did you mean: ${resolution.candidates.join(', ')}?`);
+          }
+        } else {
+          const normalizedLine = resolution.resolved.join(' ') || trimmed;
+          this.history = addToHistory(this.history, normalizedLine);
+          await this.processLine(normalizedLine);
+        }
+      }
+
+      if (this.running && this.rl) {
+        this.rl.setPrompt(generatePrompt(this.context));
+        this.rl.prompt();
+      }
+    });
+
+    // Re-attach close handler
+    this.rl.on('close', () => {
+      if (this.running) {
+        // Unexpected close while running - this shouldn't happen after pager
+        // Don't auto-recreate to avoid infinite loops
+        this.running = false;
+        saveHistory(this.history);
+        console.log();
+        printInfo('Goodbye!');
+      }
+    });
+
+    // Re-attach SIGINT handler
+    this.rl.on('SIGINT', () => {
+      console.log();
+      this.rl!.prompt();
+    });
+
+    // Show prompt
+    this.rl.prompt();
   }
 
   /**

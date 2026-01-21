@@ -1,10 +1,17 @@
 /**
  * Less Pager for psh Shell
  *
- * Interactive pager with vim-style navigation.
- * Supports j/k scrolling, page up/down, and g/G for first/last.
+ * Delegates to external pager for reliable TTY handling.
+ * Pager selection priority:
+ *   1. $PAGER environment variable (user preference)
+ *   2. 'less' command
+ *   3. Built-in pager (fallback)
+ *
+ * Note: When using external pager, standard pager key bindings apply.
+ * The built-in fallback provides vim-style navigation (j/k/space/b/g/G/q).
  */
 
+import { spawn, spawnSync } from 'child_process';
 import type { Pager, PagerOptions } from './types.js';
 import type { PipelineValue } from '../pipeline-types.js';
 import { renderRowsToLines } from './renderer.js';
@@ -35,6 +42,86 @@ export class LessPager implements Pager {
       return;
     }
 
+    // Try external pager (PAGER env -> less -> built-in)
+    const pagerResult = await this.tryExternalPager(lines);
+    if (!pagerResult) {
+      // All external pagers failed, use built-in
+      await this.runBuiltIn(lines, pageSize);
+    }
+  }
+
+  /**
+   * Try external pager in priority order
+   * Returns true if successful, false if all failed
+   */
+  private async tryExternalPager(lines: string[]): Promise<boolean> {
+    const content = lines.join('\n') + '\n';
+
+    // 1. Try $PAGER environment variable
+    const pagerEnv = process.env.PAGER;
+    if (pagerEnv) {
+      try {
+        await this.runPager(pagerEnv, [], content);
+        return true;
+      } catch {
+        // $PAGER failed, continue to next option
+      }
+    }
+
+    // 2. Try 'less' with recommended options
+    // -F: quit if content fits one screen
+    // -R: interpret ANSI color codes
+    // -S: don't wrap long lines (preserves table layout)
+    // -X: don't clear screen on exit
+    if (this.commandExists('less')) {
+      try {
+        await this.runPager('less', ['-FRSX'], content);
+        return true;
+      } catch {
+        // less failed, continue
+      }
+    }
+
+    // All external pagers failed
+    return false;
+  }
+
+  /**
+   * Check if a command exists
+   */
+  private commandExists(cmd: string): boolean {
+    const result = spawnSync('which', [cmd], { stdio: 'ignore' });
+    return result.status === 0;
+  }
+
+  /**
+   * Run a pager command with content
+   */
+  private runPager(cmd: string, args: string[], content: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const pager = spawn(cmd, args, {
+        stdio: ['pipe', 'inherit', 'inherit'],
+      });
+
+      pager.on('error', reject);
+      pager.on('close', (code) => {
+        if (code === 0 || code === null) {
+          resolve();
+        } else {
+          reject(new Error(`Pager exited with code ${code}`));
+        }
+      });
+
+      pager.stdin?.write(content);
+      pager.stdin?.end();
+    });
+  }
+
+  /**
+   * Built-in pager fallback
+   * Provides vim-style navigation when no external pager is available
+   */
+  private async runBuiltIn(lines: string[], pageSize: number): Promise<void> {
     // Enable raw mode for key input
     process.stdin.setRawMode(true);
     process.stdin.resume();
@@ -69,7 +156,7 @@ export class LessPager implements Pager {
         const start = offset + 1;
         const end = Math.min(offset + pageSize, lines.length);
         const position = `${start}-${end}/${lines.length}`;
-        process.stdout.write(`\x1b[2m-- pfscan less -- ${position} | j/k scroll | space page | q quit\x1b[0m`);
+        process.stdout.write(`\x1b[2m-- psh pager -- ${position} | j/k scroll | space page | q quit\x1b[0m`);
       };
 
       const cleanup = () => {

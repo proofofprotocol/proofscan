@@ -1,10 +1,17 @@
 /**
  * More Pager for psh Shell
  *
- * Simple page-by-page pager with Enter/Space to advance.
- * No backward navigation (like classic more command).
+ * "Page-forward" mode pager that auto-exits at end of content.
+ * Uses 'less -E' for implementation (more feature-complete than system 'more').
+ *
+ * Pager selection priority:
+ *   1. 'less' with -E option (quit at EOF, like more)
+ *   2. Built-in pager (fallback)
+ *
+ * Note: When using external pager, standard pager key bindings apply.
  */
 
+import { spawn, spawnSync } from 'child_process';
 import type { Pager, PagerOptions } from './types.js';
 import type { PipelineValue } from '../pipeline-types.js';
 import { renderRowsToLines } from './renderer.js';
@@ -35,6 +42,74 @@ export class MorePager implements Pager {
       return;
     }
 
+    // Try external pager (less -E -> built-in)
+    const pagerResult = await this.tryExternalPager(lines);
+    if (!pagerResult) {
+      // External pager failed, use built-in
+      await this.runBuiltIn(lines, pageSize);
+    }
+  }
+
+  /**
+   * Try external pager
+   * Returns true if successful, false if failed
+   */
+  private async tryExternalPager(lines: string[]): Promise<boolean> {
+    const content = lines.join('\n') + '\n';
+
+    // Use 'less' with more-like options
+    // -E: quit at end of file (like more)
+    // -R: interpret ANSI color codes
+    // -S: don't wrap long lines (preserves table layout)
+    // -X: don't clear screen on exit
+    if (this.commandExists('less')) {
+      try {
+        await this.runPager('less', ['-ERSX'], content);
+        return true;
+      } catch {
+        // less failed, continue to built-in
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if a command exists
+   */
+  private commandExists(cmd: string): boolean {
+    const result = spawnSync('which', [cmd], { stdio: 'ignore' });
+    return result.status === 0;
+  }
+
+  /**
+   * Run a pager command with content
+   */
+  private runPager(cmd: string, args: string[], content: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const pager = spawn(cmd, args, {
+        stdio: ['pipe', 'inherit', 'inherit'],
+      });
+
+      pager.on('error', reject);
+      pager.on('close', (code) => {
+        if (code === 0 || code === null) {
+          resolve();
+        } else {
+          reject(new Error(`Pager exited with code ${code}`));
+        }
+      });
+
+      pager.stdin?.write(content);
+      pager.stdin?.end();
+    });
+  }
+
+  /**
+   * Built-in pager fallback
+   * Simple page-forward mode (no backward navigation)
+   */
+  private async runBuiltIn(lines: string[], pageSize: number): Promise<void> {
     // Page through content
     for (let i = 0; i < lines.length; i += pageSize) {
       const page = lines.slice(i, i + pageSize);
