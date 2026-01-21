@@ -196,6 +196,12 @@ export const INSCRIBE_COMMANDS = ['inscribe'];
 export const FILTER_COMMANDS = ['where', 'grep'] as const;
 
 /**
+ * Pipeline sink commands (terminal output)
+ * Used with pipe: find rpc | less
+ */
+export const SINK_COMMANDS = ['less', 'more'] as const;
+
+/**
  * Commands blocked in shell mode due to stdin conflicts.
  *
  * These commands have their own readline interface which conflicts

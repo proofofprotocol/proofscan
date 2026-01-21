@@ -492,6 +492,8 @@ References & Tool Calls:
 Pipes & Filters:
   ls | where <expr> Filter rows (e.g., rpc.method == "tools/call")
   ls | grep <expr>  Alias for where (not regex)
+  ls | less         Page through results (j/k scroll, q quit)
+  find rpc | more   Simple page-by-page view
 
 Session Control:
   reset             Clear all context
@@ -591,6 +593,17 @@ Pipes & Filters (Filter DSL v0.1):
     ls | where rpc.status != ok
     ls | where rpc.latency > 1000
     ls | where tools.name ~= "read"
+
+Pager (less/more):
+  ls | less               Interactive pager (j/k scroll, q quit)
+  find rpc | less         Page through cross-session results
+  ls | more               Simple page-by-page view (Enter/q)
+
+  less keys:
+    j/k, ↑/↓              Scroll one line
+    space, b              Page down/up
+    g, G                  First/last line
+    q, Ctrl+C             Quit
 
 Session Control:
   reset                   Clear all context
@@ -694,6 +707,12 @@ Tips:
       return;
     }
 
+    // Handle: ls | less or find rpc | more
+    if (rightCommand === 'less' || rightCommand === 'more') {
+      await this.handlePipeToPager(leftCmd, rightCommand as 'less' | 'more');
+      return;
+    }
+
     // Parse right side for other commands
     const rightTokens = rightCmd.split(/\s+/).filter(t => t !== '');
 
@@ -715,6 +734,8 @@ Tips:
     printInfo('  show @rpc:<id> --json | inscribe');
     printInfo('  ls | where <filter-expr>');
     printInfo('  find rpc | where <filter-expr>');
+    printInfo('  ls | less');
+    printInfo('  find rpc | more');
   }
 
   /**
@@ -783,6 +804,134 @@ Tips:
     // Render output
     this.renderPipelineOutput(result.result);
     printInfo(`${statsLabel}: ${result.stats.matched} / ${result.stats.total}`);
+  }
+
+  /**
+   * Handle: ls | less or find rpc | more
+   */
+  private async handlePipeToPager(leftCmd: string, pagerCmd: 'less' | 'more'): Promise<void> {
+    const leftTokens = leftCmd.trim().split(/\s+/);
+    const leftCommand = leftTokens[0];
+
+    // Get pipeline input based on left command
+    let input: PipelineValue;
+
+    if (leftCommand === 'ls') {
+      const { getLsRows } = await import('./router-commands.js');
+      input = getLsRows(this.context, this.configPath);
+    } else if (leftCommand === 'find') {
+      const findArgs = leftTokens.slice(1);
+      const parseResult = parseFindArgs(findArgs);
+
+      if (!parseResult.ok) {
+        // Help text is not an error
+        if ('help' in parseResult && parseResult.help) {
+          console.log(parseResult.error);
+        } else {
+          printError(parseResult.error);
+        }
+        return;
+      }
+
+      const findResult = executeFind(this.context, this.configPath, parseResult.options);
+
+      if (!findResult.ok) {
+        printError(findResult.error);
+        return;
+      }
+
+      input = findResult.result;
+    } else {
+      printError(`${pagerCmd} only supports "ls" or "find" as input`);
+      printInfo('Examples:');
+      printInfo('  ls | less');
+      printInfo('  find rpc | less');
+      return;
+    }
+
+    // Text input is an error
+    if (input.kind === 'text') {
+      printError(`${pagerCmd} expects structured rows; got text`);
+      return;
+    }
+
+    // Close readline before pager to avoid stdin conflicts
+    // External pager uses stdio: ['pipe', inherit, inherit] so no stdin conflict,
+    // but built-in fallback uses raw mode which conflicts with readline
+    this.rl?.close();
+    this.rl = null;
+
+    // Run pager
+    const { LessPager, MorePager } = await import('./pager/index.js');
+    const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
+    await pager.run(input);
+
+    // Recreate readline after pager exits
+    this.resetReadline();
+  }
+
+  /**
+   * Reset readline interface (recreate after pager or other stdin-consuming operations)
+   */
+  private resetReadline(): void {
+    // Create new readline interface
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      completer: createCompleter(this.context, this.getDataProvider()),
+      history: this.history,
+      historySize: 1000,
+    });
+
+    // Set prompt
+    this.rl.setPrompt(generatePrompt(this.context));
+
+    // Re-attach line handler (same logic as start())
+    this.rl.on('line', async (line) => {
+      const trimmed = line.trim();
+
+      if (trimmed) {
+        const tokens = trimmed.split(/\s+/).filter(t => t !== '');
+        const resolution = resolveCommand(tokens, this.context);
+
+        if (!resolution.success) {
+          printError(resolution.error!);
+          if (resolution.candidates) {
+            printInfo(`Did you mean: ${resolution.candidates.join(', ')}?`);
+          }
+        } else {
+          const normalizedLine = resolution.resolved.join(' ') || trimmed;
+          this.history = addToHistory(this.history, normalizedLine);
+          await this.processLine(normalizedLine);
+        }
+      }
+
+      if (this.running && this.rl) {
+        this.rl.setPrompt(generatePrompt(this.context));
+        this.rl.prompt();
+      }
+    });
+
+    // Re-attach close handler
+    this.rl.on('close', () => {
+      if (this.running) {
+        // Unexpected close while running - this shouldn't happen after pager
+        // Don't auto-recreate to avoid infinite loops
+        this.running = false;
+        saveHistory(this.history);
+        console.log();
+        printInfo('Goodbye!');
+      }
+    });
+
+    // Re-attach SIGINT handler
+    this.rl.on('SIGINT', () => {
+      console.log();
+      this.rl!.prompt();
+    });
+
+    // Show prompt
+    this.rl.prompt();
   }
 
   /**
