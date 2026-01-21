@@ -11,10 +11,10 @@
  * The built-in fallback provides vim-style navigation (j/k/space/b/g/G/q).
  */
 
-import { spawn, spawnSync } from 'child_process';
 import type { Pager, PagerOptions } from './types.js';
 import type { PipelineValue } from '../pipeline-types.js';
 import { renderRowsToLines } from './renderer.js';
+import { commandExists, parsePagerCommand, runPager, FOOTER_RESERVE_LINES } from './utils.js';
 
 export class LessPager implements Pager {
   private options: PagerOptions;
@@ -35,7 +35,7 @@ export class LessPager implements Pager {
 
     // If content fits in one page, just print and return
     const terminalHeight = this.options.height ?? (process.stdout.rows || 24);
-    const pageSize = Math.max(1, terminalHeight - 2); // Reserve space for footer
+    const pageSize = Math.max(1, terminalHeight - FOOTER_RESERVE_LINES);
 
     if (lines.length <= pageSize) {
       lines.forEach(line => console.log(line));
@@ -57,14 +57,17 @@ export class LessPager implements Pager {
   private async tryExternalPager(lines: string[]): Promise<boolean> {
     const content = lines.join('\n') + '\n';
 
-    // 1. Try $PAGER environment variable
+    // 1. Try $PAGER environment variable (supports arguments like "less -R")
     const pagerEnv = process.env.PAGER;
     if (pagerEnv) {
-      try {
-        await this.runPager(pagerEnv, [], content);
-        return true;
-      } catch {
-        // $PAGER failed, continue to next option
+      const { cmd, args } = parsePagerCommand(pagerEnv);
+      if (commandExists(cmd)) {
+        try {
+          await runPager(cmd, args, content);
+          return true;
+        } catch {
+          // $PAGER failed, continue to next option
+        }
       }
     }
 
@@ -73,9 +76,9 @@ export class LessPager implements Pager {
     // -R: interpret ANSI color codes
     // -S: don't wrap long lines (preserves table layout)
     // -X: don't clear screen on exit
-    if (this.commandExists('less')) {
+    if (commandExists('less')) {
       try {
-        await this.runPager('less', ['-FRSX'], content);
+        await runPager('less', ['-FRSX'], content);
         return true;
       } catch {
         // less failed, continue
@@ -84,37 +87,6 @@ export class LessPager implements Pager {
 
     // All external pagers failed
     return false;
-  }
-
-  /**
-   * Check if a command exists
-   */
-  private commandExists(cmd: string): boolean {
-    const result = spawnSync('which', [cmd], { stdio: 'ignore' });
-    return result.status === 0;
-  }
-
-  /**
-   * Run a pager command with content
-   */
-  private runPager(cmd: string, args: string[], content: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const pager = spawn(cmd, args, {
-        stdio: ['pipe', 'inherit', 'inherit'],
-      });
-
-      pager.on('error', reject);
-      pager.on('close', (code) => {
-        if (code === 0 || code === null) {
-          resolve();
-        } else {
-          reject(new Error(`Pager exited with code ${code}`));
-        }
-      });
-
-      pager.stdin?.write(content);
-      pager.stdin?.end();
-    });
   }
 
   /**
