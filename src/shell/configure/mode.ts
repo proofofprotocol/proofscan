@@ -153,6 +153,13 @@ export class ConfigureMode {
   }
 
   /**
+   * Get the config manager
+   */
+  getConfigManager(): ConfigManager {
+    return this.configManager;
+  }
+
+  /**
    * Get the prompt string for the current state
    */
   getPrompt(): string {
