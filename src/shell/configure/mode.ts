@@ -153,6 +153,15 @@ export class ConfigureMode {
   }
 
   /**
+   * List all connectors from the committed configuration (running-config).
+   * This loads the saved state from disk, not any pending edits in the current session.
+   */
+  async listConnectors(): Promise<Connector[]> {
+    const config = await this.configManager.load();
+    return config.connectors;
+  }
+
+  /**
    * Get the prompt string for the current state
    */
   getPrompt(): string {

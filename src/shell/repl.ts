@@ -360,8 +360,8 @@ export class ShellRepl {
       return;
     }
 
-    // Handle configure terminal command
-    if (command === 'configure') {
+    // Handle configure terminal command (with aliases: conf, config)
+    if (command === 'configure' || command === 'conf' || command === 'config') {
       await this.handleConfigure(args);
       return;
     }
@@ -1280,8 +1280,9 @@ Tips:
   private async handleConfigure(args: string[]): Promise<void> {
     const subcommand = args[0]?.toLowerCase();
 
-    if (subcommand !== 'terminal') {
-      printError('Usage: configure terminal');
+    // Accept 't' or 'terminal' as subcommand (IOS-style: conf t)
+    if (subcommand !== 'terminal' && subcommand !== 't') {
+      printError('Usage: configure terminal (or: conf t)');
       printInfo('Enter configure mode for editing connector configurations.');
       return;
     }
