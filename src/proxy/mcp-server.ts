@@ -32,6 +32,10 @@ import {
   type ToolsCallParams,
   type ToolsCallResult,
 } from './types.js';
+import { IpcServer } from './ipc-server.js';
+import { getSocketPath, type ReloadResult } from './ipc-types.js';
+import { ConfigManager } from '../config/manager.js';
+import type { Connector } from '../types/config.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'proofscan-proxy';
@@ -51,9 +55,11 @@ const MAX_LOG_LINES = 1000;
  */
 export class McpProxyServer extends EventEmitter {
   private readonly options: ProxyOptions;
-  private readonly aggregator: ToolAggregator;
-  private readonly router: RequestRouter;
+  private aggregator: ToolAggregator;
+  private router: RequestRouter;
   private readonly stateManager: RuntimeStateManager;
+  private readonly configPath: string;
+  private ipcServer: IpcServer | null = null;
   private buffer = '';
   private initialized = false;
   private running = false;
@@ -64,9 +70,10 @@ export class McpProxyServer extends EventEmitter {
     protocolVersion: string;
   } | null = null;
 
-  constructor(options: ProxyOptions) {
+  constructor(options: ProxyOptions, configPath?: string) {
     super();
     this.options = options;
+    this.configPath = configPath || join(options.configDir, 'config.json');
     this.aggregator = new ToolAggregator(options);
     this.router = new RequestRouter(options, this.aggregator);
     this.stateManager = new RuntimeStateManager(options.configDir);
@@ -118,7 +125,117 @@ export class McpProxyServer extends EventEmitter {
     // Resume stdin
     process.stdin.resume();
 
+    // Start IPC server for control commands (reload, stop, status)
+    await this.startIpcServer();
+
     logger.info(`Proxy started with ${this.options.connectors.length} connector(s)`, 'server');
+  }
+
+  /**
+   * Start the IPC server for control commands
+   */
+  private async startIpcServer(): Promise<void> {
+    const socketPath = getSocketPath(this.options.configDir);
+
+    this.ipcServer = new IpcServer(socketPath, {
+      onReload: () => this.handleReload(),
+      onStop: () => this.handleIpcStop(),
+      onStatus: () => this.stateManager.getState(),
+    });
+
+    try {
+      await this.ipcServer.start();
+      logger.info(`IPC server listening on ${socketPath}`, 'server');
+    } catch (err) {
+      logger.warn(`Failed to start IPC server: ${err instanceof Error ? err.message : err}`, 'server');
+      // Continue without IPC - proxy still works, just no reload support
+    }
+  }
+
+  /**
+   * Handle reload command from IPC
+   */
+  private async handleReload(): Promise<ReloadResult> {
+    logger.info('Reloading configuration...', 'server');
+
+    const result: ReloadResult = {
+      success: true,
+      reloadedConnectors: [],
+      failedConnectors: [],
+    };
+
+    try {
+      // Load fresh config
+      const configManager = new ConfigManager(this.configPath);
+      const newConfig = await configManager.load();
+
+      // Get connector IDs that are currently enabled
+      const newConnectorIds = new Set(
+        newConfig.connectors.filter((c: Connector) => c.enabled).map((c: Connector) => c.id)
+      );
+      const currentConnectorIds = new Set(this.options.connectors.map((c) => c.id));
+
+      // Find changed connectors
+      const addedIds = [...newConnectorIds].filter((id) => !currentConnectorIds.has(id));
+      const removedIds = [...currentConnectorIds].filter((id) => !newConnectorIds.has(id));
+
+      // Check for modified connectors (simple hash comparison would be better, but this works)
+      const modifiedIds: string[] = [];
+      for (const newConn of newConfig.connectors.filter((c: Connector) => c.enabled)) {
+        const oldConn = this.options.connectors.find((c) => c.id === newConn.id);
+        if (oldConn && JSON.stringify(oldConn) !== JSON.stringify(newConn)) {
+          modifiedIds.push(newConn.id);
+        }
+      }
+
+      const changedIds = [...new Set([...addedIds, ...removedIds, ...modifiedIds])];
+
+      if (changedIds.length === 0) {
+        logger.info('No configuration changes detected', 'server');
+        result.message = 'No changes detected';
+        return result;
+      }
+
+      logger.info(`Configuration changes: added=${addedIds.length}, removed=${removedIds.length}, modified=${modifiedIds.length}`, 'server');
+
+      // Update options with new connectors
+      this.options.connectors = newConfig.connectors.filter((c: Connector) => c.enabled);
+
+      // Recreate aggregator and router with new config
+      this.aggregator.invalidateCache();
+      this.aggregator = new ToolAggregator(this.options);
+      this.router = new RequestRouter(this.options, this.aggregator);
+
+      // Preload tools from all connectors
+      await this.aggregator.preloadTools();
+
+      // Update connector summaries
+      await this.updateConnectorSummaries();
+
+      result.reloadedConnectors = changedIds;
+      result.message = `Reloaded ${changedIds.length} connector(s)`;
+
+      logger.info(`Reload complete: ${changedIds.join(', ')}`, 'server');
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logger.error(`Reload failed: ${errorMessage}`, 'server');
+      result.success = false;
+      result.message = errorMessage;
+    }
+
+    return result;
+  }
+
+  /**
+   * Handle stop command from IPC
+   */
+  private handleIpcStop(): void {
+    logger.info('Stop command received via IPC', 'server');
+    // Give time for IPC response to be sent
+    setTimeout(() => {
+      this.stop();
+      process.exit(0);
+    }, 200);
   }
 
   /**
@@ -193,6 +310,12 @@ export class McpProxyServer extends EventEmitter {
 
     this.running = false;
     logger.info('MCP proxy server stopping...', 'server');
+
+    // Stop IPC server
+    if (this.ipcServer) {
+      this.ipcServer.stop();
+      this.ipcServer = null;
+    }
 
     // Stop heartbeat
     this.stateManager.stopHeartbeat();

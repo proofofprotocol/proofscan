@@ -40,6 +40,7 @@ import { handlePopl, getPoplEntryIdsSync } from './popl-commands.js';
 import { resolveCommand } from './command-resolver.js';
 import type { PipelineValue, RpcRow, SessionRow } from './pipeline-types.js';
 import { parseFindArgs, executeFind } from './find-command.js';
+import { ConfigureMode, processConfigureCommand } from './configure/index.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -106,6 +107,7 @@ export class ShellRepl {
   private history: string[] = [];
   private configPath: string;
   private running = false;
+  private configureMode: ConfigureMode | null = null;
 
   // Caches for completion data
   private connectorsCache: CacheEntry<string[]> | null = null;
@@ -265,7 +267,7 @@ export class ShellRepl {
 
       if (this.running) {
         // Update prompt (context may have changed)
-        this.rl!.setPrompt(generatePrompt(this.context));
+        this.rl!.setPrompt(this.getCurrentPrompt());
         this.rl!.prompt();
       }
     });
@@ -288,6 +290,12 @@ export class ShellRepl {
    * Process a line of input
    */
   private async processLine(line: string): Promise<void> {
+    // Check if in configure mode
+    if (this.configureMode?.isActive()) {
+      await this.processConfigureLine(line);
+      return;
+    }
+
     // Check for pipe syntax (e.g., "pwd --json | ref add name")
     const pipeResult = this.parsePipe(line);
     if (pipeResult) {
@@ -349,6 +357,18 @@ export class ShellRepl {
     // Handle popl command (shell-native, Phase 6.0)
     if (command === 'popl') {
       await handlePopl(args, this.context, this.configPath);
+      return;
+    }
+
+    // Handle configure terminal command
+    if (command === 'configure') {
+      await this.handleConfigure(args);
+      return;
+    }
+
+    // Handle proxy command (shell-native for reload/stop)
+    if (command === 'proxy') {
+      await this.handleProxy(args);
       return;
     }
 
@@ -884,7 +904,7 @@ Tips:
     });
 
     // Set prompt
-    this.rl.setPrompt(generatePrompt(this.context));
+    this.rl.setPrompt(this.getCurrentPrompt());
 
     // Re-attach line handler (same logic as start())
     this.rl.on('line', async (line) => {
@@ -907,7 +927,7 @@ Tips:
       }
 
       if (this.running && this.rl) {
-        this.rl.setPrompt(generatePrompt(this.context));
+        this.rl.setPrompt(this.getCurrentPrompt());
         this.rl.prompt();
       }
     });
@@ -1252,5 +1272,186 @@ Tips:
         resolve();
       });
     });
+  }
+
+  /**
+   * Handle configure command
+   */
+  private async handleConfigure(args: string[]): Promise<void> {
+    const subcommand = args[0]?.toLowerCase();
+
+    if (subcommand !== 'terminal') {
+      printError('Usage: configure terminal');
+      printInfo('Enter configure mode for editing connector configurations.');
+      return;
+    }
+
+    // Initialize configure mode
+    const manager = new ConfigManager(this.configPath);
+    this.configureMode = new ConfigureMode(manager);
+    this.configureMode.enter();
+
+    printSuccess('Entered configure mode.');
+    printInfo('Type "help" for available commands, "exit" to leave configure mode.');
+  }
+
+  /**
+   * Handle proxy command (shell-native)
+   */
+  private async handleProxy(args: string[]): Promise<void> {
+    const subcommand = args[0]?.toLowerCase();
+
+    if (!subcommand || subcommand === 'help' || subcommand === '-h' || subcommand === '--help') {
+      console.log(`
+proxy - MCP proxy server operations
+
+Usage:
+  proxy start [options]   Start MCP proxy server (use CLI: pfscan proxy start)
+  proxy status            Show proxy runtime status
+  proxy reload            Reload proxy configuration
+  proxy stop              Stop the running proxy
+
+Note: "proxy start" requires stdio and should be run outside the shell.
+      Run: pfscan proxy start --all
+`);
+      return;
+    }
+
+    if (subcommand === 'start') {
+      printError('proxy start cannot be run from within the shell (requires stdio).');
+      printInfo('Exit shell and run: pfscan proxy start --all');
+      return;
+    }
+
+    // For status, reload, stop - use IPC client
+    const { IpcClient } = await import('../proxy/ipc-client.js');
+    const { getSocketPath } = await import('../proxy/ipc-types.js');
+
+    const manager = new ConfigManager(this.configPath);
+    const configDir = manager.getConfigDir();
+    const socketPath = getSocketPath(configDir);
+    const client = new IpcClient(socketPath);
+
+    if (subcommand === 'status') {
+      const isRunning = await client.isRunning();
+      if (!isRunning) {
+        printInfo('Proxy is not running.');
+        printInfo('Start the proxy with: pfscan proxy start --all');
+        return;
+      }
+
+      const result = await client.status();
+      if (!result.success) {
+        printError(`Failed to get proxy status: ${result.error}`);
+        return;
+      }
+
+      // Simple status display
+      const state = result.data!;
+      console.log();
+      console.log('Proxy Status: RUNNING');
+      console.log(`  Mode: ${state.proxy.mode}`);
+      console.log(`  PID: ${state.proxy.pid}`);
+      console.log(`  Connectors: ${state.connectors.length}`);
+      for (const conn of state.connectors) {
+        const status = conn.healthy ? 'healthy' : 'unhealthy';
+        const tools = conn.toolCount > 0 ? `${conn.toolCount} tools` : 'pending';
+        console.log(`    - ${conn.id}: ${status} (${tools})`);
+      }
+      console.log();
+      return;
+    }
+
+    if (subcommand === 'reload') {
+      const isRunning = await client.isRunning();
+      if (!isRunning) {
+        printError('Proxy is not running.');
+        printInfo('Start the proxy with: pfscan proxy start --all');
+        return;
+      }
+
+      const result = await client.reload();
+      if (result.success) {
+        printSuccess('Proxy reloaded.');
+        if (result.data) {
+          if (result.data.reloadedConnectors.length > 0) {
+            printInfo(`Reloaded connectors: ${result.data.reloadedConnectors.join(', ')}`);
+          }
+          if (result.data.failedConnectors.length > 0) {
+            printError(`Failed connectors: ${result.data.failedConnectors.join(', ')}`);
+          }
+        }
+      } else {
+        printError(`Reload failed: ${result.error}`);
+      }
+      return;
+    }
+
+    if (subcommand === 'stop') {
+      const isRunning = await client.isRunning();
+      if (!isRunning) {
+        printInfo('Proxy is not running.');
+        return;
+      }
+
+      const result = await client.stop();
+      if (result.success) {
+        printSuccess('Proxy stopped.');
+      } else {
+        printError(`Failed to stop proxy: ${result.error}`);
+      }
+      return;
+    }
+
+    printError(`Unknown proxy subcommand: ${subcommand}`);
+    printInfo('Available: status, reload, stop');
+  }
+
+  /**
+   * Process a line in configure mode
+   */
+  private async processConfigureLine(line: string): Promise<void> {
+    if (!this.configureMode) return;
+
+    const result = await processConfigureCommand(this.configureMode, line);
+
+    // Handle output
+    if (result.output) {
+      for (const outputLine of result.output) {
+        console.log(outputLine);
+      }
+    }
+
+    if (result.message) {
+      if (result.success) {
+        printSuccess(result.message);
+      } else {
+        printInfo(result.message);
+      }
+    }
+
+    if (result.error) {
+      printError(result.error);
+    }
+
+    // Handle mode transitions
+    if (result.exitMode) {
+      this.configureMode = null;
+    }
+
+    // Update prompt if still in configure mode
+    if (this.configureMode?.isActive() && this.rl) {
+      this.rl.setPrompt(this.configureMode.getPrompt());
+    }
+  }
+
+  /**
+   * Get the current prompt string
+   */
+  private getCurrentPrompt(): string {
+    if (this.configureMode?.isActive()) {
+      return this.configureMode.getPrompt();
+    }
+    return generatePrompt(this.context);
   }
 }

@@ -17,6 +17,8 @@ import {
   logger,
   RuntimeStateManager,
 } from '../proxy/index.js';
+import { IpcClient } from '../proxy/ipc-client.js';
+import { getSocketPath } from '../proxy/ipc-types.js';
 import { output, getOutputOptions } from '../utils/output.js';
 import { formatRelativeTime } from '../utils/time.js';
 
@@ -121,7 +123,7 @@ export function createProxyCommand(getConfigPath: () => string): Command {
         configDir,
         verbose: globalOpts.verbose,
         timeout,
-      });
+      }, configPath);
 
       // Handle signals for graceful shutdown
       const shutdown = () => {
@@ -229,6 +231,96 @@ export function createProxyCommand(getConfigPath: () => string): Command {
       console.log('\nLogging:');
       console.log(`  Level:      ${state.logging.level}`);
       console.log(`  Buffered:   ${state.logging.bufferedLines}/${state.logging.maxLines} lines`);
+    });
+
+  // Reload subcommand
+  cmd
+    .command('reload')
+    .description('Reload proxy configuration')
+    .action(async () => {
+      const configPath = getConfigPath();
+      const manager = new ConfigManager(configPath);
+      const configDir = manager.getConfigDir();
+
+      const socketPath = getSocketPath(configDir);
+      const client = new IpcClient(socketPath);
+
+      // Check if proxy is running
+      const isRunning = await client.isRunning();
+      if (!isRunning) {
+        if (getOutputOptions().json) {
+          output({ success: false, error: 'Proxy is not running' });
+        } else {
+          console.error('Error: Proxy is not running');
+          console.log('Start the proxy with: pfscan proxy start --all');
+        }
+        process.exit(1);
+      }
+
+      // Send reload command
+      const result = await client.reload();
+
+      if (getOutputOptions().json) {
+        output(result);
+        process.exit(result.success ? 0 : 1);
+      }
+
+      if (result.success) {
+        console.log('Proxy reloaded successfully');
+        if (result.data) {
+          if (result.data.reloadedConnectors.length > 0) {
+            console.log(`Reloaded connectors: ${result.data.reloadedConnectors.join(', ')}`);
+          }
+          if (result.data.failedConnectors.length > 0) {
+            console.log(`Failed connectors: ${result.data.failedConnectors.join(', ')}`);
+          }
+          if (result.data.message) {
+            console.log(result.data.message);
+          }
+        }
+      } else {
+        console.error(`Reload failed: ${result.error || 'Unknown error'}`);
+        process.exit(1);
+      }
+    });
+
+  // Stop subcommand
+  cmd
+    .command('stop')
+    .description('Stop the running proxy')
+    .action(async () => {
+      const configPath = getConfigPath();
+      const manager = new ConfigManager(configPath);
+      const configDir = manager.getConfigDir();
+
+      const socketPath = getSocketPath(configDir);
+      const client = new IpcClient(socketPath);
+
+      // Check if proxy is running
+      const isRunning = await client.isRunning();
+      if (!isRunning) {
+        if (getOutputOptions().json) {
+          output({ success: false, error: 'Proxy is not running' });
+        } else {
+          console.log('Proxy is not running');
+        }
+        return;
+      }
+
+      // Send stop command
+      const result = await client.stop();
+
+      if (getOutputOptions().json) {
+        output(result);
+        process.exit(result.success ? 0 : 1);
+      }
+
+      if (result.success) {
+        console.log('Proxy stopped');
+      } else {
+        console.error(`Failed to stop proxy: ${result.error || 'Unknown error'}`);
+        process.exit(1);
+      }
     });
 
   return cmd;

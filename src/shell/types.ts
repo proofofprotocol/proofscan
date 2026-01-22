@@ -58,6 +58,8 @@ export const TOP_LEVEL_COMMANDS = [
   'catalog', 'cat',
   'runners',
   'plans',
+  'proxy',
+  'configure',
 ];
 
 /**
@@ -84,6 +86,8 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   'cat sources': ['list', 'set'],
   runners: ['list', 'ls', 'doctor'],
   plans: ['ls', 'list', 'show', 'add', 'delete', 'import', 'export', 'run', 'runs', 'run-show'],
+  proxy: ['start', 'status', 'reload', 'stop'],
+  configure: ['terminal'],
 };
 
 /**
