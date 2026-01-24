@@ -6,7 +6,7 @@
  */
 
 import type { Connector } from '../../types/config.js';
-import type { ConfigureModeState, EditSession } from './types.js';
+import type { ConfigureModeState, EditSession, CommitResult } from './types.js';
 import { cloneConnector, createEmptyConnector } from './types.js';
 import { EditSessionManager } from './session.js';
 import { ConfigManager } from '../../config/index.js';
@@ -310,18 +310,4 @@ export class ConfigureMode {
     this.sessionManager = null;
     return { hadChanges };
   }
-}
-
-/**
- * Result of a commit operation
- */
-export interface CommitResult {
-  success: boolean;
-  proxyReloaded: boolean;
-  secretsStored: number;
-  message?: string;
-  error?: string;
-  diff?: import('./types.js').ConnectorDiff;
-  /** Type of commit: 'added' (new connector), 'updated' (existing), or 'none' (no changes) */
-  commitType?: 'added' | 'updated' | 'none';
 }

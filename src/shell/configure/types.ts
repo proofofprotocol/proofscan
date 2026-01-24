@@ -132,6 +132,12 @@ export interface CommitResult {
 
   /** Error message if failed */
   error?: string;
+
+  /** Diff showing what changed */
+  diff?: ConnectorDiff;
+
+  /** Type of commit: 'added' (new connector), 'updated' (existing), or 'none' (no changes) */
+  commitType?: 'added' | 'updated' | 'none';
 }
 
 /**
