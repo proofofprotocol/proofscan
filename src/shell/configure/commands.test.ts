@@ -506,18 +506,80 @@ describe('processConfigureCommand', () => {
       expect(result.error).toContain('No connector being edited');
     });
 
-    it('should commit changes', async () => {
-      const mode = createMockMode({ isEditing: true });
+    it('should commit changes (update existing)', async () => {
+      const session: EditSession = {
+        original: sampleStdioConnector,
+        candidate: sampleStdioConnector,
+        modifiedFields: new Set(['enabled']),
+        pendingSecrets: new Map(),
+        isNew: false,
+      };
+      const mode = createMockMode({ isEditing: true, session });
       (mode.commit as ReturnType<typeof vi.fn>).mockResolvedValue({
         success: true,
         proxyReloaded: true,
         secretsStored: 1,
+        commitType: 'updated',
       });
 
       const result = await processConfigureCommand(mode, 'commit');
       expect(result.success).toBe(true);
-      expect(result.output!.some(line => line.includes('Committed'))).toBe(true);
+      expect(result.output!.some(line => line.includes('Updated connector'))).toBe(true);
       expect(result.output!.some(line => line.includes('Proxy reloaded'))).toBe(true);
+      expect(result.exitSession).toBe(true);
+    });
+
+    it('should commit changes (add new)', async () => {
+      const newConnector: Connector = {
+        id: 'new-connector',
+        enabled: true,
+        transport: {
+          type: 'stdio',
+          command: 'npx',
+          args: [],
+        },
+      };
+      const session: EditSession = {
+        original: newConnector,
+        candidate: newConnector,
+        modifiedFields: new Set(),
+        pendingSecrets: new Map(),
+        isNew: true,
+      };
+      const mode = createMockMode({ isEditing: true, session });
+      (mode.commit as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+        proxyReloaded: false,
+        secretsStored: 0,
+        commitType: 'added',
+        message: 'Proxy not running (reload skipped)',
+      });
+
+      const result = await processConfigureCommand(mode, 'commit');
+      expect(result.success).toBe(true);
+      expect(result.output!.some(line => line.includes('Added connector'))).toBe(true);
+      expect(result.exitSession).toBe(true);
+    });
+
+    it('should handle no changes case', async () => {
+      const session: EditSession = {
+        original: sampleStdioConnector,
+        candidate: sampleStdioConnector,
+        modifiedFields: new Set(),
+        pendingSecrets: new Map(),
+        isNew: false,
+      };
+      const mode = createMockMode({ isEditing: true, session });
+      (mode.commit as ReturnType<typeof vi.fn>).mockResolvedValue({
+        success: true,
+        proxyReloaded: false,
+        secretsStored: 0,
+        commitType: 'none',
+      });
+
+      const result = await processConfigureCommand(mode, 'commit');
+      expect(result.success).toBe(true);
+      expect(result.output!.some(line => line.includes('No changes to commit'))).toBe(true);
       expect(result.exitSession).toBe(true);
     });
 
@@ -546,6 +608,71 @@ describe('processConfigureCommand', () => {
       const result = await processConfigureCommand(mode, 'commit --dry-run');
       expect(result.success).toBe(true);
       expect(result.output!.some(line => line.includes('dry-run'))).toBe(true);
+      expect(mode.commit).not.toHaveBeenCalled();
+    });
+
+    it('should handle --dry-run for new connector', async () => {
+      const newConnector: Connector = {
+        id: 'new-connector',
+        enabled: true,
+        transport: {
+          type: 'stdio',
+          command: 'npx',
+          args: ['-y', 'some-mcp'],
+        },
+      };
+      const mockManager = {
+        getDiff: vi.fn().mockReturnValue({
+          hasChanges: false,
+          added: new Map(),
+          modified: new Map(),
+          removed: new Map(),
+        }),
+      };
+      const session: EditSession = {
+        original: newConnector,
+        candidate: newConnector,
+        modifiedFields: new Set(),
+        pendingSecrets: new Map(),
+        isNew: true,
+      };
+      const mode = createMockMode({
+        isEditing: true,
+        sessionManager: mockManager as unknown as EditSessionManager,
+        session,
+      });
+
+      const result = await processConfigureCommand(mode, 'commit --dry-run');
+      expect(result.success).toBe(true);
+      expect(result.output!.some(line => line.includes('NEW CONNECTOR'))).toBe(true);
+      expect(mode.commit).not.toHaveBeenCalled();
+    });
+
+    it('should handle --dry-run with no changes for existing connector', async () => {
+      const mockManager = {
+        getDiff: vi.fn().mockReturnValue({
+          hasChanges: false,
+          added: new Map(),
+          modified: new Map(),
+          removed: new Map(),
+        }),
+      };
+      const session: EditSession = {
+        original: sampleStdioConnector,
+        candidate: sampleStdioConnector,
+        modifiedFields: new Set(),
+        pendingSecrets: new Map(),
+        isNew: false,
+      };
+      const mode = createMockMode({
+        isEditing: true,
+        sessionManager: mockManager as unknown as EditSessionManager,
+        session,
+      });
+
+      const result = await processConfigureCommand(mode, 'commit --dry-run');
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('No changes to commit.');
       expect(mode.commit).not.toHaveBeenCalled();
     });
   });
