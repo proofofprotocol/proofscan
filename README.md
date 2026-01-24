@@ -4,61 +4,106 @@
 
 MCP Server scanner - eliminate black boxes by capturing JSON-RPC from connection to tools/list.
 
-**Version:** 0.10.23
+[![npm version](https://img.shields.io/npm/v/proofscan.svg)](https://www.npmjs.com/package/proofscan)
+[![Node.js](https://img.shields.io/node/v/proofscan.svg)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-proofscan provides complete visibility into MCP (Model Context Protocol) server communication. It:
+proofscan provides complete visibility into MCP (Model Context Protocol) server communication. It operates in three modes:
 
-- 🔍 **Captures** all JSON-RPC messages (requests, responses, notifications)
-- 💾 **Stores** events in SQLite for efficient querying and analysis
-- 🌳 **Visualizes** connector → session → RPC hierarchies
-- 🔧 **Tests** MCP tools directly from CLI
-- 🎭 **Proxies** multiple MCP servers with unified tool namespace
-- 📊 **Generates** public-safe audit trails (POPL)
-- 🐚 **Interactive** shell mode with TAB completion
-- 📦 **Catalog** - Search and install MCP servers from registry
-- 📈 **Analyze** - Tool usage analysis across sessions
-- 🌍 **i18n** - Multi-language support (English, 日本語)
+- **CLI** – Run single commands to inspect, manage and analyze data
+- **SHELL** – Explore connectors, sessions and RPCs interactively
+- **PROXY** – Capture MCP traffic continuously as a proxy server
+
+### Key Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| 🔍 **Capture** | All JSON-RPC messages (requests, responses, notifications) |
+| 💾 **Store** | Events in SQLite for efficient querying and analysis |
+| 🌳 **Visualize** | Connector → session → RPC hierarchies |
+| 🔧 **Test** | MCP tools directly from CLI |
+| 🎭 **Proxy** | Multiple MCP servers with unified tool namespace |
+| 📊 **Generate** | Public-safe audit trails (POPL) |
+| 🐚 **Interactive** | Shell mode with TAB completion |
+| 📦 **Catalog** | Search and install MCP servers from registry |
+| 📈 **Analyze** | Tool usage analysis across sessions |
+| 📝 **Plans** | Validation plans for automated testing |
+| 🌍 **i18n** | Multi-language support (English, 日本語) |
 
 ## Quick Links
 
-- 📖 **[User Guide](docs/GUIDE.md)** - Complete CLI reference and examples
-- 🐚 **[Shell Mode Guide](docs/SHELL.md)** - Interactive shell and @references
-- 🎭 **[Proxy Guide](docs/PROXY.md)** - MCP proxy server documentation
-- 📦 **[POPL Guide](docs/POPL.md)** - Public Observable Proof Ledger
-- 🔧 **[API Documentation](docs/API.md)** - TypeScript API for developers
+### For Users
+
+- 📖 **[User Guide](docs/GUIDE.md)** ([日本語](docs/GUIDE.ja.md)) – Complete CLI reference
+- 🐚 **[Shell Mode](docs/SHELL.md)** ([日本語](docs/SHELL.ja.md)) – Interactive shell and @references
+- 🎭 **[Proxy Guide](docs/PROXY.md)** ([日本語](docs/PROXY.ja.md)) – MCP proxy server
+- 📦 **[POPL Guide](docs/POPL.md)** ([日本語](docs/POPL.ja.md)) – Public Observable Proof Ledger
+- 🔧 **[MCP Server Setup](docs/MCP_SERVER_SETUP_GUIDE.md)** ([日本語](docs/MCP_SERVER_SETUP_GUIDE.ja.md)) – Setting up MCP servers
+
+### For Developers
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** – Development setup and guidelines
 
 ## Installation
 
-```bash
-# Global installation
-npm install -g proofscan
+### Global Installation (Recommended)
 
-# Or run without installing
+```bash
+npm install -g proofscan
+```
+
+### Run without Installing
+
+```bash
 npx proofscan --help
 ```
+
+### Available Commands
+
+After installation, you can use any of these aliases:
+
+| Command | Description |
+|---------|-------------|
+| `proofscan` | Full command name |
+| `pfscan` | Short alias |
+| `pfs` | Shortest alias |
+| `psh` | Direct shell mode (equivalent to `pfscan shell`) |
 
 **Requirements:** Node.js v18+ (v20+ recommended)
 
 ## Quick Start
 
-### 1. Initialize
+### 1. Initialize Configuration
 
 ```bash
 pfscan config init        # Create configuration
 pfscan config path        # Show config location
 ```
 
-### 2. Add MCP Server
+### 2. Add an MCP Server
+
+**Option A: Import from Claude Desktop config**
 
 ```bash
-# From Claude Desktop / mcp.so format
-echo '{"mcpServers":{"time":{"command":"npx","args":["-y","@modelcontextprotocol/server-time"]}}}' \
-  | pfscan connectors import --from mcpServers --stdin
+# Import from file
+pfscan connectors import --from mcpServers --file ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
-# Or add manually
+# Or from stdin
+cat claude_desktop_config.json | pfscan connectors import --from mcpServers --stdin
+```
+
+**Option B: Add manually**
+
+```bash
 pfscan connectors add --id time --stdio "npx -y @modelcontextprotocol/server-time"
+```
+
+**Option C: Install from catalog**
+
+```bash
+pfscan catalog install @modelcontextprotocol/server-time --id time
 ```
 
 ### 3. Scan and View
@@ -70,7 +115,7 @@ pfscan tree                   # Show structure
 pfscan status                 # System status
 ```
 
-## Key Features
+## Core Features
 
 ### 📊 Event Timeline
 
@@ -107,7 +152,9 @@ $ pfscan tree
 ### 🐚 Interactive Shell
 
 ```bash
-$ pfscan shell
+$ psh
+# Or: pfscan shell
+
 proofscan> pwd
 Context: session=f2442c9b (connector=time)
 
@@ -127,117 +174,103 @@ proofscan> popl @last --title "Time Server Test"
 # Start proxy with multiple backends
 pfscan proxy start --connectors time,weather
 
-# In another terminal - use as unified MCP server
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | pfscan proxy start --all
-
 # Tools are namespaced: time__get_current_time, weather__get_forecast
+```
+
+**Use with Claude Desktop:**
+
+```json
+{
+  "mcpServers": {
+    "proofscan-proxy": {
+      "command": "pfscan",
+      "args": ["proxy", "start", "--all"]
+    }
+  }
+}
 ```
 
 ### 🔧 Direct Tool Testing
 
 ```bash
-# List tools
-pfscan tool ls time
-
-# Show tool schema
-pfscan tool show time get_current_time
-
-# Call tool
-pfscan tool call time get_current_time --args '{}'
+pfscan tool ls time                              # List tools
+pfscan tool show time get_current_time           # Show tool schema
+pfscan tool call time get_current_time --args '{}' # Call tool
 ```
 
-### 📦 MCP Catalog (New in v0.10.23)
+### 📦 MCP Catalog
 
 Discover and install MCP servers from the registry:
 
 ```bash
-# Search for servers
-pfscan catalog search time
-
-# View server details
-pfscan catalog view @modelcontextprotocol/server-time
-
-# Install directly to connectors
-pfscan catalog install @modelcontextprotocol/server-time --id time
-
-# Search across all sources
-pfscan catalog search database --all
+pfscan catalog search time                                    # Search
+pfscan catalog view @modelcontextprotocol/server-time         # View details
+pfscan catalog install @modelcontextprotocol/server-time --id time  # Install
+pfscan catalog sources                                        # Manage sources
 ```
 
-### 📈 Tool Usage Analysis (New in v0.10.23)
-
-Analyze how tools are used across sessions:
+### 📈 Tool Usage Analysis
 
 ```bash
-# Analyze all tool usage
-pfscan analyze
-
-# Analyze specific connector
-pfscan analyze --connector time
-
-# Show detailed statistics
-pfscan analyze --verbose
+pfscan analyze                      # Analyze all tool usage
+pfscan analyze --connector time     # Specific connector
+pfscan analyze --verbose            # Detailed statistics
 ```
 
-## Command Overview
+### 📝 Validation Plans
 
-```
-Observe & Inspect:
-  view, v       View recent events timeline (default)
-  tree, t       Show connector → session → RPC structure
-  rpc           View RPC call details (list, show)
-  summary       Show session summary
-  analyze       Analyze tool usage across sessions
+Create and run automated validation plans:
 
-Run & Capture:
-  scan, s       Run a new scan
-  proxy         MCP proxy server
-
-Explore Interactively:
-  shell         Interactive shell (REPL) with TAB completion
-
-Work with MCP Tools:
-  tool          MCP tool operations (ls, show, call)
-  catalog       Search and inspect MCP servers from registry
-  runners       Manage package runners (npx, uvx)
-
-Manage Configuration & Data:
-  connectors    Connector management
-  config, c     Configuration management
-  secrets       Secret management
-  archive, a    Data retention and cleanup
-  doctor        Diagnose and fix database issues
-
-Proof & Ledger:
-  popl          Public Observable Proof Ledger
-
-Shortcuts:
-  v=view  t=tree  s=scan  st=status  a=archive  c=config
+```bash
+pfscan plans ls                    # List plans
+pfscan plans add plan.yaml         # Add a plan
+pfscan plans run --id myplan       # Execute plan
+pfscan plans runs                  # View execution history
 ```
 
-## Documentation
+## Command Reference
 
-### For Users
+```
+Main Commands
+  view (v)        View recent events timeline (default)
+  tree (t)        Show connector → session → RPC structure
+  rpc             Inspect RPC call details
+  summary         Show session summary and capabilities
+  analyze         Analyze tool usage across sessions
+  scan (s)        Run a new scan against MCP servers
+  proxy           Run MCP proxy server
+  shell           Start interactive shell (REPL)
+  tool            List, inspect and call MCP tools
+  catalog (cat)   Search and inspect MCP servers from registry
+  connectors      Manage MCP server connectors
+  config (c)      Configuration management
+  secrets         Secret management
+  runners         Manage package runners (npx, uvx)
+  archive (a)     Data retention and cleanup
+  doctor          Diagnose and fix issues
+  status (st)     Show database and system status
+  popl            Public Observable Proof Ledger management
 
-- **[User Guide](docs/GUIDE.md)** - Complete CLI command reference with examples
-- **[Shell Mode](docs/SHELL.md)** - Interactive shell, @references, and advanced workflows
-- **[Proxy Guide](docs/PROXY.md)** - MCP proxy server setup and usage
-- **[POPL Guide](docs/POPL.md)** - Creating public audit trails
+Ancillary Commands
+  plans           Manage validation plans
+  sessions        Manage scan sessions
+  record          Record management commands
+  log             View proxy logs
+```
 
-### For Developers
-
-- **[API Documentation](docs/API.md)** - TypeScript API and EventLine model
-- **[Architecture](docs/ARCHITECTURE.md)** - Internal design and database schema
-- **[Contributing](CONTRIBUTING.md)** - Development setup and guidelines
+Run `pfscan help <command>` for details on any command.
 
 ## Configuration
 
-Config location (OS-standard):
-- **Windows**: `%APPDATA%\proofscan\config.json`
-- **macOS**: `~/Library/Application Support/proofscan/config.json`
-- **Linux**: `~/.config/proofscan/config.json`
+Config file location (OS-standard):
 
-Basic config structure:
+| Platform | Path |
+|----------|------|
+| **Windows** | `%APPDATA%\proofscan\config.json` |
+| **macOS** | `~/Library/Application Support/proofscan/config.json` |
+| **Linux** | `~/.config/proofscan/config.json` |
+
+Example configuration:
 
 ```json
 {
@@ -261,24 +294,20 @@ Basic config structure:
 }
 ```
 
-See **[User Guide](docs/GUIDE.md#configuration)** for details.
-
 ## Data Storage
-
-proofscan uses a 2-file SQLite structure:
 
 ```
 ~/.config/proofscan/
-├── config.json
-├── events.db          # Sessions, events, RPC calls (can be pruned)
-├── proofs.db          # Immutable proof records (never pruned)
-├── proxy-runtime-state.json  # Proxy state (if proxy used)
-└── proxy-logs.jsonl   # Proxy logs (if proxy used)
+├── config.json                 # Configuration file
+├── events.db                   # Sessions, events, RPC calls (prunable)
+├── proofs.db                   # Immutable proof records (never pruned)
+├── proxy-runtime-state.json    # Proxy state (if proxy used)
+└── proxy-logs.jsonl            # Proxy logs (if proxy used)
 ```
 
 ## Global Options
 
-```bash
+```
 -c, --config <path>  Path to config file
 --json               Output in JSON format
 -v, --verbose        Verbose output
@@ -286,93 +315,22 @@ proofscan uses a 2-file SQLite structure:
 -V, --version        Show version
 ```
 
-## Examples
-
-### Basic Workflow
-
-```bash
-# 1. Import MCP server
-cat claude_desktop_config.json | pfscan connectors import --from mcpServers --stdin
-
-# 2. Run scan
-pfscan scan start --id myserver
-
-# 3. View results
-pfscan                         # Recent events
-pfscan tree                    # Hierarchical view
-pfscan rpc list --session abc  # RPC details
-```
-
-### Shell Mode Workflow
-
-```bash
-pfscan shell
-
-# Navigate using cd command
-proofscan> cd time
-proofscan:/time > pwd
-Context: connector=time
-
-proofscan:/time > cd abc123
-proofscan:/time/abc123 > pwd
-Context: session=abc123 (connector=time)
-
-# Save reference and use later
-proofscan> ref add important @this
-proofscan> tool call get_current_time --args '{}'
-proofscan> popl @last --title "Production Test"
-```
-
-### Proxy Mode
-
-```bash
-# Terminal 1: Start proxy
-pfscan -v proxy start --connectors server1,server2
-
-# Terminal 2: Check status
-pfscan proxy status
-pfscan log --tail 20
-
-# Use proxy with Claude Desktop
-# Add to claude_desktop_config.json:
-# {
-#   "mcpServers": {
-#     "proofscan-proxy": {
-#       "command": "pfscan",
-#       "args": ["proxy", "start", "--all"]
-#     }
-#   }
-# }
-```
-
-## Development
-
-```bash
-git clone https://github.com/proofofprotocol/proofscan.git
-cd proofscan
-npm install
-npm run build
-npm test
-
-# Run from source
-node dist/cli.js --help
-```
-
 ## Use Cases
 
-- 🔍 **Debug MCP servers**: See exactly what's happening in JSON-RPC communication
-- 📊 **Analyze tool usage**: Track which tools are called and how often
-- 🎯 **Performance monitoring**: Measure RPC latency and identify bottlenecks
-- 🔐 **Security auditing**: Review permission requests and data access
-- 📝 **Documentation**: Generate public-safe logs for bug reports
-- 🧪 **Testing**: Verify MCP server behavior and tool schemas
-- 🎭 **Integration**: Use proxy mode to aggregate multiple MCP servers
+| Use Case | Description |
+|----------|-------------|
+| 🔍 **Debug** | See exactly what's happening in JSON-RPC communication |
+| 📊 **Analyze** | Track which tools are called and how often |
+| 🎯 **Performance** | Measure RPC latency and identify bottlenecks |
+| 🔐 **Security** | Review permission requests and data access |
+| 📝 **Documentation** | Generate public-safe logs for bug reports |
+| 🧪 **Testing** | Verify MCP server behavior and tool schemas |
+| 🎭 **Integration** | Aggregate multiple MCP servers via proxy |
 
 ## Related Projects
 
-- **[Model Context Protocol](https://modelcontextprotocol.io)** - Official MCP specification
-- **[MCP Servers](https://github.com/modelcontextprotocol/servers)** - Official server implementations
-- **[@proofofprotocol/inscribe-mcp-server](https://github.com/proofofprotocol/inscribe-mcp-server)** - Blockchain-backed proof storage
+- **[Model Context Protocol](https://modelcontextprotocol.io)** – Official MCP specification
+- **[MCP Servers](https://github.com/modelcontextprotocol/servers)** – Official server implementations
 
 ## License
 
