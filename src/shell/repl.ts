@@ -235,25 +235,41 @@ export class ShellRepl {
   }
 
   /**
+   * Create a dynamic completer that delegates based on current mode
+   */
+  private createDynamicCompleter(): (line: string, callback: (err: Error | null, result: [string[], string]) => void) => void {
+    const shellDataProvider = this.getDataProvider();
+    const shellCompleter = createCompleter(this.context, shellDataProvider);
+    const configureDataProvider = this.getConfigureDataProvider();
+
+    return (line: string, callback: (err: Error | null, result: [string[], string]) => void) => {
+      if (this.configureMode?.isActive()) {
+        const configureCompleter = createConfigureCompleter(this.configureMode, configureDataProvider);
+        const [completions, prefix] = configureCompleter(line);
+        callback(null, [completions, prefix]);
+      } else {
+        const [completions, prefix] = shellCompleter(line);
+        callback(null, [completions, prefix]);
+      }
+    };
+  }
+
+  /**
    * Start the REPL
    */
   async start(): Promise<void> {
     // Load history
     this.history = loadHistory();
 
-    // Create completer
-    const dataProvider = this.getDataProvider();
-    const completer = createCompleter(this.context, dataProvider);
+    // Create dynamic completer that switches based on mode
+    const dynamicCompleter = this.createDynamicCompleter();
 
     // Create readline interface
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
       prompt: generatePrompt(this.context),
-      completer: (line: string, callback: (err: Error | null, result: [string[], string]) => void) => {
-        const [completions, prefix] = completer(line);
-        callback(null, [completions, prefix]);
-      },
+      completer: dynamicCompleter,
       history: this.history,
       historySize: 1000,
     });
@@ -1331,8 +1347,10 @@ Tips:
     printSuccess('Entered configure mode.');
     printInfo('Type "help" for available commands, "exit" to leave configure mode.');
 
-    // Recreate readline with configure mode completer
-    this.resetReadline();
+    // Update prompt for configure mode (completer switches dynamically)
+    if (this.rl) {
+      this.rl.setPrompt(this.configureMode.getPrompt());
+    }
   }
 
   /**
@@ -1477,8 +1495,10 @@ Note: "proxy start" requires stdio and should be run outside the shell.
     // Handle mode transitions
     if (result.exitMode) {
       this.configureMode = null;
-      // Recreate readline with normal shell completer
-      this.resetReadline();
+      // Update prompt back to normal shell (completer switches dynamically)
+      if (this.rl) {
+        this.rl.setPrompt(this.getCurrentPrompt());
+      }
     }
 
     // Update prompt if still in configure mode
