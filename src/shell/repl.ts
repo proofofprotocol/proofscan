@@ -40,7 +40,7 @@ import { handlePopl, getPoplEntryIdsSync } from './popl-commands.js';
 import { resolveCommand } from './command-resolver.js';
 import type { PipelineValue, RpcRow, SessionRow } from './pipeline-types.js';
 import { parseFindArgs, executeFind } from './find-command.js';
-import { ConfigureMode, processConfigureCommand } from './configure/index.js';
+import { ConfigureMode, processConfigureCommand, createConfigureCompleter, type ConfigureDataProvider } from './configure/index.js';
 
 // Cache TTL in milliseconds (5 seconds)
 const CACHE_TTL_MS = 5000;
@@ -135,6 +135,31 @@ export class ShellRepl {
     this.sessionsCache.clear();
     this.rpcsCache.clear();
     this.poplEntriesCache = null;
+  }
+
+  /**
+   * Get data provider for configure mode completions
+   */
+  private getConfigureDataProvider(): ConfigureDataProvider {
+    const manager = new ConfigManager(this.configPath);
+    const configDir = manager.getConfigDir();
+
+    return {
+      getConnectorIds: () => {
+        const now = Date.now();
+        if (this.connectorsCache && this.connectorsCache.expiry > now) {
+          return this.connectorsCache.data;
+        }
+        try {
+          const store = new EventLineStore(configDir);
+          const ids = store.getConnectors().map(c => c.id);
+          this.connectorsCache = { data: ids, expiry: now + CACHE_TTL_MS };
+          return ids;
+        } catch {
+          return [];
+        }
+      },
+    };
   }
 
   /**
@@ -894,11 +919,16 @@ Tips:
    * Reset readline interface (recreate after pager or other stdin-consuming operations)
    */
   private resetReadline(): void {
+    // Choose completer based on mode
+    const completer = this.configureMode?.isActive()
+      ? createConfigureCompleter(this.configureMode, this.getConfigureDataProvider())
+      : createCompleter(this.context, this.getDataProvider());
+
     // Create new readline interface
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
-      completer: createCompleter(this.context, this.getDataProvider()),
+      completer,
       history: this.history,
       historySize: 1000,
     });
@@ -1294,6 +1324,9 @@ Tips:
 
     printSuccess('Entered configure mode.');
     printInfo('Type "help" for available commands, "exit" to leave configure mode.');
+
+    // Recreate readline with configure mode completer
+    this.resetReadline();
   }
 
   /**
@@ -1438,6 +1471,8 @@ Note: "proxy start" requires stdio and should be run outside the shell.
     // Handle mode transitions
     if (result.exitMode) {
       this.configureMode = null;
+      // Recreate readline with normal shell completer
+      this.resetReadline();
     }
 
     // Update prompt if still in configure mode
