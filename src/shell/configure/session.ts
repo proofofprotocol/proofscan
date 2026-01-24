@@ -45,8 +45,17 @@ export class EditSessionManager {
 
   /**
    * Check if the session has unsaved changes
+   * Note: A new connector (isNew=true) is always considered dirty,
+   * even if no fields have been modified (the connector itself is new)
    */
   isDirty(): boolean {
+    return this.session.isNew || this.session.modifiedFields.size > 0 || this.session.pendingSecrets.size > 0;
+  }
+
+  /**
+   * Check if the session has actual field modifications (excluding isNew status)
+   */
+  hasFieldChanges(): boolean {
     return this.session.modifiedFields.size > 0 || this.session.pendingSecrets.size > 0;
   }
 

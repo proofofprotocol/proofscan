@@ -181,6 +181,11 @@ export class ConfigureMode {
 
   /**
    * Commit the current edit session
+   *
+   * Commit types:
+   * - 'added': New connector created and saved to config
+   * - 'updated': Existing connector modified and saved
+   * - 'none': No changes (existing connector with no modifications)
    */
   async commit(options: {
     dryRun?: boolean;
@@ -192,18 +197,38 @@ export class ConfigureMode {
         proxyReloaded: false,
         secretsStored: 0,
         error: 'No active edit session',
+        commitType: 'none',
       };
     }
 
     const session = this.state.editSession;
     const diff = this.sessionManager.getDiff();
+    const hasFieldChanges = this.sessionManager.hasFieldChanges();
 
-    if (!diff.hasChanges && session.pendingSecrets.size === 0) {
+    // Determine commit type
+    // - New connector: always 'added' (even if no field changes, the connector itself is new)
+    // - Existing connector with changes: 'updated'
+    // - Existing connector without changes: 'none'
+    let commitType: 'added' | 'updated' | 'none';
+    if (session.isNew) {
+      commitType = 'added';
+    } else if (diff.hasChanges || hasFieldChanges) {
+      commitType = 'updated';
+    } else {
+      commitType = 'none';
+    }
+
+    // No changes case: existing connector with no modifications
+    if (commitType === 'none') {
+      // Clear the edit session without writing
+      this.state.editSession = null;
+      this.sessionManager = null;
+
       return {
         success: true,
         proxyReloaded: false,
         secretsStored: 0,
-        message: 'No changes to commit',
+        commitType: 'none',
       };
     }
 
@@ -214,6 +239,7 @@ export class ConfigureMode {
         secretsStored: 0,
         message: 'Dry run - no changes applied',
         diff,
+        commitType,
       };
     }
 
@@ -223,14 +249,15 @@ export class ConfigureMode {
       const secretsCount = session.pendingSecrets.size;
       const finalizedConnector = await this.sessionManager.finalizeSecrets(configDir);
 
-      // Update or add the connector in config
-      if (session.isNew) {
+      // Add or update the connector in config based on commit type
+      if (commitType === 'added') {
         await this.configManager.addConnector(finalizedConnector);
       } else {
+        // commitType === 'updated'
         await this.configManager.updateConnector(session.original.id, finalizedConnector);
       }
 
-      // Reload proxy if not disabled
+      // Reload proxy if not disabled and there were actual changes
       let proxyReloaded = false;
       let proxyMessage: string | undefined;
 
@@ -261,6 +288,7 @@ export class ConfigureMode {
         secretsStored: secretsCount,
         message: proxyMessage,
         diff,
+        commitType,
       };
     } catch (error) {
       return {
@@ -268,6 +296,7 @@ export class ConfigureMode {
         proxyReloaded: false,
         secretsStored: 0,
         error: error instanceof Error ? error.message : String(error),
+        commitType,
       };
     }
   }
@@ -293,4 +322,6 @@ export interface CommitResult {
   message?: string;
   error?: string;
   diff?: import('./types.js').ConnectorDiff;
+  /** Type of commit: 'added' (new connector), 'updated' (existing), or 'none' (no changes) */
+  commitType?: 'added' | 'updated' | 'none';
 }

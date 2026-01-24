@@ -13,7 +13,7 @@
 
 import type { Connector, StdioTransport, HttpTransport, SseTransport } from '../../types/config.js';
 import type { SetOptions, ConnectorDiff } from './types.js';
-import { ConfigureMode, CommitResult } from './mode.js';
+import { ConfigureMode } from './mode.js';
 import { isSecretRef } from '../../secrets/types.js';
 
 /**
@@ -460,12 +460,26 @@ async function handleCommit(mode: ConfigureMode, args: string[]): Promise<Comman
 
   const dryRun = args.includes('--dry-run');
   const noReload = args.includes('--no-reload');
+  const session = mode.getSession()!;
+  const connectorId = session.candidate.id;
 
   // Show diff first if dry-run
   if (dryRun) {
     const manager = mode.getSessionManager()!;
-    const session = mode.getSession()!;
     const diff = manager.getDiff();
+
+    // For new connectors, always show as having changes
+    if (session.isNew) {
+      const output = [
+        `Changes to be committed (dry-run): [NEW CONNECTOR]`,
+        '',
+        ...formatConnector(session.candidate, session.pendingSecrets),
+      ];
+      return {
+        success: true,
+        output,
+      };
+    }
 
     if (!diff.hasChanges && session.pendingSecrets.size === 0) {
       return {
@@ -495,8 +509,24 @@ async function handleCommit(mode: ConfigureMode, args: string[]): Promise<Comman
     };
   }
 
+  // Handle different commit types with appropriate messages
   const output: string[] = [];
-  output.push('Committed candidate-config -> running-config.');
+
+  switch (result.commitType) {
+    case 'added':
+      output.push(`✓ Added connector '${connectorId}' (candidate-config -> running-config).`);
+      break;
+    case 'updated':
+      output.push(`✓ Updated connector '${connectorId}' (candidate-config -> running-config).`);
+      break;
+    case 'none':
+      // No changes - only show this message, not "Committed..."
+      return {
+        success: true,
+        output: ['ℹ No changes to commit. (running-config unchanged)'],
+        exitSession: true,
+      };
+  }
 
   if (result.secretsStored > 0) {
     output.push(`Stored ${result.secretsStored} secret(s).`);
