@@ -31,10 +31,10 @@ const sessions = store.listSessions({ connectorId: 'my-connector', limit: 10 });
 ### Configuration Types
 
 ```typescript
-import type { Config, Connector, Transport, RetentionConfig } from 'proofscan';
+import type { Config, Connector, Transport, RetentionConfig, ConnectorPlugins } from 'proofscan';
 
 // Transport types
-type TransportType = 'stdio' | 'http' | 'sse';
+type TransportType = 'stdio' | 'rpc-http' | 'rpc-sse';
 
 interface StdioTransport {
   type: 'stdio';
@@ -45,18 +45,24 @@ interface StdioTransport {
 }
 
 interface HttpTransport {
-  type: 'http';
+  type: 'rpc-http';
   url: string;
   headers?: Record<string, string>;
 }
 
 interface SseTransport {
-  type: 'sse';
+  type: 'rpc-sse';
   url: string;
   headers?: Record<string, string>;
 }
 
 type Transport = StdioTransport | HttpTransport | SseTransport;
+
+// Connector plugins configuration
+interface ConnectorPlugins {
+  debug_monitor?: boolean;
+  inscribe?: boolean;
+}
 
 // Connector configuration
 interface Connector {
@@ -68,7 +74,7 @@ interface Connector {
 
 // Main config structure
 interface Config {
-  version: number;
+  version: 1;
   connectors: Connector[];
   retention?: RetentionConfig;
 }
