@@ -8,6 +8,11 @@ export { ConfigureMode } from './mode.js';
 export { EditSessionManager } from './session.js';
 export { processConfigureCommand, type CommandResult } from './commands.js';
 export {
+  getConfigureCompletions,
+  createConfigureCompleter,
+  type ConfigureDataProvider,
+} from './completer.js';
+export {
   type CommitResult,
   type EditSession,
   type ConfigureModeState,
