@@ -919,6 +919,12 @@ Tips:
    * Reset readline interface (recreate after pager or other stdin-consuming operations)
    */
   private resetReadline(): void {
+    // Close existing readline interface to prevent duplicate input
+    if (this.rl) {
+      this.rl.removeAllListeners();
+      this.rl.close();
+    }
+
     // Choose completer based on mode
     const completer = this.configureMode?.isActive()
       ? createConfigureCompleter(this.configureMode, this.getConfigureDataProvider())
