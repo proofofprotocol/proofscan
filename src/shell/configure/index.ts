@@ -4,10 +4,11 @@
  * Exports for the psh configure terminal mode.
  */
 
-export { ConfigureMode, type CommitResult } from './mode.js';
+export { ConfigureMode } from './mode.js';
 export { EditSessionManager } from './session.js';
 export { processConfigureCommand, type CommandResult } from './commands.js';
 export {
+  type CommitResult,
   type EditSession,
   type ConfigureModeState,
   type SetOptions,
