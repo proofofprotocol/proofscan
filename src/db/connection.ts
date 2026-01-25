@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -251,6 +251,36 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
         } catch (err) {
           // Ignore "table already exists" errors
           if (err instanceof Error &&
+              !err.message.includes('already exists')) {
+            throw err;
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  // Migration 5 → 6: Add targets table, agent_cache table, target_id to sessions, normalized_json to events (Phase 7.0)
+  if (fromVersion < 6) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      const statements = EVENTS_DB_MIGRATION_5_TO_6
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0 && !s.startsWith('--'));
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Ignore "duplicate column" and "table already exists" errors
+          if (err instanceof Error &&
+              !err.message.includes('duplicate column') &&
               !err.message.includes('already exists')) {
             throw err;
           }

@@ -1,5 +1,5 @@
 /**
- * Database types for Phase2 + Phase 3.4
+ * Database types for Phase2 + Phase 3.4 + Phase 7.0
  */
 
 // Session exit reasons
@@ -118,4 +118,28 @@ export interface UserRef {
   target: string | null;
   /** For popl kind: POPL entry ID */
   entry_id: string | null;
+}
+
+// Targets table (Phase 7.0: unified connector/agent)
+export type TargetType = 'connector' | 'agent';
+export type TargetProtocol = 'mcp' | 'a2a';
+
+export interface Target {
+  id: string;
+  type: TargetType;
+  protocol: TargetProtocol;
+  name: string | null;
+  enabled: number; // 0 or 1 (SQLite doesn't have boolean)
+  created_at: string; // ISO8601
+  updated_at: string | null;
+  config_json: string; // JSON string, parsed to object in store
+}
+
+// Agent cache table (Phase 7.0)
+export interface AgentCache {
+  target_id: string;
+  agent_card_json: string | null; // JSON string, parsed to object in store
+  agent_card_hash: string | null;
+  fetched_at: string | null;
+  expires_at: string | null;
 }
