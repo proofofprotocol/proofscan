@@ -11,6 +11,7 @@ import type {
   TargetConfig,
   AgentCard,
   AgentSkill,
+  AuthConfig,
 } from './types.js';
 
 // ===== Result Type =====
@@ -70,6 +71,7 @@ function requireField<T>(
 function optionalField<T>(
   obj: Record<string, unknown>,
   field: string,
+  typeName: string,
   validator: (v: unknown) => v is T
 ): T | undefined {
   const value = obj[field];
@@ -439,7 +441,7 @@ export function parseAgentCard(json: unknown): ParseResult<AgentCard> {
       if (!isPlainObject(auth)) {
         return { ok: false, error: 'Field authentication must be an object' };
       }
-      const authData: NonNullable<AgentCard['authentication']> = {};
+      // schemes is required for authentication
       if ('schemes' in auth) {
         const schemes = auth['schemes'];
         if (!Array.isArray(schemes)) {
@@ -452,12 +454,10 @@ export function parseAgentCard(json: unknown): ParseResult<AgentCard> {
           }
           stringSchemes.push(schemes[i]);
         }
-        authData.schemes = stringSchemes;
-      }
-      if ('credentials' in auth) {
-        authData.credentials = requireField(auth, 'credentials', 'a string', isString);
-      }
-      if (Object.keys(authData).length > 0) {
+        const authData: NonNullable<AgentCard['authentication']> = { schemes: stringSchemes };
+        if ('credentials' in auth) {
+          authData.credentials = requireField(auth, 'credentials', 'a string', isString);
+        }
         result.authentication = authData;
       }
     }
@@ -547,13 +547,13 @@ export function parseTargetConfig(
     if (!result.ok) {
       return { ok: false, error: `Connector config error: ${result.error}` };
     }
-    return { ok: true, value: { type, protocol, config: result.value } };
+    return { ok: true, value: { type, protocol: 'mcp' as const, config: result.value } };
   } else {
     // type === 'agent'
     const result = parseAgentConfig(parsed);
     if (!result.ok) {
       return { ok: false, error: `Agent config error: ${result.error}` };
     }
-    return { ok: true, value: { type, protocol, config: result.value } };
+    return { ok: true, value: { type, protocol: 'a2a' as const, config: result.value } };
   }
 }
