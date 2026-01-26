@@ -10,6 +10,9 @@
 import type { AgentCard } from './types.js';
 import { isPrivateUrl } from './agent-card.js';
 
+// Maximum response size (1MB) to prevent DoS
+const MAX_RESPONSE_SIZE = 1024 * 1024;
+
 // ===== A2A Protocol Types =====
 
 export interface A2AMessage {
@@ -79,6 +82,7 @@ export class A2AClient {
   private baseUrl: string;
   private defaultHeaders: Record<string, string>;
   private agentCard: AgentCard;
+  private requestCounter = 0;
 
   constructor(agentCard: AgentCard, options?: { headers?: Record<string, string> }) {
     this.agentCard = agentCard;
@@ -112,8 +116,8 @@ export class A2AClient {
         ? { role: 'user', parts: [{ text: message }] }
         : message;
 
-    // Build JSON-RPC request
-    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    // Build JSON-RPC request with unique ID
+    const requestId = `req-${Date.now()}-${++this.requestCounter}-${Math.random().toString(36).slice(2, 9)}`;
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
@@ -129,7 +133,7 @@ export class A2AClient {
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      // SSRF protection: Check URL before sending
+      // SSRF protection (defense-in-depth): Double-check URL even though constructor validates
       if (isPrivateUrl(this.baseUrl)) {
         return {
           ok: false,
@@ -144,9 +148,37 @@ export class A2AClient {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      // Validate Content-Type
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Expected JSON response, got ${contentType || 'unknown'}`,
+        };
+      }
+
+      // Check Content-Length for size limit
+      const contentLength = response.headers.get('content-length');
+      if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_SIZE) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Response too large: ${contentLength} bytes (max ${MAX_RESPONSE_SIZE})`,
+        };
+      }
 
       const responseText = await response.text();
+
+      // Validate actual response size
+      if (responseText.length > MAX_RESPONSE_SIZE) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Response too large: ${responseText.length} bytes (max ${MAX_RESPONSE_SIZE})`,
+        };
+      }
+
       let responseData: JsonRpcResponse;
 
       try {
@@ -197,8 +229,6 @@ export class A2AClient {
         error: `Unknown response type: ${JSON.stringify(result).slice(0, 200)}`,
       };
     } catch (error) {
-      clearTimeout(timeoutId);
-
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           return {
@@ -215,6 +245,8 @@ export class A2AClient {
         ok: false,
         error: String(error),
       };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -223,7 +255,7 @@ export class A2AClient {
    * POST /tasks/get (JSON-RPC 2.0)
    */
   async getTask(taskId: string): Promise<SendMessageResult> {
-    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const requestId = `req-${Date.now()}-${++this.requestCounter}-${Math.random().toString(36).slice(2, 9)}`;
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
@@ -240,7 +272,27 @@ export class A2AClient {
         body: JSON.stringify(request),
       });
 
+      // Validate Content-Type
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Expected JSON response, got ${contentType || 'unknown'}`,
+        };
+      }
+
       const responseText = await response.text();
+
+      // Validate response size
+      if (responseText.length > MAX_RESPONSE_SIZE) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Response too large: ${responseText.length} bytes (max ${MAX_RESPONSE_SIZE})`,
+        };
+      }
+
       let responseData: JsonRpcResponse;
 
       try {
@@ -290,7 +342,7 @@ export class A2AClient {
    * POST /tasks/cancel (JSON-RPC 2.0)
    */
   async cancelTask(taskId: string): Promise<{ ok: boolean; error?: string }> {
-    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const requestId = `req-${Date.now()}-${++this.requestCounter}-${Math.random().toString(36).slice(2, 9)}`;
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
@@ -307,7 +359,25 @@ export class A2AClient {
         body: JSON.stringify(request),
       });
 
+      // Validate Content-Type
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        return {
+          ok: false,
+          error: `Expected JSON response, got ${contentType || 'unknown'}`,
+        };
+      }
+
       const responseText = await response.text();
+
+      // Validate response size
+      if (responseText.length > MAX_RESPONSE_SIZE) {
+        return {
+          ok: false,
+          error: `Response too large: ${responseText.length} bytes (max ${MAX_RESPONSE_SIZE})`,
+        };
+      }
+
       let responseData: JsonRpcResponse;
 
       try {
