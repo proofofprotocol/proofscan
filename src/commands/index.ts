@@ -1,6 +1,7 @@
 // Existing commands
 export * from './config.js';
 export * from './connectors.js';
+export * from './agent.js';
 export * from './scan.js';
 export * from './sessions.js';
 export * from './archive.js';

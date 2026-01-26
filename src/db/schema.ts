@@ -4,9 +4,10 @@
  * Phase 3.4: Schema version 3 with actor columns, secret_ref_count, actors table
  * Phase 4.1: Schema version 4 with user_refs table for named references
  * Phase 6.0: Schema version 5 with popl kind support in user_refs
+ * Phase 7.0: Schema version 6 with targets table (unified connector/agent) and agent_cache table
  */
 
-export const EVENTS_DB_VERSION = 5;
+export const EVENTS_DB_VERSION = 6;
 export const PROOFS_DB_VERSION = 2;
 
 // events.db schema (version 3)
@@ -205,6 +206,47 @@ ALTER TABLE user_refs_new RENAME TO user_refs;
 -- Recreate indexes
 CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
 CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
+`;
+
+/**
+ * Migration from version 5 to version 6
+ * Phase 7.0: Adds targets table (unified connector/agent), agent_cache table,
+ *            target_id to sessions, and normalized_json to events
+ */
+export const EVENTS_DB_MIGRATION_5_TO_6 = `
+-- Create targets table (unified connector/agent)
+CREATE TABLE targets (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL CHECK(type IN ('connector', 'agent')),
+  protocol TEXT NOT NULL CHECK(protocol IN ('mcp', 'a2a')),
+  name TEXT,
+  enabled INTEGER DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  config_json TEXT NOT NULL,
+  CHECK (
+    (type = 'connector' AND protocol = 'mcp') OR
+    (type = 'agent' AND protocol = 'a2a')
+  )
+);
+
+CREATE INDEX idx_targets_type ON targets(type, enabled);
+
+-- Create agent_cache table
+CREATE TABLE agent_cache (
+  target_id TEXT PRIMARY KEY,
+  agent_card_json TEXT,
+  agent_card_hash TEXT,
+  fetched_at TEXT,
+  expires_at TEXT,
+  FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
+);
+
+-- Add target_id to sessions (migrate from connector_id later)
+ALTER TABLE sessions ADD COLUMN target_id TEXT;
+
+-- Add normalized_json to events
+ALTER TABLE events ADD COLUMN normalized_json TEXT;
 `;
 
 // proofs.db schema (version 2: added plans and runs tables)
