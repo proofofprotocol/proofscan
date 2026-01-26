@@ -22,6 +22,68 @@ export interface FetchAgentCardResult {
 }
 
 /**
+ * Maximum allowed response body size (1MB)
+ */
+const MAX_RESPONSE_SIZE = 1024 * 1024;
+
+/**
+ * Validates that a URL is not a private/internal URL
+ * Blocks localhost, private IP ranges, and non-HTTP/HTTPS protocols
+ * @param url - URL string to validate
+ * @returns true if URL should be blocked (private/local)
+ */
+export function isPrivateUrl(url: string): boolean {
+  const parsed = new URL(url);
+  const hostname = parsed.hostname.toLowerCase();
+
+  // localhost variants
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
+    return true;
+  }
+
+  // IPv6 loopback addresses (any within ::1/128)
+  if (hostname.startsWith('[') && hostname.includes('::')) {
+    const ipv6 = hostname.slice(1, -1);
+    if (ipv6 === '::1' || ipv6 === '0:0:0:0:0:0:0:1') {
+      return true;
+    }
+  }
+
+  // Private IPv4 address ranges
+  const ipv4Match = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number);
+    // 10.0.0.0/8
+    if (a === 10) return true;
+    // 172.16.0.0/12
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    // 192.168.0.0/16
+    if (a === 192 && b === 168) return true;
+    // 169.254.0.0/16 (link-local)
+    if (a === 169 && b === 254) return true;
+    // 127.0.0.0/8 (loopback - extra safety)
+    if (a === 127) return true;
+  }
+
+  // Private IPv6 address ranges
+  if (hostname.startsWith('[') && hostname.endsWith(']')) {
+    const ipv6 = hostname.slice(1, -1);
+    // fc00::/7 (unique local)
+    if (ipv6.startsWith('fc') || ipv6.startsWith('fd')) return true;
+    // fe80::/10 (link-local)
+    if (ipv6.startsWith('fe8') || ipv6.startsWith('fe9') ||
+        ipv6.startsWith('fea') || ipv6.startsWith('feb')) return true;
+  }
+
+  // Only allow HTTP and HTTPS protocols
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Normalizes URL for Agent Card endpoint
  * Appends /.well-known/agent.json if not present
  * Exported for testing
@@ -86,6 +148,14 @@ export async function fetchAgentCard(
     };
   }
 
+  // SSRF protection: Block private and local URLs
+  if (isPrivateUrl(agentCardUrl)) {
+    return {
+      ok: false,
+      error: 'Private or local URLs are not allowed',
+    };
+  }
+
   // Set up abort controller for timeout
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -101,8 +171,31 @@ export async function fetchAgentCard(
 
     clearTimeout(timeoutId);
 
+    // Response size limit: Check Content-Length header first
+    const contentLength = response.headers.get('content-length');
+    if (contentLength) {
+      const length = parseInt(contentLength, 10);
+      if (length > MAX_RESPONSE_SIZE) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Response too large: ${length} bytes (max ${MAX_RESPONSE_SIZE})`,
+        };
+      }
+    }
+
     // Get response body
     const bodyText = await response.text();
+
+    // Response size limit: Check actual body size
+    if (bodyText.length > MAX_RESPONSE_SIZE) {
+      return {
+        ok: false,
+        statusCode: response.status,
+        error: `Response body too large: ${bodyText.length} bytes (max ${MAX_RESPONSE_SIZE})`,
+      };
+    }
+
     const hash = computeHash(bodyText);
 
     // Handle non-OK responses

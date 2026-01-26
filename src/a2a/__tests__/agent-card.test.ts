@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fetchAgentCard, normalizeAgentCardUrl } from '../agent-card.js';
+import { fetchAgentCard, normalizeAgentCardUrl, isPrivateUrl } from '../agent-card.js';
 import type { AgentCard } from '../types.js';
 
 // Mock fetch
@@ -199,5 +199,205 @@ describe('fetchAgentCard', () => {
     const result2 = await fetchAgentCard('https://example.com');
 
     expect(result1.hash).toBe(result2.hash);
+  });
+});
+
+describe('isPrivateUrl - SSRF protection', () => {
+  it('should reject localhost', () => {
+    expect(isPrivateUrl('http://localhost:8080')).toBe(true);
+    expect(isPrivateUrl('https://localhost')).toBe(true);
+    expect(isPrivateUrl('http://localhost/.well-known/agent.json')).toBe(true);
+  });
+
+  it('should reject 127.0.0.1', () => {
+    expect(isPrivateUrl('http://127.0.0.1:8080')).toBe(true);
+    expect(isPrivateUrl('https://127.0.0.1')).toBe(true);
+    expect(isPrivateUrl('http://127.0.0.1/.well-known/agent.json')).toBe(true);
+  });
+
+  it('should reject IPv6 loopback', () => {
+    expect(isPrivateUrl('http://[::1]:8080')).toBe(true);
+    expect(isPrivateUrl('http://[0:0:0:0:0:0:0:1]')).toBe(true);
+  });
+
+  it('should reject private IPv4 ranges', () => {
+    // 10.0.0.0/8
+    expect(isPrivateUrl('http://10.0.0.1/agent')).toBe(true);
+    expect(isPrivateUrl('http://10.255.255.255')).toBe(true);
+
+    // 172.16.0.0/12
+    expect(isPrivateUrl('http://172.16.0.1/agent')).toBe(true);
+    expect(isPrivateUrl('http://172.31.255.255')).toBe(true);
+    expect(isPrivateUrl('http://172.15.0.1/agent')).toBe(false); // Just outside range
+    expect(isPrivateUrl('http://172.32.0.1/agent')).toBe(false); // Just outside range
+
+    // 192.168.0.0/16
+    expect(isPrivateUrl('http://192.168.0.1/agent')).toBe(true);
+    expect(isPrivateUrl('http://192.168.255.255')).toBe(true);
+    expect(isPrivateUrl('http://192.167.0.1/agent')).toBe(false); // Just outside range
+
+    // 169.254.0.0/16 (link-local)
+    expect(isPrivateUrl('http://169.254.1.1/agent')).toBe(true);
+
+    // 127.0.0.0/8 (loopback)
+    expect(isPrivateUrl('http://127.1.1.1/agent')).toBe(true);
+  });
+
+  it('should reject private IPv6 ranges', () => {
+    // fc00::/7 (unique local)
+    expect(isPrivateUrl('http://[fc00::1]/agent')).toBe(true);
+    expect(isPrivateUrl('http://[fd00::1]/agent')).toBe(true);
+
+    // fe80::/10 (link-local)
+    expect(isPrivateUrl('http://[fe80::1]/agent')).toBe(true);
+    expect(isPrivateUrl('http://[febf::1]/agent')).toBe(true);
+  });
+
+  it('should reject non-HTTP protocols', () => {
+    expect(isPrivateUrl('file:///etc/passwd')).toBe(true);
+    expect(isPrivateUrl('ftp://example.com')).toBe(true);
+    expect(isPrivateUrl('data:text/plain,hello')).toBe(true);
+  });
+
+  it('should allow public HTTP/HTTPS URLs', () => {
+    expect(isPrivateUrl('https://example.com')).toBe(false);
+    expect(isPrivateUrl('http://api.example.com')).toBe(false);
+    expect(isPrivateUrl('https://8.8.8.8/agent')).toBe(false); // Public IP
+    expect(isPrivateUrl('https://1.1.1.1/.well-known/agent.json')).toBe(false); // Public IP
+  });
+});
+
+describe('fetchAgentCard - SSRF protection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should reject localhost URLs', async () => {
+    const result = await fetchAgentCard('http://localhost:8080');
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Private');
+  });
+
+  it('should reject private IP ranges', async () => {
+    const privateUrls = [
+      'http://10.0.0.1/agent',
+      'http://172.16.0.1/agent',
+      'http://192.168.1.1/agent',
+      'http://169.254.1.1/agent',
+      'http://127.0.0.1/agent',
+    ];
+    for (const url of privateUrls) {
+      const result = await fetchAgentCard(url);
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('Private');
+    }
+  });
+
+  it('should reject non-HTTP protocols', async () => {
+    const result = await fetchAgentCard('file:///etc/passwd');
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Private');
+  });
+});
+
+describe('fetchAgentCard - Response size limits', () => {
+  const validAgentCard: AgentCard = {
+    name: 'Test Agent',
+    url: 'https://test.example.com',
+    version: '1.0.0',
+    description: 'A test agent',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should reject responses larger than 1MB via Content-Length header', async () => {
+    const largeSize = 1024 * 1024 + 1; // 1MB + 1 byte
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-length': largeSize.toString() }),
+      text: async () => '{}',
+      json: async () => ({}),
+      url: 'https://example.com/.well-known/agent.json',
+    } as Response);
+
+    const result = await fetchAgentCard('https://example.com');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('too large');
+    expect(result.error).toContain('max');
+  });
+
+  it('should reject responses larger than 1MB via actual body size', async () => {
+    // Create a response larger than 1MB
+    const largeBody = JSON.stringify({
+      ...validAgentCard,
+      data: 'x'.repeat(1024 * 1024 + 100), // 1MB + 100 bytes
+    });
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers(), // No Content-Length header
+      text: async () => largeBody,
+      json: async () => JSON.parse(largeBody),
+      url: 'https://example.com/.well-known/agent.json',
+    } as Response);
+
+    const result = await fetchAgentCard('https://example.com');
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('too large');
+    expect(result.error).toContain('max');
+  });
+
+  it('should accept responses within size limit', async () => {
+    const responseText = JSON.stringify(validAgentCard);
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-length': responseText.length.toString() }),
+      text: async () => responseText,
+      json: async () => validAgentCard,
+      url: 'https://example.com/.well-known/agent.json',
+    } as Response);
+
+    const result = await fetchAgentCard('https://example.com');
+
+    expect(result.ok).toBe(true);
+    expect(result.agentCard).toEqual(validAgentCard);
+  });
+
+  it('should accept large but still within limit response (900KB)', async () => {
+    const nearLimitData = 'x'.repeat(900 * 1024); // 900KB
+    const largeButValidCard = {
+      ...validAgentCard,
+      data: nearLimitData,
+    };
+    const responseText = JSON.stringify(largeButValidCard);
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: new Headers({ 'content-length': responseText.length.toString() }),
+      text: async () => responseText,
+      json: async () => largeButValidCard,
+      url: 'https://example.com/.well-known/agent.json',
+    } as Response);
+
+    const result = await fetchAgentCard('https://example.com');
+
+    expect(result.ok).toBe(true);
+    expect(result.agentCard).toBeDefined();
+    expect(result.agentCard?.name).toBe(validAgentCard.name);
+    expect(result.agentCard?.version).toBe(validAgentCard.version);
   });
 });

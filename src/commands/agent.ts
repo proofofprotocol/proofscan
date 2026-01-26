@@ -9,7 +9,7 @@ import { Command } from 'commander';
 import { TargetsStore } from '../db/targets-store.js';
 import { AgentCacheStore } from '../db/agent-cache-store.js';
 import { output, outputError, outputSuccess, outputTable } from '../utils/output.js';
-import { fetchAgentCard } from '../a2a/agent-card.js';
+import { fetchAgentCard, isPrivateUrl } from '../a2a/agent-card.js';
 import type { AgentConfigV1 } from '../a2a/types.js';
 
 /**
@@ -44,6 +44,12 @@ export function createAgentCommand(getConfigPath: () => string): Command {
           new URL(options.url);
         } catch {
           outputError(`Invalid URL: ${options.url}`);
+          process.exit(1);
+        }
+
+        // SSRF protection: Block private and local URLs
+        if (isPrivateUrl(options.url)) {
+          outputError(`Private or local URLs are not allowed: ${options.url}`);
           process.exit(1);
         }
 
