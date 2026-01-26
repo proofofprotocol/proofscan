@@ -47,7 +47,7 @@ describe('agent command', () => {
           url: 'https://example.com',
           ttl_seconds: 3600,
         },
-      });
+      }, { id: 'test-agent' });
     });
 
     it('should fail on duplicate ID', async () => {
@@ -110,7 +110,7 @@ describe('agent command', () => {
           url: 'https://example.com',
           ttl_seconds: 7200,
         },
-      });
+      }, { id: 'test-agent' });
     });
   });
 

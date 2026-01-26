@@ -74,7 +74,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
           name: options.name,
           enabled: true,
           config,
-        });
+        }, { id });
 
         outputSuccess(`Agent '${id}' added`);
       } catch (error) {
@@ -313,7 +313,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
         if (!options.refresh) {
           const cache = cacheStore.get(agent.id);
           if (cache && cache.agentCard) {
-            const isExpired = cache.expiresAt && new Date(cache.expiresAt) < new Date();
+            const isExpired = cache.expiresAt && new Date(cache.expiresAt) <= new Date();
             if (!isExpired) {
               output(`Agent Card cached (expires: ${cache.expiresAt})`);
               output(cache.agentCard);

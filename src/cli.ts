@@ -30,6 +30,7 @@ const VERSION = packageJson.version;
 import {
   createConfigCommand,
   createConnectorsCommand,
+  createAgentCommand,
   createScanCommand,
   createSessionsCommand,
   createArchiveCommand,
@@ -150,6 +151,9 @@ const connectorCmd = createConnectorsCommand(getConfigPath);
 connectorCmd.name('connector').description('Alias for connectors');
 program.addCommand(connectorCmd);
 
+// agent (Phase 7.0: A2A agent management)
+program.addCommand(createAgentCommand(getConfigPath));
+
 // sessions (kept for compatibility)
 program.addCommand(createSessionsCommand(getConfigPath));
 
@@ -228,7 +232,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'rpc', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'plans', 'monitor', 'i18n', 'help'
+  'connectors', 'connector', 'sessions', 'rpc', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'plans', 'monitor', 'i18n', 'help', 'agent'
 ]);
 
 // Shell-only commands (not available as CLI commands)
