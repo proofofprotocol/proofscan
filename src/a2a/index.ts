@@ -7,3 +7,4 @@
 export * from './types.js';
 export * from './config.js';
 export * from './agent-card.js';
+export * from './client.js';

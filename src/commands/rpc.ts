@@ -27,6 +27,8 @@ import {
 } from '../utils/session-resolver.js';
 import { redactDeep } from '../secrets/redaction.js';
 import { t } from '../i18n/index.js';
+import { createA2AClient } from '../a2a/client.js';
+import type { A2ATask, A2AMessage } from '../a2a/client.js';
 import {
   DEFAULT_EMBED_MAX_BYTES,
   toRpcStatus,
@@ -581,6 +583,129 @@ export function createRpcCommand(getConfigPath: () => string): Command {
           return;
         }
         throw error;
+      }
+    });
+
+  // rpc send <agent> <message> [--timeout <ms>] [--json] [--blocking]
+  cmd
+    .command('send')
+    .description('Send a message to an A2A agent')
+    .argument('<agent>', 'Agent ID or prefix')
+    .argument('<message>', 'Message to send')
+    .option('--timeout <ms>', 'Timeout in milliseconds', '30000')
+    .option('--json', 'Output raw JSON response')
+    .option('--blocking', 'Wait for task completion before returning')
+    .action(async (agentId, message, options) => {
+      try {
+        const manager = new ConfigManager(getConfigPath());
+        const configDir = manager.getConfigDir();
+
+        // Create A2A client
+        const clientResult = await createA2AClient(configDir, agentId);
+
+        if (!clientResult.ok) {
+          console.error(`Error: ${clientResult.error}`);
+          process.exit(1);
+        }
+
+        const { client, agentCard } = clientResult;
+
+        // Parse timeout
+        const timeout = parseInt(options.timeout, 10);
+        if (isNaN(timeout) || timeout < 0) {
+          console.error('Error: Timeout must be a positive integer');
+          process.exit(1);
+        }
+
+        // Send message
+        const result = await client.sendMessage(message, {
+          timeout,
+          blocking: options.blocking,
+        });
+
+        if (!result.ok) {
+          if (options.json) {
+            output(result);
+          } else {
+            console.error(`Error: ${result.error}`);
+            if (result.statusCode) {
+              console.error(`Status code: ${result.statusCode}`);
+            }
+          }
+          process.exit(1);
+        }
+
+        // Output result
+        if (options.json) {
+          output(result);
+          return;
+        }
+
+        console.log(`Agent: ${agentCard.name} (${agentCard.url})`);
+        console.log(`Version: ${agentCard.version}`);
+        console.log();
+
+        // Show task
+        if (result.task) {
+          const task = result.task;
+          console.log(`Task ID: ${task.id}`);
+          console.log(`Status: ${task.status}`);
+          console.log();
+
+          // Show messages
+          for (const msg of task.messages) {
+            const role = msg.role === 'assistant' ? '🤖 Assistant' : '👤 User';
+            console.log(`${role}:`);
+
+            for (const part of msg.parts) {
+              if ('text' in part) {
+                console.log(`  ${part.text}`);
+              } else if ('data' in part) {
+                console.log(`  [Data: ${part.mimeType}, ${part.data.length} bytes]`);
+              }
+            }
+            console.log();
+          }
+
+          // Show artifacts if present
+          if (task.artifacts && task.artifacts.length > 0) {
+            console.log('Artifacts:');
+            for (const artifact of task.artifacts) {
+              const name = artifact.name || 'unnamed';
+              const desc = artifact.description ? ` - ${artifact.description}` : '';
+              console.log(`  - ${name}${desc}`);
+            }
+            console.log();
+          }
+
+          // Show pending status hint
+          if (task.status === 'pending' || task.status === 'working' || task.status === 'input_required') {
+            console.log('Task is still in progress.');
+            console.log(`Use \`pfscan rpc get-task ${task.id}\` to check status (when implemented).`);
+          }
+        }
+
+        // Show direct message
+        if (result.message) {
+          const msg = result.message;
+          const role = msg.role === 'assistant' ? '🤖 Assistant' : '👤 User';
+          console.log(`${role}:`);
+
+          for (const part of msg.parts) {
+            if ('text' in part) {
+              console.log(`  ${part.text}`);
+            } else if ('data' in part) {
+              console.log(`  [Data: ${part.mimeType}, ${part.data.length} bytes]`);
+            }
+          }
+        }
+      } catch (error) {
+        if (error instanceof Error) {
+          console.error('Failed to send message:', error.message);
+        } else {
+          console.error('Failed to send message:', String(error));
+        }
+        process.exit(1);
       }
     });
 
