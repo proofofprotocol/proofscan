@@ -7,7 +7,7 @@
  * Phase 4 - Client Implementation
  */
 
-import type { AgentCard } from './types.js';
+import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult } from './types.js';
 import { isPrivateUrl } from './agent-card.js';
 
 // Maximum response size (1MB) to prevent DoS
@@ -71,6 +71,17 @@ export interface SendMessageResult {
   message?: A2AMessage;
   error?: string;
   statusCode?: number;
+}
+
+export interface StreamMessageOptions {
+  timeout?: number; // default: 60000ms
+  headers?: Record<string, string>;
+  onStatus?: (event: TaskStatusUpdateEvent) => void;
+  onArtifact?: (event: TaskArtifactUpdateEvent) => void;
+  onMessage?: (message: A2AMessage) => void;
+  onTask?: (task: A2ATask) => void;
+  onError?: (error: string) => void;
+  signal?: AbortSignal; // External abort signal
 }
 
 // ===== A2A Client =====
@@ -412,6 +423,145 @@ export class A2AClient {
   }
 
   /**
+   * Stream message to agent
+   * POST /message/stream (JSON-RPC 2.0 + SSE response)
+   */
+  async streamMessage(
+    message: string | A2AMessage,
+    options: StreamMessageOptions = {}
+  ): Promise<StreamMessageResult> {
+    const {
+      timeout = 60000,
+      headers = {},
+      onStatus,
+      onArtifact,
+      onMessage,
+      onTask,
+      onError,
+      signal,
+    } = options;
+
+    // Build JSON-RPC request
+    const a2aMessage: A2AMessage =
+      typeof message === 'string'
+        ? { role: 'user', parts: [{ text: message }] }
+        : message;
+
+    const requestId = `req-${Date.now()}-${++this.requestCounter}-${Math.random().toString(36).slice(2, 9)}`;
+    const request: JsonRpcRequest = {
+      jsonrpc: '2.0',
+      id: requestId,
+      method: 'message/stream',
+      params: { message: a2aMessage },
+    };
+
+    // Abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    // Combine with external signal if provided
+    if (signal) {
+      signal.addEventListener('abort', () => controller.abort());
+    }
+
+    try {
+      // SSRF protection (defense-in-depth)
+      if (isPrivateUrl(this.baseUrl)) {
+        return {
+          ok: false,
+          error: 'Private or local URLs are not allowed',
+        };
+      }
+
+      const response = await fetch(`${this.baseUrl}/message/stream`, {
+        method: 'POST',
+        headers: { ...this.defaultHeaders, ...headers },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: `HTTP ${response.status}: ${response.statusText}`,
+        };
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('text/event-stream')) {
+        return {
+          ok: false,
+          error: `Expected SSE, got ${contentType}`,
+        };
+      }
+
+      // Process SSE stream
+      const reader = response.body?.getReader();
+      if (!reader) {
+        return { ok: false, error: 'No response body' };
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let taskId: string | undefined;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') continue;
+
+            try {
+              const json = JSON.parse(data);
+              const event = this.parseStreamEvent(json);
+
+              if (event) {
+                switch (event.type) {
+                  case 'status':
+                    taskId = event.event.taskId;
+                    onStatus?.(event.event);
+                    if (event.event.final) {
+                      return { ok: true, taskId };
+                    }
+                    break;
+                  case 'artifact':
+                    onArtifact?.(event.event);
+                    break;
+                  case 'message':
+                    onMessage?.(event.message);
+                    break;
+                  case 'task':
+                    taskId = event.task.id;
+                    onTask?.(event.task);
+                    break;
+                }
+              }
+            } catch (e) {
+              onError?.(`Parse error: ${e}`);
+            }
+          }
+        }
+      }
+
+      return { ok: true, taskId };
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return { ok: false, error: `Timeout after ${timeout}ms` };
+      }
+      return { ok: false, error: String(error) };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
    * Parse Task from JSON-RPC response
    */
   private parseTask(data: Record<string, unknown>): A2ATask {
@@ -524,6 +674,84 @@ export class A2AClient {
     }
 
     return 'pending';
+  }
+
+  /**
+   * Parse SSE event data
+   */
+  private parseStreamEvent(data: unknown): StreamEvent | null {
+    if (!data || typeof data !== 'object') return null;
+
+    const obj = data as Record<string, unknown>;
+
+    // JSON-RPC response wrapper
+    const result = obj.result as Record<string, unknown> | undefined;
+    if (!result) return null;
+
+    // Check event type
+    if ('status' in result && 'taskId' in result) {
+      return {
+        type: 'status',
+        event: this.parseStatusEvent(result),
+      };
+    }
+
+    if ('artifact' in result && 'taskId' in result) {
+      return {
+        type: 'artifact',
+        event: this.parseArtifactEvent(result),
+      };
+    }
+
+    if ('id' in result && 'status' in result && 'messages' in result) {
+      return {
+        type: 'task',
+        task: this.parseTask(result),
+      };
+    }
+
+    if ('role' in result && 'parts' in result) {
+      return {
+        type: 'message',
+        message: this.parseMessage(result),
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse status event
+   */
+  private parseStatusEvent(data: Record<string, unknown>): TaskStatusUpdateEvent {
+    return {
+      taskId: String(data.taskId || ''),
+      contextId: data.contextId ? String(data.contextId) : undefined,
+      status: this.parseTaskStatus(data.status),
+      message: data.message ? this.parseMessage(data.message) : undefined,
+      final: Boolean(data.final),
+    };
+  }
+
+  /**
+   * Parse artifact event
+   */
+  private parseArtifactEvent(data: Record<string, unknown>): TaskArtifactUpdateEvent {
+    const artifact = data.artifact as Record<string, unknown> || {};
+    return {
+      taskId: String(data.taskId || ''),
+      contextId: data.contextId ? String(data.contextId) : undefined,
+      artifact: {
+        name: artifact.name ? String(artifact.name) : undefined,
+        description: artifact.description ? String(artifact.description) : undefined,
+        parts: Array.isArray(artifact.parts)
+          ? artifact.parts.map((p: unknown) => this.parsePart(p))
+          : [],
+        index: typeof artifact.index === 'number' ? artifact.index : undefined,
+        append: Boolean(artifact.append),
+        lastChunk: Boolean(artifact.lastChunk),
+      },
+    };
   }
 }
 
