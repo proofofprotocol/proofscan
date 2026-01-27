@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, EVENTS_DB_MIGRATION_5_TO_6_DATA, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -286,6 +286,9 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
           }
         }
       }
+
+      // Run data migration: set target_id = connector_id for existing sessions
+      db.exec(EVENTS_DB_MIGRATION_5_TO_6_DATA);
 
       db.exec('COMMIT');
     } catch (err) {
