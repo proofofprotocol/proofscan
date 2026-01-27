@@ -28,7 +28,6 @@ import {
 import { redactDeep } from '../secrets/redaction.js';
 import { t } from '../i18n/index.js';
 import { createA2AClient } from '../a2a/client.js';
-import type { A2ATask, A2AMessage } from '../a2a/client.js';
 import {
   DEFAULT_EMBED_MAX_BYTES,
   toRpcStatus,
@@ -586,7 +585,7 @@ export function createRpcCommand(getConfigPath: () => string): Command {
       }
     });
 
-  // rpc send <agent> <message> [--timeout <ms>] [--json] [--blocking]
+  // rpc send <agent> <message> [--timeout <ms>] [--json] [--blocking] [--stream]
   cmd
     .command('send')
     .description('Send a message to an A2A agent')
@@ -595,6 +594,7 @@ export function createRpcCommand(getConfigPath: () => string): Command {
     .option('--timeout <ms>', 'Timeout in milliseconds', '30000')
     .option('--json', 'Output raw JSON response')
     .option('--blocking', 'Wait for task completion before returning')
+    .option('--stream', 'Stream response (SSE)')
     .action(async (agentId, message, options) => {
       try {
         const manager = new ConfigManager(getConfigPath());
@@ -617,7 +617,40 @@ export function createRpcCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
-        // Send message
+        // Streaming mode
+        if (options.stream) {
+          console.log(`Streaming to ${agentId}...`);
+
+          const result = await client.streamMessage(message, {
+            timeout,
+            onStatus: (event) => {
+              console.log(`[${event.status}] ${event.taskId}`);
+              if (event.message) {
+                const text = extractTextFromMessage(event.message);
+                if (text) process.stdout.write(text);
+              }
+            },
+            onArtifact: (event) => {
+              console.log(`\n[Artifact] ${event.artifact.name || 'unnamed'}`);
+            },
+            onMessage: (msg) => {
+              const text = extractTextFromMessage(msg);
+              if (text) process.stdout.write(text);
+            },
+            onError: (err) => {
+              console.error(`\n[Error] ${err}`);
+            },
+          });
+
+          console.log(); // newline
+          if (!result.ok) {
+            console.error(`Stream error: ${result.error}`);
+            process.exit(1);
+          }
+          return;
+        }
+
+        // Non-streaming mode
         const result = await client.sendMessage(message, {
           timeout,
           blocking: options.blocking,
@@ -708,6 +741,16 @@ export function createRpcCommand(getConfigPath: () => string): Command {
         process.exit(1);
       }
     });
+
+/**
+ * Extract text from message
+ */
+function extractTextFromMessage(msg: { role: string; parts: Array<{ text: string } | { data: string; mimeType: string }> }): string {
+  return msg.parts
+    .filter((p): p is { text: string } => 'text' in p)
+    .map(p => p.text)
+    .join('');
+}
 
   return cmd;
 }
