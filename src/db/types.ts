@@ -12,10 +12,11 @@ export type ActorKind = 'human' | 'agent' | 'system';
 export type EventDirection = 'client_to_server' | 'server_to_client';
 export type EventKind = 'request' | 'response' | 'notification' | 'transport_event';
 
-// Sessions table (Phase 3.4: added actor_*, secret_ref_count)
+// Sessions table (Phase 3.4: added actor_*, secret_ref_count; Phase 6: added target_id)
 export interface Session {
   session_id: string;
   connector_id: string;
+  target_id: string | null; // Phase 6: Unified connector/agent target ID
   started_at: string; // ISO8601
   ended_at: string | null;
   exit_reason: ExitReason | null;
@@ -49,7 +50,7 @@ export interface RpcCall {
   error_code: number | null;
 }
 
-// Events table (schema version 2)
+// Events table (schema version 2; Phase 6: added normalized_json)
 export interface Event {
   event_id: string;
   session_id: string;
@@ -61,6 +62,7 @@ export interface Event {
   summary: string | null;     // Phase 2.1: human-readable summary
   payload_hash: string | null; // Phase 2.1: SHA-256 first 16 chars
   raw_json: string | null;
+  normalized_json: string | null; // Phase 6: Protocol-agnostic normalized format
 }
 
 // Proofs table (proofs.db)

@@ -249,6 +249,17 @@ ALTER TABLE sessions ADD COLUMN target_id TEXT;
 ALTER TABLE events ADD COLUMN normalized_json TEXT;
 `;
 
+/**
+ * Data migration from version 5 to version 6
+ * Migrate existing sessions: set target_id = connector_id
+ */
+export const EVENTS_DB_MIGRATION_5_TO_6_DATA = `
+-- Migrate existing sessions: set target_id = connector_id
+UPDATE sessions
+SET target_id = connector_id
+WHERE target_id IS NULL;
+`;
+
 // proofs.db schema (version 2: added plans and runs tables)
 export const PROOFS_DB_SCHEMA = `
 -- Proofs table (immutable, never pruned)

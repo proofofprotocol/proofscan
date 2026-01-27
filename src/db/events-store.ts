@@ -16,6 +16,7 @@ import type {
   UserRef,
   RefKind,
 } from './types.js';
+import { normalizeMcpEvent, normalizeA2aEvent } from '../a2a/normalizer.js';
 
 export class EventsStore {
   private configDir?: string;
@@ -31,13 +32,16 @@ export class EventsStore {
   // ==================== Sessions ====================
 
   createSession(connectorId: string, options?: {
+    targetId?: string;
     actorId?: string;
     actorKind?: string;
     actorLabel?: string;
   }): Session {
+    const targetId = options?.targetId || connectorId;
     const session: Session = {
       session_id: randomUUID(),
       connector_id: connectorId,
+      target_id: targetId,
       started_at: new Date().toISOString(),
       ended_at: null,
       exit_reason: null,
@@ -50,13 +54,14 @@ export class EventsStore {
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO sessions (session_id, connector_id, started_at, ended_at, exit_reason, protected, created_at, actor_id, actor_kind, actor_label, secret_ref_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sessions (session_id, connector_id, target_id, started_at, ended_at, exit_reason, protected, created_at, actor_id, actor_kind, actor_label, secret_ref_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       session.session_id,
       session.connector_id,
+      session.target_id,
       session.started_at,
       session.ended_at,
       session.exit_reason,
@@ -138,6 +143,19 @@ export class EventsStore {
 
   // ==================== Events ====================
 
+  /**
+   * Save an event with optional normalization
+   * @param sessionId - Session ID
+   * @param direction - Event direction
+   * @param kind - Event kind
+   * @param options - Event options
+   * @param options.rpcId - Optional RPC ID
+   * @param options.rawJson - Raw JSON payload
+   * @param options.seq - Sequence number
+   * @param options.summary - Human-readable summary
+   * @param options.payloadHash - Payload hash
+   * @param options.protocol - Protocol for normalization ('mcp' | 'a2a')
+   */
   saveEvent(
     sessionId: string,
     direction: EventDirection,
@@ -148,8 +166,27 @@ export class EventsStore {
       seq?: number;
       summary?: string;
       payloadHash?: string;
+      protocol?: 'mcp' | 'a2a';
     } = {}
   ): Event {
+    // Phase 6: Normalize event if protocol is specified
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    let normalizedJson: string | null = null;
+    if (options.protocol && options.rawJson) {
+      try {
+        const raw = JSON.parse(options.rawJson);
+        const normalized = options.protocol === 'mcp'
+          ? normalizeMcpEvent(raw)
+          : normalizeA2aEvent(raw);
+        if (normalized) {
+          normalizedJson = JSON.stringify(normalized);
+        }
+      } catch {
+        // Silently fail if JSON parsing or normalization fails
+        // normalized_json remains null
+      }
+    }
+
     const event: Event = {
       event_id: randomUUID(),
       session_id: sessionId,
@@ -161,11 +198,12 @@ export class EventsStore {
       summary: options.summary || null,
       payload_hash: options.payloadHash || null,
       raw_json: options.rawJson || null,
+      normalized_json,
     };
 
     const stmt = this.db.prepare(`
-      INSERT INTO events (event_id, session_id, rpc_id, direction, kind, ts, seq, summary, payload_hash, raw_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO events (event_id, session_id, rpc_id, direction, kind, ts, seq, summary, payload_hash, raw_json, normalized_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -178,7 +216,8 @@ export class EventsStore {
       event.seq,
       event.summary,
       event.payload_hash,
-      event.raw_json
+      event.raw_json,
+      normalized_json
     );
 
     return event;
