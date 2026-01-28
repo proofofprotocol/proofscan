@@ -170,7 +170,6 @@ export class EventsStore {
     } = {}
   ): Event {
     // Phase 6: Normalize event if protocol is specified
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     let normalizedJson: string | null = null;
     if (options.protocol && options.rawJson) {
       try {

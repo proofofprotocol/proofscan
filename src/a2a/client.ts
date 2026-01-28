@@ -7,6 +7,7 @@
  * Phase 4 - Client Implementation
  */
 
+import { randomUUID } from 'crypto';
 import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult, A2AMessage, A2ATask } from './types.js';
 import { isPrivateUrl } from './agent-card.js';
 
@@ -72,7 +73,6 @@ export class A2AClient {
   private baseUrl: string;
   private defaultHeaders: Record<string, string>;
   private agentCard: AgentCard;
-  private requestCounter = 0;
 
   constructor(agentCard: AgentCard, options?: { headers?: Record<string, string> }) {
     this.agentCard = agentCard;
@@ -107,7 +107,7 @@ export class A2AClient {
         : message;
 
     // Build JSON-RPC request with unique ID
-    const requestId = `req-${Date.now()}-${++this.requestCounter}-${Math.random().toString(36).slice(2, 9)}`;
+    const requestId = randomUUID();
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
@@ -245,7 +245,7 @@ export class A2AClient {
    * POST /tasks/get (JSON-RPC 2.0)
    */
   async getTask(taskId: string): Promise<SendMessageResult> {
-    const requestId = `req-${Date.now()}-${++this.requestCounter}-${Math.random().toString(36).slice(2, 9)}`;
+    const requestId = randomUUID();
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
@@ -332,7 +332,7 @@ export class A2AClient {
    * POST /tasks/cancel (JSON-RPC 2.0)
    */
   async cancelTask(taskId: string): Promise<{ ok: boolean; error?: string }> {
-    const requestId = `req-${Date.now()}-${++this.requestCounter}-${Math.random().toString(36).slice(2, 9)}`;
+    const requestId = randomUUID();
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
@@ -426,7 +426,7 @@ export class A2AClient {
         ? { role: 'user', parts: [{ text: message }] }
         : message;
 
-    const requestId = `req-${Date.now()}-${++this.requestCounter}-${Math.random().toString(36).slice(2, 9)}`;
+    const requestId = randomUUID();
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
