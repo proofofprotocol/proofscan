@@ -24,6 +24,11 @@ export interface A2AMessageRecord {
 }
 
 /**
+ * Summary truncation length constant
+ */
+const SUMMARY_MAX_LENGTH = 50;
+
+/**
  * Session manager for A2A conversations
  */
 export class A2ASessionManager {
@@ -31,10 +36,18 @@ export class A2ASessionManager {
   private targetId: string;
   private currentSessionId: string | null = null;
   private currentContextId: string | null = null;
+  private contextIdToSessionId: Map<string, string> = new Map();
 
   constructor(eventsStore: EventsStore, targetId: string) {
     this.eventsStore = eventsStore;
     this.targetId = targetId;
+  }
+
+  /**
+   * Get the EventsStore instance
+   */
+  getEventsStore(): EventsStore {
+    return this.eventsStore;
   }
 
   /**
@@ -49,9 +62,9 @@ export class A2ASessionManager {
       return this.currentSessionId;
     }
 
-    // If new contextId, try to find existing session by contextId
+    // If new contextId, try to find existing session by contextId using in-memory cache
     if (contextId) {
-      const existingSession = this.findSessionByContextId(contextId, this.targetId);
+      const existingSession = this.contextIdToSessionId.get(contextId);
       if (existingSession) {
         this.currentSessionId = existingSession;
         this.currentContextId = contextId;
@@ -68,6 +81,11 @@ export class A2ASessionManager {
 
     this.currentSessionId = session.session_id;
     this.currentContextId = contextId || null;
+
+    // Store mapping in memory cache
+    if (contextId) {
+      this.contextIdToSessionId.set(contextId, this.currentSessionId);
+    }
 
     return this.currentSessionId;
   }
@@ -162,16 +180,15 @@ export class A2ASessionManager {
   }
 
   /**
-   * Find an existing session by contextId
+   * Find an existing session by contextId using in-memory cache
+   *
+   * @param contextId - A2A context ID
+   * @param targetId - Target ID (unused in in-memory implementation)
+   * @returns Session ID or null if not found
+   * @private
    */
   private findSessionByContextId(contextId: string, targetId: string): string | null {
-    // Look for a session with the same contextId in user_refs
-    // For now, we'll just check if we have a session with this target
-    // In the future, we could store contextId mapping in user_refs or add it to sessions table
-
-    // For simplicity, just return null (always create new session per contextId)
-    // TODO: Implement contextId persistence in sessions table
-    return null;
+    return this.contextIdToSessionId.get(contextId) ?? null;
   }
 
   /**
@@ -194,7 +211,9 @@ export class A2ASessionManager {
   private createSummary(message: A2AMessage, isRequest: boolean): string {
     const role = message.role === 'assistant' ? '🤖' : '👤';
     const content = this.extractTextContent(message);
-    const truncated = content.length > 50 ? content.slice(0, 50) + '...' : content;
+    const truncated = content.length > SUMMARY_MAX_LENGTH
+      ? content.slice(0, SUMMARY_MAX_LENGTH) + '...'
+      : content;
 
     return `${role} ${isRequest ? '→' : '←'} ${truncated}`;
   }

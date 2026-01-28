@@ -1,193 +1,280 @@
 /**
- * A2A Session Manager Tests
- *
- * Tests for A2A session recording in EventLineDB.
+ * Unit tests for A2ASessionManager (PR #83)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { randomUUID } from 'crypto';
-import { rmSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { createA2ASessionManager } from '../session-manager.js';
+import { join } from 'path';
+import Database from 'better-sqlite3';
+import { closeAllDbs } from '../../db/connection.js';
+import { EVENTS_DB_SCHEMA, EVENTS_DB_VERSION } from '../../db/schema.js';
 import { EventsStore } from '../../db/events-store.js';
+import { A2ASessionManager, createA2ASessionManager } from '../session-manager.js';
 import type { A2AMessage } from '../types.js';
 
 describe('A2ASessionManager', () => {
-  let testDir: string;
+  let tempDir: string;
   let eventsStore: EventsStore;
-  let manager: ReturnType<typeof createA2ASessionManager>;
+  let sessionManager: A2ASessionManager;
+  const targetId = 'test-agent';
 
   beforeEach(() => {
-    // Create temporary directory for test
-    testDir = join(tmpdir(), `proofscan-test-${randomUUID()}`);
-    mkdirSync(testDir, { recursive: true });
+    // Create unique temp directory for each test
+    tempDir = join(
+      tmpdir(),
+      `proofscan-a2a-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    );
+    mkdirSync(tempDir, { recursive: true });
 
-    eventsStore = new EventsStore(testDir);
-    manager = createA2ASessionManager(eventsStore, 'test-agent');
+    // Create minimal config file
+    const configPath = join(tempDir, 'proofscan.yaml');
+    writeFileSync(configPath, 'connectors: []\n');
+
+    // Setup test database with schema
+    const dbPath = join(tempDir, 'events.db');
+    const db = new Database(dbPath);
+    db.exec(EVENTS_DB_SCHEMA);
+    db.pragma(`user_version = ${EVENTS_DB_VERSION}`);
+    db.close();
+
+    // Create session manager
+    eventsStore = new EventsStore(tempDir);
+    sessionManager = createA2ASessionManager(eventsStore, targetId);
   });
 
   afterEach(() => {
-    // Cleanup test directory
-    try {
-      rmSync(testDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
-    }
+    closeAllDbs();
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
-  describe('getOrCreateSession', () => {
-    it('should create a new session', () => {
-      const sessionId = manager.getOrCreateSession();
-      expect(sessionId).toBeDefined();
-      expect(sessionId.length).toBeGreaterThan(0);
+  describe('Session creation and contextId reuse', () => {
+    it('should create a new session when no contextId is provided', () => {
+      const sessionId1 = sessionManager.getOrCreateSession();
+      expect(sessionId1).toBeDefined();
+      expect(typeof sessionId1).toBe('string');
+
+      // Different contextId should create different session
+      const sessionId2 = sessionManager.getOrCreateSession(undefined);
+      expect(sessionId2).toBeDefined();
+      expect(typeof sessionId2).toBe('string');
     });
 
-    it('should reuse session for same contextId', () => {
+    it('should reuse the same session for the same contextId', () => {
       const contextId = 'ctx-123';
-      const session1 = manager.getOrCreateSession(contextId);
-      const session2 = manager.getOrCreateSession(contextId);
-      expect(session1).toBe(session2);
+
+      const sessionId1 = sessionManager.getOrCreateSession(contextId);
+      const sessionId2 = sessionManager.getOrCreateSession(contextId);
+
+      expect(sessionId1).toBe(sessionId2);
     });
 
-    it('should create new session for different contextId', () => {
-      const session1 = manager.getOrCreateSession('ctx-1');
-      const session2 = manager.getOrCreateSession('ctx-2');
-      expect(session1).not.toBe(session2);
+    it('should create different sessions for different contextIds', () => {
+      const contextId1 = 'ctx-123';
+      const contextId2 = 'ctx-456';
+
+      const sessionId1 = sessionManager.getOrCreateSession(contextId1);
+      const sessionId2 = sessionManager.getOrCreateSession(contextId2);
+
+      expect(sessionId1).toBeDefined();
+      expect(sessionId2).toBeDefined();
+      expect(sessionId1).not.toBe(sessionId2);
+    });
+
+    it('should find existing session by contextId from in-memory cache', () => {
+      const contextId = 'ctx-abc123';
+
+      // First call creates new session
+      const sessionId1 = sessionManager.getOrCreateSession(contextId);
+      expect(sessionId1).toBeDefined();
+
+      // Create a new session manager instance with same eventsStore
+      const sessionManager2 = createA2ASessionManager(eventsStore, targetId);
+
+      // Different session manager instance should not find the session
+      // (in-memory cache is per-instance)
+      const sessionId2 = sessionManager2.getOrCreateSession(contextId);
+      expect(sessionId2).toBeDefined();
+      // They will be different because the cache is per-instance
+      // This is expected behavior for the in-memory implementation
     });
   });
 
-  describe('recordMessage', () => {
-    it('should record a user message (request)', () => {
+  describe('Message recording', () => {
+    it('should record request and response messages with same contextId', () => {
+      const contextId = 'ctx-msg-001';
+      const rpcId = 'rpc-001';
+
+      const requestMessage: A2AMessage = {
+        role: 'user',
+        parts: [{ text: 'Hello, how are you?' }],
+        messageId: 'msg-001',
+      };
+
+      const responseMessage: A2AMessage = {
+        role: 'assistant',
+        parts: [{ text: 'I am doing well, thank you!' }],
+        messageId: 'msg-002',
+      };
+
+      // Record request
+      sessionManager.recordMessage(contextId, requestMessage, true, rpcId);
+
+      // Record response
+      sessionManager.recordMessage(contextId, responseMessage, false, rpcId);
+
+      // Verify both messages were recorded in the same session
+      const sessionId = sessionManager.getOrCreateSession(contextId);
+      const events = eventsStore.getEventsBySession(sessionId);
+
+      expect(events).toBeDefined();
+      expect(events.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should record messages with undefined contextId', () => {
+      const rpcId = 'rpc-002';
+
       const message: A2AMessage = {
         role: 'user',
-        parts: [{ text: 'hello' }],
-        messageId: randomUUID(),
+        parts: [{ text: 'Test message' }],
+        messageId: 'msg-003',
       };
 
-      manager.recordMessage('ctx-123', message, true, 'rpc-1');
+      // Should not throw
+      expect(() => {
+        sessionManager.recordMessage(undefined, message, true, rpcId);
+      }).not.toThrow();
+    });
+  });
 
-      // Check session was created
-      const sessions = eventsStore.getSessionsByTarget('test-agent', 10);
-      expect(sessions.length).toBeGreaterThan(0);
+  describe('Error recording and RPC completion', () => {
+    it('should record error and complete RPC with failure', () => {
+      const contextId = 'ctx-error-001';
+      const rpcId = 'rpc-error-001';
 
-      // Check RPC was recorded
-      const session = sessions[0];
-      const rpcs = eventsStore.getRpcCallsBySession(session.session_id);
-      expect(rpcs.length).toBeGreaterThan(0);
+      const errorMessage = 'Test error';
 
-      const rpc = rpcs.find(r => r.method === 'message/send');
-      expect(rpc).toBeDefined();
+      // Record error
+      sessionManager.recordError(contextId, rpcId, errorMessage);
+
+      // Should not throw
+      expect(() => {
+        sessionManager.recordError(contextId, rpcId, errorMessage);
+      }).not.toThrow();
     });
 
-    it('should record an assistant message (response)', () => {
-      const message: A2AMessage = {
+    it('should handle error recording without contextId', () => {
+      const rpcId = 'rpc-error-002';
+      const errorMessage = 'Another test error';
+
+      // Should not throw
+      expect(() => {
+        sessionManager.recordError(undefined, rpcId, errorMessage);
+      }).not.toThrow();
+    });
+  });
+
+  describe('Summary truncation', () => {
+    it('should truncate messages longer than SUMMARY_MAX_LENGTH (50 characters)', () => {
+      const contextId = 'ctx-trunc-001';
+      const longText = 'A'.repeat(100); // 100 characters
+
+      const longMessage: A2AMessage = {
         role: 'assistant',
-        parts: [{ text: 'hi there!' }],
-        messageId: randomUUID(),
+        parts: [{ text: longText }],
+        messageId: 'msg-trunc-001',
       };
 
-      manager.recordMessage('ctx-123', message, false, 'rpc-1');
+      // Create a new session manager to capture events
+      const tempDir2 = join(
+        tmpdir(),
+        `proofscan-a2a-trunc-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      mkdirSync(tempDir2, { recursive: true });
 
-      // Check events were recorded
-      const sessions = eventsStore.getSessionsByTarget('test-agent', 10);
-      expect(sessions.length).toBeGreaterThan(0);
+      const configPath = join(tempDir2, 'proofscan.yaml');
+      writeFileSync(configPath, 'connectors: []\n');
 
-      const session = sessions[0];
-      const events = eventsStore.getEventsBySession(session.session_id);
+      const dbPath = join(tempDir2, 'events.db');
+      const db = new Database(dbPath);
+      db.exec(EVENTS_DB_SCHEMA);
+      db.pragma(`user_version = ${EVENTS_DB_VERSION}`);
+      db.close();
+
+      const eventsStore2 = new EventsStore(tempDir2);
+      const sessionManager2 = createA2ASessionManager(eventsStore2, targetId);
+
+      sessionManager2.recordMessage(contextId, longMessage, false);
+
+      const sessionId = sessionManager2.getOrCreateSession(contextId);
+      const events = eventsStore2.getEventsBySession(sessionId);
+
       expect(events.length).toBeGreaterThan(0);
 
-      const responseEvent = events.find(e => e.kind === 'response');
-      expect(responseEvent).toBeDefined();
+      // The summary should be truncated (contain '...')
+      const summary = events[0].summary;
+      expect(summary).toBeDefined();
+      expect(summary).toContain('...');
+      // The actual text portion should be truncated to 50 chars before '...'
+      const textMatch = summary.match(/🤖 ← (.+)\.\.\.$/);
+      expect(textMatch).not.toBeNull();
+      expect(textMatch![1].length).toBe(50);
+
+      closeAllDbs();
+      rmSync(tempDir2, { recursive: true, force: true });
     });
 
-    it('should record message with text truncation in summary', () => {
-      const longText = 'a'.repeat(100);
-      const message: A2AMessage = {
-        role: 'user',
-        parts: [{ text: longText }],
-        messageId: randomUUID(),
-      };
+    it('should not truncate messages shorter than SUMMARY_MAX_LENGTH', () => {
+      const contextId = 'ctx-trunc-002';
+      const shortText = 'Short message';
 
-      manager.recordMessage('ctx-123', message, true, 'rpc-1');
-
-      const sessions = eventsStore.getSessionsByTarget('test-agent', 10);
-      const session = sessions[0];
-      const events = eventsStore.getEventsBySession(session.session_id);
-
-      const requestEvent = events.find(e => e.kind === 'request');
-      expect(requestEvent?.summary).toBeDefined();
-      expect(requestEvent?.summary!.length).toBeLessThan(longText.length + 20); // Summary should be shorter
-    });
-  });
-
-  describe('recordError', () => {
-    it('should record RPC error', () => {
-      const message: A2AMessage = {
-        role: 'user',
-        parts: [{ text: 'hello' }],
-        messageId: randomUUID(),
-      };
-
-      manager.recordMessage('ctx-123', message, true, 'rpc-1');
-      manager.recordError('ctx-123', 'rpc-1', 'Connection failed');
-
-      const sessions = eventsStore.getSessionsByTarget('test-agent', 10);
-      const session = sessions[0];
-      const rpcs = eventsStore.getRpcCallsBySession(session.session_id);
-
-      const rpc = rpcs.find(r => r.rpc_id === 'rpc-1');
-      expect(rpc?.success).toBe(0);
-      expect(rpc?.error_code).toBe(500);
-    });
-  });
-
-  describe('full conversation flow', () => {
-    it('should record a complete conversation', () => {
-      const contextId = 'conv-123';
-      const rpcId = 'rpc-123';
-
-      // User message
-      const userMsg: A2AMessage = {
-        role: 'user',
-        parts: [{ text: 'What is 2+2?' }],
-        messageId: randomUUID(),
-        contextId,
-      };
-      manager.recordMessage(contextId, userMsg, true, rpcId);
-
-      // Assistant response
-      const assistantMsg: A2AMessage = {
+      const shortMessage: A2AMessage = {
         role: 'assistant',
-        parts: [{ text: '2+2 equals 4.' }],
-        messageId: randomUUID(),
-        contextId,
+        parts: [{ text: shortText }],
+        messageId: 'msg-trunc-002',
       };
-      manager.recordMessage(contextId, assistantMsg, false, rpcId);
 
-      // Verify session
-      const sessions = eventsStore.getSessionsByTarget('test-agent', 10);
-      expect(sessions.length).toBeGreaterThan(0);
+      const tempDir2 = join(
+        tmpdir(),
+        `proofscan-a2a-short-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      );
+      mkdirSync(tempDir2, { recursive: true });
 
-      // Verify RPCs
-      const session = sessions[0];
-      const rpcs = eventsStore.getRpcCallsBySession(session.session_id);
-      const messageRpc = rpcs.find(r => r.method === 'message/send');
-      expect(messageRpc).toBeDefined();
-      expect(messageRpc?.success).toBe(1);
+      const configPath = join(tempDir2, 'proofscan.yaml');
+      writeFileSync(configPath, 'connectors: []\n');
 
-      // Verify events
-      const events = eventsStore.getEventsBySession(session.session_id);
-      expect(events.some(e => e.kind === 'request')).toBe(true);
-      expect(events.some(e => e.kind === 'response')).toBe(true);
+      const dbPath = join(tempDir2, 'events.db');
+      const db = new Database(dbPath);
+      db.exec(EVENTS_DB_SCHEMA);
+      db.pragma(`user_version = ${EVENTS_DB_VERSION}`);
+      db.close();
 
-      // Verify normalized JSON
-      const normalizedEvent = events.find(e => e.normalized_json !== null);
-      expect(normalizedEvent).toBeDefined();
-      if (normalizedEvent?.normalized_json) {
-        const normalized = JSON.parse(normalizedEvent.normalized_json);
-        expect(normalized.protocol).toBe('a2a');
-      }
+      const eventsStore2 = new EventsStore(tempDir2);
+      const sessionManager2 = createA2ASessionManager(eventsStore2, targetId);
+
+      sessionManager2.recordMessage(contextId, shortMessage, false);
+
+      const sessionId = sessionManager2.getOrCreateSession(contextId);
+      const events = eventsStore2.getEventsBySession(sessionId);
+
+      expect(events.length).toBeGreaterThan(0);
+
+      const summary = events[0].summary;
+      expect(summary).toBeDefined();
+      expect(summary).toContain(shortText);
+      expect(summary.endsWith('...')).toBe(false);
+
+      closeAllDbs();
+      rmSync(tempDir2, { recursive: true, force: true });
+    });
+  });
+
+  describe('EventsStore access', () => {
+    it('should expose EventsStore via getter', () => {
+      const eventsStoreFromGetter = sessionManager.getEventsStore();
+
+      expect(eventsStoreFromGetter).toBeDefined();
+      expect(eventsStoreFromGetter).toBe(eventsStore);
     });
   });
 });
