@@ -46,14 +46,14 @@ describe('Cross-connector data isolation', () => {
 
     // Session A for connector-a
     db.prepare(`
-      INSERT INTO sessions (session_id, connector_id, started_at, created_at)
-      VALUES ('session-a', 'connector-a', ?, ?)
+      INSERT INTO sessions (session_id, connector_id, target_id, started_at, created_at)
+      VALUES ('session-a', 'connector-a', 'connector-a', ?, ?)
     `).run(now, now);
 
     // Session B for connector-b
     db.prepare(`
-      INSERT INTO sessions (session_id, connector_id, started_at, created_at)
-      VALUES ('session-b', 'connector-b', ?, ?)
+      INSERT INTO sessions (session_id, connector_id, target_id, started_at, created_at)
+      VALUES ('session-b', 'connector-b', 'connector-b', ?, ?)
     `).run(now, now);
 
     // RPC calls with SAME rpc_id "1" in both sessions (different content)
@@ -115,7 +115,7 @@ describe('Cross-connector data isolation', () => {
     const detail = await getConnectorDetail(configPath, 'connector-a');
 
     expect(detail).not.toBeNull();
-    expect(detail?.connector_id).toBe('connector-a');
+    expect(detail?.target_id).toBe('connector-a');
     // Critical assertion: should see "server-alpha", NOT "server-beta"
     // This verifies the SQL JOIN uses session_id to isolate data
     expect(detail?.package_name).toBe('server-alpha');
@@ -127,7 +127,7 @@ describe('Cross-connector data isolation', () => {
     const detail = await getConnectorDetail(configPath, 'connector-b');
 
     expect(detail).not.toBeNull();
-    expect(detail?.connector_id).toBe('connector-b');
+    expect(detail?.target_id).toBe('connector-b');
     // Critical assertion: should see "server-beta", NOT "server-alpha"
     // Without the session_id fix, this would return "server-alpha" due to rpc_id collision
     expect(detail?.package_name).toBe('server-beta');
@@ -155,8 +155,8 @@ describe('Cross-connector data isolation', () => {
     // Both connectors should appear as orphan connectors (in DB but not config)
     expect(homeData.connectors.length).toBeGreaterThanOrEqual(2);
 
-    const connectorA = homeData.connectors.find((c) => c.connector_id === 'connector-a');
-    const connectorB = homeData.connectors.find((c) => c.connector_id === 'connector-b');
+    const connectorA = homeData.connectors.find((c) => c.target_id === 'connector-a');
+    const connectorB = homeData.connectors.find((c) => c.target_id === 'connector-b');
 
     expect(connectorA).toBeDefined();
     expect(connectorB).toBeDefined();

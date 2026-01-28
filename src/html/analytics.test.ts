@@ -52,7 +52,8 @@ function createSessionReport(rpcs: SessionRpcDetail[]): HtmlSessionReportV1 {
     },
     session: {
       session_id: 'session-001',
-      connector_id: 'test-connector',
+      target_id: 'test-connector',
+      target_id: 'test-connector',
       started_at: '2024-01-15T10:00:00.000Z',
       ended_at: '2024-01-15T11:00:00.000Z',
       exit_reason: null,

@@ -33,7 +33,7 @@ export interface SecretBindingInfo {
   /** Kind of secret: connector env or namespace */
   kind: SecretKind;
   /** Connector ID (for connector kind) */
-  connector_id?: string;
+  target_id?: string;
   /** Environment key (for connector kind) or namespace key (for namespace kind) */
   env_key?: string;
   /** Provider type */
@@ -100,7 +100,7 @@ export interface ImportOptions {
 
 /** Error detail for import failures */
 export interface ImportError {
-  connector_id: string;
+  target_id: string;
   env_key: string;
   error: string;
 }
@@ -137,7 +137,7 @@ interface ExportBundle {
 
 /** Decrypted entry in export bundle */
 interface ExportEntry {
-  connector_id: string;
+  target_id: string;
   env_key: string;
   secret_bytes_b64: string; // base64 of plaintext
 }
@@ -347,7 +347,7 @@ export async function listSecretBindings(
             secret_ref: makeSecretRef(provider, id),
             secret_id: id,
             kind: 'connector',
-            connector_id: binding.connectorId,
+            target_id: binding.connectorId,
             env_key: binding.envKey,
             provider,
             created_at: createdAt?.toISOString() ?? new Date().toISOString(),
@@ -388,7 +388,7 @@ export async function listSecretBindings(
           secret_ref: `unknown:${id}`,
           secret_id: id,
           kind: 'connector',
-          connector_id: binding.connectorId,
+          target_id: binding.connectorId,
           env_key: binding.envKey,
           provider: 'plain',
           created_at: '',
@@ -566,7 +566,7 @@ export async function exportSecrets(options: ExportOptions): Promise<ExportResul
       if (!plaintext) continue;
 
       entries.push({
-        connector_id: binding.connectorId,
+        target_id: binding.connectorId,
         env_key: binding.envKey,
         secret_bytes_b64: Buffer.from(plaintext, 'utf-8').toString('base64'),
       });
@@ -672,15 +672,15 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
 
         // Store secret
         const result = await store.store(plaintext, {
-          connectorId: entry.connector_id,
+          connectorId: entry.target_id,
           keyName: entry.env_key,
-          source: `${entry.connector_id}.transport.env.${entry.env_key}`,
+          source: `${entry.target_id}.transport.env.${entry.env_key}`,
         });
 
         storedSecrets.push({ entry, reference: result.reference });
       } catch (err) {
         errors.push({
-          connector_id: entry.connector_id,
+          target_id: entry.target_id,
           env_key: entry.env_key,
           error: err instanceof Error ? err.message : String(err),
         });
@@ -707,7 +707,7 @@ export async function importSecrets(options: ImportOptions): Promise<ImportResul
 
     for (const { entry, reference } of storedSecrets) {
       // Find connector
-      const connector = config.connectors?.find(c => c.id === entry.connector_id);
+      const connector = config.connectors?.find(c => c.id === entry.target_id);
       if (!connector) {
         // Connector doesn't exist in config, skip
         skippedCount++;

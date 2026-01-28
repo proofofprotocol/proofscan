@@ -736,7 +736,7 @@ export function generateRpcHtml(report: HtmlRpcReportV1): string {
         <dt>Session</dt>
         <dd><span class="badge">${escapeHtml(sessionShort)}...</span></dd>
         <dt>Connector</dt>
-        <dd><span class="badge">${escapeHtml(rpc.connector_id)}</span></dd>
+        <dd><span class="badge">${escapeHtml(rpc.target_id)}</span></dd>
         <dt>Status</dt>
         <dd><span class="badge ${statusClass}">${rpc.status}${rpc.error_code !== null ? ` (code: ${rpc.error_code})` : ''}</span></dd>
       </dl>

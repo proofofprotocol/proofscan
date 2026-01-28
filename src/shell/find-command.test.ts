@@ -265,7 +265,7 @@ describe('executeFind', () => {
       if (result.ok && result.result.kind === 'rows') {
         const rows = result.result.rows as SessionRow[];
         // Should only include sessions from conn-1
-        expect(rows.every(r => r.connector_id === 'conn-1')).toBe(true);
+        expect(rows.every(r => r.target_id === 'conn-1')).toBe(true);
       }
     });
 

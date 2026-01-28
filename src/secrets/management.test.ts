@@ -72,7 +72,7 @@ describe('listSecretBindings', () => {
     const bindings = await listSecretBindings(tempDir, configPath);
 
     expect(bindings.length).toBe(1);
-    expect(bindings[0].connector_id).toBe('test-connector');
+    expect(bindings[0].target_id).toBe('test-connector');
     expect(bindings[0].env_key).toBe('API_KEY');
     expect(bindings[0].status).toBe('OK');
   });

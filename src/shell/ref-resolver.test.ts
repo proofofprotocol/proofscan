@@ -131,7 +131,7 @@ describe('RefResolver', () => {
 
       expect(result.success).toBe(true);
       expect(result.ref?.kind).toBe('connector');
-      expect(result.ref?.connector).toBe('mcp-server');
+      expect(result.ref?.target).toBe('mcp-server');
       expect(result.ref?.level).toBe('connector');
     });
 
@@ -145,7 +145,7 @@ describe('RefResolver', () => {
 
       expect(result.success).toBe(true);
       expect(result.ref?.kind).toBe('session');
-      expect(result.ref?.connector).toBe('mcp-server');
+      expect(result.ref?.target).toBe('mcp-server');
       expect(result.ref?.session).toBe('session-123');
       expect(result.ref?.proto).toBe('mcp');
       expect(result.ref?.level).toBe('session');
@@ -179,6 +179,7 @@ describe('RefResolver', () => {
       vi.mocked(mockDataProvider.getLatestSession).mockReturnValue({
         session_id: 'session-789',
         connector_id: 'mcp-server',
+        target_id: 'mcp-server',
       });
 
       const result = resolver.resolveLast(context);
@@ -251,6 +252,7 @@ describe('RefResolver', () => {
       vi.mocked(mockDataProvider.getSessionByPrefix).mockReturnValue({
         session_id: 'session-full-id',
         connector_id: 'mcp-server',
+        target_id: 'mcp-server',
       });
 
       const result = resolver.resolveSession('session', context);
@@ -258,7 +260,7 @@ describe('RefResolver', () => {
       expect(result.success).toBe(true);
       expect(result.ref?.kind).toBe('session');
       expect(result.ref?.session).toBe('session-full-id');
-      expect(result.ref?.connector).toBe('mcp-server');
+      expect(result.ref?.target).toBe('mcp-server');
     });
 
     it('should fail when session not found', () => {
@@ -277,7 +279,7 @@ describe('RefResolver', () => {
     it('should resolve @ref:<name>', () => {
       vi.mocked(mockDataProvider.getUserRef).mockReturnValue({
         kind: 'session',
-        connector: 'mcp-server',
+        target: 'mcp-server',
         session: 'session-123',
       });
 
@@ -285,7 +287,7 @@ describe('RefResolver', () => {
 
       expect(result.success).toBe(true);
       expect(result.ref?.kind).toBe('session');
-      expect(result.ref?.connector).toBe('mcp-server');
+      expect(result.ref?.target).toBe('mcp-server');
     });
 
     it('should fail when ref not found', () => {
@@ -301,7 +303,7 @@ describe('RefResolver', () => {
       vi.mocked(mockDataProvider.getUserRef).mockReturnValue({
         kind: 'popl',
         entry_id: '01KE4EKCVK',
-        target: 'popl/01KE4EKCVK',
+        target_path: 'popl/01KE4EKCVK',
         captured_at: '2024-01-01T00:00:00.000Z',
       });
 
@@ -310,7 +312,7 @@ describe('RefResolver', () => {
       expect(result.success).toBe(true);
       expect(result.ref?.kind).toBe('popl');
       expect(result.ref?.entry_id).toBe('01KE4EKCVK');
-      expect(result.ref?.target).toBe('popl/01KE4EKCVK');
+      expect(result.ref?.target_path).toBe('popl/01KE4EKCVK');
     });
   });
 
@@ -321,7 +323,7 @@ describe('RefResolver', () => {
       expect(result.success).toBe(true);
       expect(result.ref?.kind).toBe('popl');
       expect(result.ref?.entry_id).toBe('01KE4EKCVK');
-      expect(result.ref?.target).toBe('popl/01KE4EKCVK');
+      expect(result.ref?.target_path).toBe('popl/01KE4EKCVK');
       expect(result.ref?.source).toBe('@popl:01KE4EKCVK');
       expect(result.ref?.captured_at).toBeDefined();
     });
@@ -365,7 +367,7 @@ describe('RefResolver', () => {
       expect(result.success).toBe(true);
       expect(result.ref?.kind).toBe('popl');
       expect(result.ref?.entry_id).toBe('01KE4EKCVK');
-      expect(result.ref?.target).toBe('popl/01KE4EKCVK');
+      expect(result.ref?.target_path).toBe('popl/01KE4EKCVK');
     });
 
     it('should fail for @popl without id', () => {
@@ -391,6 +393,7 @@ describe('RefResolver', () => {
       vi.mocked(mockDataProvider.getSessionByPrefix).mockReturnValue({
         session_id: 'session-full',
         connector_id: 'mcp-server',
+        target_id: 'mcp-server',
       });
 
       const { resolved, errors } = resolver.resolveArgs(
@@ -446,7 +449,7 @@ describe('createRefFromContext', () => {
     const ref = createRefFromContext(context);
 
     expect(ref.kind).toBe('connector');
-    expect(ref.connector).toBe('mcp-server');
+    expect(ref.target).toBe('mcp-server');
     expect(ref.proto).toBe('mcp');
     expect(ref.level).toBe('connector');
   });
@@ -460,7 +463,7 @@ describe('createRefFromContext', () => {
     const ref = createRefFromContext(context);
 
     expect(ref.kind).toBe('session');
-    expect(ref.connector).toBe('mcp-server');
+    expect(ref.target).toBe('mcp-server');
     expect(ref.session).toBe('session-123');
     expect(ref.proto).toBe('mcp');
     expect(ref.level).toBe('session');
@@ -502,7 +505,7 @@ describe('refToJson / refFromJson', () => {
 
     expect(ref?.kind).toBe('popl');
     expect(ref?.entry_id).toBe('01KE4EKCVK');
-    expect(ref?.target).toBe('popl/01KE4EKCVK');
+    expect(ref?.target_path).toBe('popl/01KE4EKCVK');
   });
 
   it('should infer entry_id from target if missing', () => {
@@ -511,14 +514,14 @@ describe('refToJson / refFromJson', () => {
 
     expect(ref?.kind).toBe('popl');
     expect(ref?.entry_id).toBe('01KE4EKCVK');
-    expect(ref?.target).toBe('popl/01KE4EKCVK');
+    expect(ref?.target_path).toBe('popl/01KE4EKCVK');
   });
 
   it('should serialize and deserialize POPL RefStruct', () => {
     const ref: RefStruct = {
       kind: 'popl',
       entry_id: '01KE4EKCVK',
-      target: 'popl/01KE4EKCVK',
+      target_path: 'popl/01KE4EKCVK',
       captured_at: '2024-01-01T00:00:00.000Z',
     };
 

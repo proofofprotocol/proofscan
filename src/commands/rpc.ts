@@ -383,7 +383,7 @@ async function exportRpcHtml(
     rpc: {
       rpc_id: detail.rpc_id,
       session_id: detail.session_id,
-      connector_id: detail.connector_id,
+      target_id: detail.connector_id,
       method: detail.method,
       status: toRpcStatus(detail.status === 'OK' ? 1 : detail.status === 'ERR' ? 0 : null),
       latency_ms: detail.latency_ms,

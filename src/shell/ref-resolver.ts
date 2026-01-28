@@ -692,9 +692,10 @@ export function refFromJson(json: string): RefStruct | null {
     }
 
     // Support legacy `target` field for popl (rename to target_path)
-    if (parsed.kind === 'popl' && parsed.target && typeof parsed.target === 'string') {
+    // Also handles case where kind is missing but target starts with "popl/"
+    if (parsed.target && typeof parsed.target === 'string') {
       const targetMatch = parsed.target.match(/^popl\/(.+)$/);
-      if (targetMatch) {
+      if (targetMatch && (parsed.kind === 'popl' || !parsed.kind)) {
         const entryId = targetMatch[1];
         return {
           kind: 'popl',

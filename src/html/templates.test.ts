@@ -132,7 +132,7 @@ describe('generateRpcHtml', () => {
     rpc: {
       rpc_id: '1',
       session_id: 'abc12345-1234-1234-1234-123456789012',
-      connector_id: 'test-connector',
+      target_id: 'test-connector',
       method: 'tools/list',
       status: 'OK',
       latency_ms: 42,
@@ -247,7 +247,7 @@ describe('generateSessionHtml', () => {
     },
     session: {
       session_id: 'abc12345-1234-1234-1234-123456789012',
-      connector_id: 'test-connector',
+      target_id: 'test-connector',
       started_at: '2025-01-12T09:00:00.000Z',
       ended_at: '2025-01-12T10:00:00.000Z',
       exit_reason: null,
@@ -356,7 +356,7 @@ describe('Embedded JSON parsing', () => {
       rpc: {
         rpc_id: '1',
         session_id: 'abc12345',
-        connector_id: 'test',
+        target_id: 'test',
         method: 'test',
         status: 'OK',
         latency_ms: 10,
@@ -393,7 +393,7 @@ describe('Embedded JSON parsing', () => {
       },
       session: {
         session_id: 'abc12345',
-        connector_id: 'test',
+        target_id: 'test',
         started_at: '2025-01-12T09:00:00.000Z',
         ended_at: null,
         exit_reason: null,
@@ -429,7 +429,7 @@ describe('generateConnectorHtml', () => {
     },
     session: {
       session_id: 'abc12345-1234-1234-1234-123456789012',
-      connector_id: 'test-connector',
+      target_id: 'test-connector',
       started_at: '2025-01-12T09:00:00.000Z',
       ended_at: '2025-01-12T10:00:00.000Z',
       exit_reason: null,
@@ -471,7 +471,7 @@ describe('generateConnectorHtml', () => {
       redacted: false,
     },
     connector: {
-      connector_id: 'test-connector',
+      target_id: 'test-connector',
       enabled: true,
       transport: {
         type: 'stdio',
@@ -758,7 +758,7 @@ describe('generateConnectorHtml', () => {
       ...baseConnectorReport,
       connector: {
         ...baseConnectorReport.connector,
-        connector_id: '<script>alert(1)</script>',
+        target_id: '<script>alert(1)</script>',
       },
     };
     const html = generateConnectorHtml(xssReport);
@@ -771,7 +771,7 @@ describe('generateConnectorHtml', () => {
       ...baseConnectorReport,
       connector: {
         ...baseConnectorReport.connector,
-        connector_id: '</script><script>alert(1)',
+        target_id: '</script><script>alert(1)',
       },
     };
     const html = generateConnectorHtml(reportWithXss);
@@ -794,7 +794,7 @@ describe('generateConnectorHtml', () => {
       expect(() => JSON.parse(unescaped)).not.toThrow();
       const parsed = JSON.parse(unescaped);
       expect(parsed.meta.schemaVersion).toBe(HTML_REPORT_SCHEMA_VERSION);
-      expect(parsed.connector.connector_id).toBe('test-connector');
+      expect(parsed.connector.target_id).toBe('test-connector');
       expect(parsed.sessions).toHaveLength(2);
       expect(parsed.session_reports).toBeDefined();
     }

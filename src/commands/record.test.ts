@@ -140,6 +140,7 @@ describe('DryRunData structure', () => {
       session: {
         id: 'test-session-id',
         connector_id: 'test-connector',
+        target_id: 'test-connector',
         resolved_by: 'current',
       },
       candidates,
@@ -353,6 +354,7 @@ describe('Integration scenarios', () => {
       session: {
         id: 'time-session',
         connector_id: 'time',
+        target_id: 'time',
         resolved_by: 'latest',
       },
       candidates: [], // No tool calls
@@ -380,6 +382,7 @@ describe('Integration scenarios', () => {
       session: {
         id: 'time-session',
         connector_id: 'time',
+        target_id: 'time',
         resolved_by: 'latest',
       },
       candidates: [
