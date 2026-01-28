@@ -84,13 +84,13 @@ export interface ResolveResult {
  */
 export interface RefDataProvider {
   /** Get latest session for a target (or globally if no target) */
-  getLatestSession(targetId?: string): { session_id: string; connector_id: string } | null;
+  getLatestSession(targetId?: string): { session_id: string; target_id: string } | null;
   /** Get latest RPC for a session */
   getLatestRpc(sessionId: string): { rpc_id: string; method: string } | null;
   /** Get RPC by ID */
   getRpcById(rpcId: string, sessionId?: string): { rpc_id: string; session_id: string; method: string } | null;
   /** Get session by ID or prefix */
-  getSessionByPrefix(prefix: string, connectorId?: string): { session_id: string; connector_id: string } | null;
+  getSessionByPrefix(prefix: string, targetId?: string): { session_id: string; target_id: string } | null;
   /** Get user-defined ref by name */
   getUserRef(name: string): RefStruct | null;
   /** Get favorite by name */
@@ -271,7 +271,7 @@ export class RefResolver {
         success: true,
         ref: {
           kind: 'session',
-          target: latestSession.connector_id,
+          target: latestSession.target_id,
           session: latestSession.session_id,
           level: 'connector',
           captured_at: new Date().toISOString(),
@@ -336,7 +336,7 @@ export class RefResolver {
       success: true,
       ref: {
         kind: 'session',
-        target: session.connector_id,
+        target: session.target_id,
         session: session.session_id,
         captured_at: new Date().toISOString(),
         source: `@session:${sessionId}`,
@@ -722,10 +722,10 @@ export function refFromJson(json: string): RefStruct | null {
  * This adapts the EventsStore to the RefDataProvider interface
  */
 export function createRefDataProvider(eventsStore: {
-  getLatestSession(targetId?: string): { session_id: string; connector_id: string } | null;
+  getLatestSession(targetId?: string): { session_id: string; target_id: string } | null;
   getLatestRpc(sessionId: string): { rpc_id: string; method: string } | null;
   getRpcById(rpcId: string, sessionId?: string): { rpc_id: string; session_id: string; method: string } | null;
-  getSessionByPrefix(prefix: string, connectorId?: string): { session_id: string; connector_id: string } | null;
+  getSessionByPrefix(prefix: string, targetId?: string): { session_id: string; target_id: string } | null;
   getUserRef(name: string): { kind: RefKind; target: string | null; session: string | null; rpc: string | null; proto: string | null; level: string | null; captured_at: string; entry_id?: string | null; target_path?: string | null } | null;
 }): RefDataProvider {
   return {

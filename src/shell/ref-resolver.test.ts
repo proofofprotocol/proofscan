@@ -178,7 +178,6 @@ describe('RefResolver', () => {
 
       vi.mocked(mockDataProvider.getLatestSession).mockReturnValue({
         session_id: 'session-789',
-        connector_id: 'mcp-server',
         target_id: 'mcp-server',
       });
 
@@ -251,7 +250,6 @@ describe('RefResolver', () => {
 
       vi.mocked(mockDataProvider.getSessionByPrefix).mockReturnValue({
         session_id: 'session-full-id',
-        connector_id: 'mcp-server',
         target_id: 'mcp-server',
       });
 
@@ -392,7 +390,6 @@ describe('RefResolver', () => {
 
       vi.mocked(mockDataProvider.getSessionByPrefix).mockReturnValue({
         session_id: 'session-full',
-        connector_id: 'mcp-server',
         target_id: 'mcp-server',
       });
 
