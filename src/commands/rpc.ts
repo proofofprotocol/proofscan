@@ -431,10 +431,11 @@ export function createRpcCommand(getConfigPath: () => string): Command {
         const configDir = manager.getConfigDir();
 
         // Resolve session
+        const targetId = options.connector; // CLI option name preserved, internal uses targetId
         const result = resolveSession({
           sessionId: options.session,
           latest: options.latest,
-          connectorId: options.connector,
+          connectorId: targetId,
           configDir,
         });
 
@@ -534,10 +535,11 @@ export function createRpcCommand(getConfigPath: () => string): Command {
         const configDir = manager.getConfigDir();
 
         // Resolve session
+        const targetId = options.connector; // CLI option name preserved, internal uses targetId
         const result = resolveSession({
           sessionId: options.session,
           latest: options.latest,
-          connectorId: options.connector,
+          connectorId: targetId,
           configDir,
         });
 

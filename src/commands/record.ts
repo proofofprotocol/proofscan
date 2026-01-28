@@ -424,7 +424,7 @@ function getSession(configDir: string, sessionId: string): Session | null {
 function generateDryRun(
   configDir: string,
   sessionId: string,
-  connectorId: string,
+  connectorId: string, // DB field name preserved for schema compatibility
   resolvedBy: 'option' | 'latest' | 'current',
   includeCapabilities: boolean
 ): DryRunData {
@@ -581,13 +581,13 @@ Examples:
         const configDir = manager.getConfigDir();
 
         // Resolve connector from positional arg, --connector, or --id
-        const connectorId = connectorArg || options.connector || options.id;
+        const targetId = connectorArg || options.connector || options.id; // CLI option name preserved, internal uses targetId
 
         // Resolve session
         const result = resolveSession({
           sessionId: options.session,
-          latest: options.latest || !!connectorId,
-          connectorId,
+          latest: options.latest || !!targetId,
+          connectorId: targetId,
           configDir,
         });
 

@@ -528,7 +528,7 @@ function getSession(configDir: string, sessionId: string): Session | null {
 function generateSummary(
   configDir: string,
   sessionId: string,
-  connectorId: string,
+  connectorId: string, // DB field name preserved for schema compatibility
   resolvedBy: 'option' | 'latest' | 'current'
 ): SummaryData {
   const capabilities = extractToolsFromSession(configDir, sessionId);
@@ -703,10 +703,11 @@ export function createSummaryCommand(getConfigPath: () => string): Command {
         const configDir = manager.getConfigDir();
 
         // Resolve session
+        const targetId = options.connector; // CLI option name preserved, internal uses targetId
         const result = resolveSession({
           sessionId: options.session,
           latest: options.latest,
-          connectorId: options.connector,
+          connectorId: targetId,
           configDir,
         });
 
