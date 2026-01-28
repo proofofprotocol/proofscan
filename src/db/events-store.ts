@@ -198,7 +198,7 @@ export class EventsStore {
       summary: options.summary || null,
       payload_hash: options.payloadHash || null,
       raw_json: options.rawJson || null,
-      normalized_json,
+      normalized_json: normalizedJson,
     };
 
     const stmt = this.db.prepare(`
@@ -217,7 +217,7 @@ export class EventsStore {
       event.summary,
       event.payload_hash,
       event.raw_json,
-      normalized_json
+      normalizedJson
     );
 
     return event;

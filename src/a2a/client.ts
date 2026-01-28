@@ -7,35 +7,14 @@
  * Phase 4 - Client Implementation
  */
 
-import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult } from './types.js';
+import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult, A2AMessage, A2ATask } from './types.js';
 import { isPrivateUrl } from './agent-card.js';
 
 // Maximum response size (1MB) to prevent DoS
 const MAX_RESPONSE_SIZE = 1024 * 1024;
 
-// ===== A2A Protocol Types =====
-
-export interface A2AMessage {
-  role: 'user' | 'assistant';
-  parts: Array<{ text: string } | { data: string; mimeType: string }>;
-  metadata?: Record<string, unknown>;
-  contextId?: string;
-  referenceTaskIds?: string[];
-}
-
-export interface A2ATask {
-  id: string;
-  status: 'pending' | 'working' | 'input_required' | 'completed' | 'failed' | 'canceled' | 'rejected';
-  messages: A2AMessage[];
-  artifacts?: Array<{
-    name?: string;
-    description?: string;
-    parts: Array<{ text: string } | { data: string; mimeType: string }>;
-  }>;
-  createdAt?: string;
-  updatedAt?: string;
-  contextId?: string;
-}
+// Re-export types from types.ts for backward compatibility
+export type { A2AMessage, A2ATask } from './types.js';
 
 // ===== JSON-RPC Types =====
 

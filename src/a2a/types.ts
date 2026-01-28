@@ -117,6 +117,36 @@ export interface TaskArtifactUpdateEvent {
   };
 }
 
+// ===== A2A Message & Task Types =====
+
+/**
+ * A2A message exchanged between agents
+ */
+export interface A2AMessage {
+  role: 'user' | 'assistant';
+  parts: Array<{ text: string } | { data: string; mimeType: string }>;
+  metadata?: Record<string, unknown>;
+  contextId?: string;
+  referenceTaskIds?: string[];
+}
+
+/**
+ * A2A task representing a unit of work
+ */
+export interface A2ATask {
+  id: string;
+  status: 'pending' | 'working' | 'input_required' | 'completed' | 'failed' | 'canceled' | 'rejected';
+  messages: A2AMessage[];
+  artifacts?: Array<{
+    name?: string;
+    description?: string;
+    parts: Array<{ text: string } | { data: string; mimeType: string }>;
+  }>;
+  createdAt?: string;
+  updatedAt?: string;
+  contextId?: string;
+}
+
 /**
  * Stream event type (discriminated union)
  */
@@ -124,7 +154,7 @@ export type StreamEvent =
   | { type: 'status'; event: TaskStatusUpdateEvent }
   | { type: 'artifact'; event: TaskArtifactUpdateEvent }
   | { type: 'task'; task: A2ATask }
-  | { type: 'message'; message: { role: 'user' | 'assistant'; parts: Array<{ text: string } | { data: string; mimeType: string }>; metadata?: Record<string, unknown>; contextId?: string; referenceTaskIds?: string[] } };
+  | { type: 'message'; message: A2AMessage };
 
 /**
  * Stream message result
