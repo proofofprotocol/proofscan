@@ -12,10 +12,11 @@ export const PROOFS_DB_VERSION = 2;
 
 // events.db schema (version 3)
 export const EVENTS_DB_SCHEMA = `
--- Sessions table (Phase 3.4: added actor_id, actor_kind, actor_label, secret_ref_count)
+-- Sessions table (Phase 7.0: added target_id for unified connector/agent)
 CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY,
   connector_id TEXT NOT NULL,
+  target_id TEXT,
   started_at TEXT NOT NULL,
   ended_at TEXT,
   exit_reason TEXT CHECK(exit_reason IN ('normal', 'error', 'killed')),
@@ -47,7 +48,7 @@ CREATE TABLE IF NOT EXISTS rpc_calls (
 CREATE INDEX IF NOT EXISTS idx_rpc_calls_session ON rpc_calls(session_id);
 CREATE INDEX IF NOT EXISTS idx_rpc_calls_method ON rpc_calls(method);
 
--- Events table (version 2: added seq, summary, payload_hash)
+-- Events table (version 6: added seq, summary, payload_hash, normalized_json)
 CREATE TABLE IF NOT EXISTS events (
   event_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -59,6 +60,7 @@ CREATE TABLE IF NOT EXISTS events (
   summary TEXT,
   payload_hash TEXT,
   raw_json TEXT,
+  normalized_json TEXT,
   FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 
@@ -97,6 +99,34 @@ CREATE TABLE IF NOT EXISTS user_refs (
 
 CREATE INDEX IF NOT EXISTS idx_user_refs_kind ON user_refs(kind);
 CREATE INDEX IF NOT EXISTS idx_user_refs_created ON user_refs(created_at);
+
+-- Targets table (Phase 7.0: unified connector/agent)
+CREATE TABLE IF NOT EXISTS targets (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL CHECK(type IN ('connector', 'agent')),
+  protocol TEXT NOT NULL CHECK(protocol IN ('mcp', 'a2a')),
+  name TEXT,
+  enabled INTEGER DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  config_json TEXT NOT NULL,
+  CHECK (
+    (type = 'connector' AND protocol = 'mcp') OR
+    (type = 'agent' AND protocol = 'a2a')
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_targets_type ON targets(type, enabled);
+
+-- Agent cache table (Phase 7.0: cache for A2A agent cards)
+CREATE TABLE IF NOT EXISTS agent_cache (
+  target_id TEXT PRIMARY KEY,
+  agent_card_json TEXT,
+  agent_card_hash TEXT,
+  fetched_at TEXT,
+  expires_at TEXT,
+  FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
+);
 `;
 
 /**

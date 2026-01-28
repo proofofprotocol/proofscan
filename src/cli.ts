@@ -11,7 +11,8 @@
  *   pfscan status      # System status
  *   pfscan archive     # Archive/prune data
  *   pfscan config      # Configuration
- *   pfscan connectors  # Connector management
+ *   pfscan connectors  # MCP Connector management
+ *   pfscan agent       # A2A Agent management
  *
  * Shortcuts:
  *   v = view, t = tree, s = scan

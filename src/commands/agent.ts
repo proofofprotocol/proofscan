@@ -5,6 +5,7 @@
  * Phase 3 - CLI Implementation
  */
 
+import { dirname } from 'path';
 import { Command } from 'commander';
 import { TargetsStore } from '../db/targets-store.js';
 import { AgentCacheStore } from '../db/agent-cache-store.js';
@@ -29,7 +30,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
     .option('--ttl <seconds>', 'Agent card cache TTL in seconds', '3600')
     .action(async (id, options) => {
       try {
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const store = new TargetsStore(configDir);
 
         // Check if ID already exists
@@ -86,7 +87,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
   // ===== agent list =====
   const listAction = async (options: { all?: boolean }) => {
     try {
-      const configDir = getConfigPath();
+      const configDir = dirname(getConfigPath());
       const store = new TargetsStore(configDir);
 
       const agents = store.list({
@@ -139,7 +140,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
     .argument('<id>', 'Agent ID (or 8-char prefix)')
     .action(async (id) => {
       try {
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const store = new TargetsStore(configDir);
         const cacheStore = new AgentCacheStore(configDir);
 
@@ -183,7 +184,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
     .argument('<id>', 'Agent ID (or 8-char prefix)')
     .action(async (id) => {
       try {
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const store = new TargetsStore(configDir);
 
         // Find agent by ID or prefix
@@ -215,7 +216,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
     .argument('<id>', 'Agent ID (or 8-char prefix)')
     .action(async (id) => {
       try {
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const store = new TargetsStore(configDir);
 
         // Find agent by ID or prefix
@@ -252,7 +253,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
     .argument('<id>', 'Agent ID (or 8-char prefix)')
     .action(async (id) => {
       try {
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const store = new TargetsStore(configDir);
 
         // Find agent by ID or prefix
@@ -290,7 +291,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
     .option('--refresh', 'Ignore cache and re-fetch')
     .action(async (id, options) => {
       try {
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const store = new TargetsStore(configDir);
         const cacheStore = new AgentCacheStore(configDir);
 
