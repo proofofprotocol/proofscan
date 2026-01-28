@@ -309,7 +309,7 @@ CREATE TABLE IF NOT EXISTS proofs (
   created_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_proofs_target ON proofs(COALESCE(target_id, connector_id));
+CREATE INDEX IF NOT EXISTS idx_proofs_target ON proofs(target_id);
 CREATE INDEX IF NOT EXISTS idx_proofs_connector ON proofs(connector_id);
 CREATE INDEX IF NOT EXISTS idx_proofs_session ON proofs(session_id);
 CREATE INDEX IF NOT EXISTS idx_proofs_created ON proofs(created_at);

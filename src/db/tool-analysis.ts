@@ -433,12 +433,12 @@ export function getConnectorSummaries(configDir: string): ConnectorSummary[] {
 
   const rows = db.prepare(`
     SELECT
-      COALESCE(s.target_id, s.connector_id) as connector_id,
+      s.target_id as connector_id,
       COUNT(DISTINCT s.session_id) as session_count,
       COUNT(r.rpc_id) as rpc_count
     FROM sessions s
     LEFT JOIN rpc_calls r ON s.session_id = r.session_id
-    GROUP BY COALESCE(s.target_id, s.connector_id)
+    GROUP BY s.target_id
     ORDER BY session_count DESC
   `).all() as Array<{
     connector_id: string;
@@ -464,9 +464,9 @@ export function getSessionsForTarget(
   const limitClause = safeLimit !== undefined && Number.isFinite(safeLimit) ? `LIMIT ${safeLimit}` : '';
 
   const sql = `
-    SELECT session_id, COALESCE(target_id, connector_id) as connector_id, started_at
+    SELECT session_id, target_id as connector_id, started_at
     FROM sessions
-    WHERE COALESCE(target_id, connector_id) = ?
+    WHERE target_id = ?
     ORDER BY started_at DESC
     ${limitClause}
   `;
@@ -495,7 +495,7 @@ export function getAllToolUsage(configDir: string): ToolUsageSummary[] {
   const rows = db.prepare(`
     SELECT
       e.raw_json,
-      COALESCE(s.target_id, s.connector_id) as connector_id
+      s.target_id as connector_id
     FROM events e
     JOIN sessions s ON e.session_id = s.session_id
     JOIN rpc_calls r ON e.session_id = r.session_id AND e.rpc_id = r.rpc_id
@@ -558,7 +558,7 @@ export function getToolUsageForTarget(
     FROM events e
     JOIN sessions s ON e.session_id = s.session_id
     JOIN rpc_calls r ON e.session_id = r.session_id AND e.rpc_id = r.rpc_id
-    WHERE COALESCE(s.target_id, s.connector_id) = ? AND r.method = 'tools/call' AND e.kind = 'request'
+    WHERE s.target_id = ? AND r.method = 'tools/call' AND e.kind = 'request'
   `).all(targetId) as Array<{ raw_json: string | null }>;
 
   // Count by tool name
@@ -657,7 +657,7 @@ export function getLatestToolsForTarget(
   // Find latest session
   const latestSession = db.prepare(`
     SELECT session_id FROM sessions
-    WHERE COALESCE(target_id, connector_id) = ?
+    WHERE target_id = ?
     ORDER BY started_at DESC
     LIMIT 1
   `).get(targetId) as { session_id: string } | undefined;

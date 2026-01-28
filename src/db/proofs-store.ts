@@ -95,7 +95,7 @@ export class ProofsStore {
    * Get proofs by target
    */
   getProofsByTarget(targetId: string, limit?: number): Proof[] {
-    let sql = `SELECT * FROM proofs WHERE COALESCE(target_id, connector_id) = ? ORDER BY created_at DESC`;
+    let sql = `SELECT * FROM proofs WHERE target_id = ? ORDER BY created_at DESC`;
     if (limit) {
       sql += ` LIMIT ${limit}`;
     }

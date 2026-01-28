@@ -96,7 +96,7 @@ export class EventsStore {
         (SELECT COUNT(*) FROM events WHERE session_id = s.session_id) as event_count,
         (SELECT COUNT(*) FROM rpc_calls WHERE session_id = s.session_id) as rpc_count
       FROM sessions s
-      WHERE COALESCE(s.target_id, s.connector_id) = ?
+      WHERE s.target_id = ?
       ORDER BY s.started_at DESC
     `;
     if (limit) {
@@ -244,7 +244,7 @@ export class EventsStore {
     const stmt = this.db.prepare(`
       SELECT e.* FROM events e
       JOIN sessions s ON e.session_id = s.session_id
-      WHERE COALESCE(s.target_id, s.connector_id) = ?
+      WHERE s.target_id = ?
       ORDER BY e.ts DESC
       LIMIT ?
     `);
@@ -341,7 +341,7 @@ export class EventsStore {
 
     // Get all unprotected sessions
     let sql = `
-      SELECT s.session_id, COALESCE(s.target_id, s.connector_id) as connector_id, s.started_at, s.protected,
+      SELECT s.session_id, s.target_id as connector_id, s.started_at, s.protected,
         (SELECT COUNT(*) FROM events WHERE session_id = s.session_id) as event_count
       FROM sessions s
       WHERE s.protected = 0
@@ -349,7 +349,7 @@ export class EventsStore {
     const params: unknown[] = [];
 
     if (filterId) {
-      sql += ` AND COALESCE(s.target_id, s.connector_id) = ?`;
+      sql += ` AND s.target_id = ?`;
       params.push(filterId);
     }
 
@@ -629,19 +629,19 @@ export class EventsStore {
    * Get latest session (optionally for a specific target)
    * Used by RefResolver
    */
-  getLatestSession(targetId?: string): { session_id: string; connector_id: string } | null {
-    let sql = `SELECT session_id, COALESCE(target_id, connector_id) as connector_id FROM sessions`;
+  getLatestSession(targetId?: string): { session_id: string; target_id: string } | null {
+    let sql = `SELECT session_id, target_id FROM sessions`;
     const params: unknown[] = [];
 
     if (targetId) {
-      sql += ` WHERE COALESCE(target_id, connector_id) = ?`;
+      sql += ` WHERE target_id = ?`;
       params.push(targetId);
     }
 
     sql += ` ORDER BY started_at DESC LIMIT 1`;
 
     const stmt = this.db.prepare(sql);
-    return stmt.get(...params) as { session_id: string; connector_id: string } | null;
+    return stmt.get(...params) as { session_id: string; target_id: string } | null;
   }
 
   /**
@@ -679,12 +679,12 @@ export class EventsStore {
    * Get session by ID or prefix
    * Used by RefResolver
    */
-  getSessionByPrefix(prefix: string, targetId?: string): { session_id: string; connector_id: string } | null {
+  getSessionByPrefix(prefix: string, targetId?: string): { session_id: string; target_id: string } | null {
     // Try exact match first
-    let stmt = this.db.prepare(`SELECT session_id, COALESCE(target_id, connector_id) as connector_id FROM sessions WHERE session_id = ?`);
-    let result = stmt.get(prefix) as { session_id: string; connector_id: string } | null;
+    let stmt = this.db.prepare(`SELECT session_id, target_id FROM sessions WHERE session_id = ?`);
+    let result = stmt.get(prefix) as { session_id: string; target_id: string } | null;
     if (result) {
-      if (targetId && result.connector_id !== targetId) {
+      if (targetId && result.target_id !== targetId) {
         return null; // Wrong connector
       }
       return result;
@@ -692,18 +692,18 @@ export class EventsStore {
 
     // Try prefix match (escape SQL wildcards in user input)
     const escapedPrefix = prefix.replace(/[%_]/g, '\\$&');
-    let sql = `SELECT session_id, COALESCE(target_id, connector_id) as connector_id FROM sessions WHERE session_id LIKE ? ESCAPE '\\'`;
+    let sql = `SELECT session_id, target_id FROM sessions WHERE session_id LIKE ? ESCAPE '\\'`;
     const params: unknown[] = [escapedPrefix + '%'];
 
     if (targetId) {
-      sql += ` AND COALESCE(target_id, connector_id) = ?`;
+      sql += ` AND target_id = ?`;
       params.push(targetId);
     }
 
     sql += ` ORDER BY started_at DESC LIMIT 1`;
 
     stmt = this.db.prepare(sql);
-    return stmt.get(...params) as { session_id: string; connector_id: string } | null;
+    return stmt.get(...params) as { session_id: string; target_id: string } | null;
   }
 
   /**
