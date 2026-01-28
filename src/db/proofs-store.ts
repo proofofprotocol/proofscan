@@ -35,7 +35,7 @@ export class ProofsStore {
     artifactUri?: string;
   }): Proof {
     // Support legacy connectorId for backward compatibility
-    const connectorId = params.connectorId || params.targetId;
+    const targetId = params.targetId || params.connectorId!;
 
     const hashAlgo = params.hashAlgo || 'sha256';
     const payloadHash = createHash(hashAlgo)
@@ -44,7 +44,8 @@ export class ProofsStore {
 
     const proof: Proof = {
       proof_id: randomUUID(),
-      connector_id: connectorId,
+      target_id: targetId,
+      connector_id: targetId, // Write both for backward compatibility
       session_id: params.sessionId || null,
       rpc_id: params.rpcId || null,
       method: params.method || null,
@@ -58,14 +59,15 @@ export class ProofsStore {
 
     const stmt = this.db.prepare(`
       INSERT INTO proofs (
-        proof_id, connector_id, session_id, rpc_id, method,
+        proof_id, target_id, connector_id, session_id, rpc_id, method,
         payload_hash, hash_algo, inscriber_type, inscriber_ref,
         artifact_uri, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
       proof.proof_id,
+      proof.target_id,
       proof.connector_id,
       proof.session_id,
       proof.rpc_id,
@@ -90,15 +92,23 @@ export class ProofsStore {
   }
 
   /**
-   * Get proofs by connector
+   * Get proofs by target
    */
-  getProofsByConnector(connectorId: string, limit?: number): Proof[] {
-    let sql = `SELECT * FROM proofs WHERE connector_id = ? ORDER BY created_at DESC`;
+  getProofsByTarget(targetId: string, limit?: number): Proof[] {
+    let sql = `SELECT * FROM proofs WHERE COALESCE(target_id, connector_id) = ? ORDER BY created_at DESC`;
     if (limit) {
       sql += ` LIMIT ${limit}`;
     }
     const stmt = this.db.prepare(sql);
-    return stmt.all(connectorId) as Proof[];
+    return stmt.all(targetId) as Proof[];
+  }
+
+  /**
+   * Get proofs by connector
+   * @deprecated Use getProofsByTarget instead
+   */
+  getProofsByConnector(connectorId: string, limit?: number): Proof[] {
+    return this.getProofsByTarget(connectorId, limit);
   }
 
   /**
