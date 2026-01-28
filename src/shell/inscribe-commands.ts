@@ -132,7 +132,7 @@ function buildPayload(
   const rawPayload: InscribePayload = {
     ref: {
       kind: ref.kind,
-      connector: ref.connector,
+      target: ref.target,
       session: ref.session,
       rpc: ref.rpc,
       proto: ref.proto,
@@ -208,7 +208,7 @@ function buildPayloadFromStdin(stdinJson: string): {
   // Build ref
   const ref: RefStruct = {
     kind: 'rpc',
-    connector: connectorId,
+    target: connectorId,
     session: sessionId,
     rpc: rpcId,
     proto: 'mcp',
@@ -344,7 +344,7 @@ async function handleInscribeFromRef(
     }
     rpcId = result.ref.rpc;
     sessionId = result.ref.session;
-    connectorId = result.ref.connector;
+    connectorId = result.ref.target;
   } else if (parsed.type === 'rpc' && parsed.id) {
     rpcId = parsed.id;
     sessionId = context.session;
@@ -362,7 +362,7 @@ async function handleInscribeFromRef(
     }
     rpcId = result.ref.rpc;
     sessionId = result.ref.session;
-    connectorId = result.ref.connector;
+    connectorId = result.ref.target;
   } else if (parsed.type === 'session') {
     printError('Cannot inscribe a session directly');
     printInfo('Only RPC references can be inscribed. Hint: use show to locate an RPC, then inscribe @rpc:<id>');
@@ -389,7 +389,7 @@ async function handleInscribeFromRef(
   // Build ref structure
   const ref: RefStruct = {
     kind: 'rpc',
-    connector: connectorId,
+    target: connectorId,
     session: rpcData.rpc.session_id,
     rpc: rpcId,
     proto: context.proto || 'mcp',

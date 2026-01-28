@@ -113,7 +113,7 @@ const MAX_AMBIGUOUS_DISPLAY = 5;
  */
 interface SessionMatch {
   session_id: string;
-  connector_id: string;
+  target_id: string | null;
 }
 
 /**
@@ -144,30 +144,30 @@ async function selectSessionFromMatches(
   prefix: string,
   context: ShellContext,
   store: EventLineStore,
-  connectorId: string
+  targetId: string
 ): Promise<boolean> {
   if (matches.length === 1) {
     savePreviousLocation(context);
     context.session = matches[0].session_id;
-    context.connector = connectorId;
+    context.connector = targetId;
     context.proto = detectProto(store, matches[0].session_id);
-    setCurrentSession(matches[0].session_id, connectorId);
-    printSuccess(`→ /${connectorId}/${shortenSessionId(matches[0].session_id)}`);
+    setCurrentSession(matches[0].session_id, targetId);
+    printSuccess(`→ /${targetId}/${shortenSessionId(matches[0].session_id)}`);
     return true;
   }
 
   if (canInteract()) {
     printInfo(`Multiple sessions match "${prefix}". Select one:`);
     const selected = await selectSession(
-      matches.slice(0, MAX_INTERACTIVE_OPTIONS).map(s => ({ id: s.session_id, connector_id: s.connector_id }))
+      matches.slice(0, MAX_INTERACTIVE_OPTIONS).map(s => ({ id: s.session_id, connector_id: s.target_id }))
     );
     if (selected) {
       savePreviousLocation(context);
       context.session = selected;
-      context.connector = connectorId;
+      context.connector = targetId;
       context.proto = detectProto(store, selected);
-      setCurrentSession(selected, connectorId);
-      printSuccess(`→ /${connectorId}/${shortenSessionId(selected)}`);
+      setCurrentSession(selected, targetId);
+      printSuccess(`→ /${targetId}/${shortenSessionId(selected)}`);
       return true;
     }
   } else {
@@ -292,7 +292,7 @@ export async function handleCc(
       return;
     }
 
-    // Get latest session (optionally filtered by current connector)
+    // Get latest session (optionally filtered by current target)
     const sessions = store.getSessions(context.connector, 1);
     if (sessions.length === 0) {
       if (context.connector) {
@@ -336,46 +336,46 @@ export async function handleCc(
     // Navigate based on ref kind
     if (ref.kind === 'rpc') {
       // For RPC refs, navigate to the containing session
-      if (!ref.session || !ref.connector) {
+      if (!ref.session || !ref.target) {
         printError(`Cannot navigate to RPC reference: missing session/connector`);
         printInfo(`Use: show ${arg} to view RPC details`);
         return;
       }
       savePreviousLocation(context);
-      context.connector = ref.connector;
+      context.connector = ref.target;
       context.session = ref.session;
       context.proto = detectProto(store, ref.session);
-      setCurrentSession(ref.session, ref.connector);
-      printSuccess(`→ /${ref.connector}/${shortenSessionId(ref.session)}`);
+      setCurrentSession(ref.session, ref.target);
+      printSuccess(`→ /${ref.target}/${shortenSessionId(ref.session)}`);
       printInfo(`(navigated to session containing RPC)`);
       return;
     }
 
     if (ref.kind === 'session') {
-      if (!ref.session || !ref.connector) {
+      if (!ref.session || !ref.target) {
         printError(`Invalid session reference: missing session/connector`);
         return;
       }
       savePreviousLocation(context);
-      context.connector = ref.connector;
+      context.connector = ref.target;
       context.session = ref.session;
       context.proto = detectProto(store, ref.session);
-      setCurrentSession(ref.session, ref.connector);
-      printSuccess(`→ /${ref.connector}/${shortenSessionId(ref.session)}`);
+      setCurrentSession(ref.session, ref.target);
+      printSuccess(`→ /${ref.target}/${shortenSessionId(ref.session)}`);
       return;
     }
 
     if (ref.kind === 'connector') {
-      if (!ref.connector) {
+      if (!ref.target) {
         printError(`Invalid connector reference: missing connector`);
         return;
       }
       savePreviousLocation(context);
-      context.connector = ref.connector;
+      context.connector = ref.target;
       context.session = undefined;
-      context.proto = detectConnectorProto(store, ref.connector);
-      setCurrentSession('', ref.connector);
-      printSuccess(`→ /${ref.connector}`);
+      context.proto = detectConnectorProto(store, ref.target);
+      setCurrentSession('', ref.target);
+      printSuccess(`→ /${ref.target}`);
       return;
     }
 
@@ -843,19 +843,19 @@ async function listConnectors(
 }
 
 /**
- * List sessions for a connector (router-style table)
+ * List sessions for a target (router-style table)
  */
 async function listSessions(
   store: EventLineStore,
-  connectorId: string,
+  targetId: string,
   _isLong: boolean,
   isJson: boolean,
   idsOnly: boolean
 ): Promise<void> {
-  const sessions = store.getSessions(connectorId, 50);
+  const sessions = store.getSessions(targetId, 50);
 
   if (sessions.length === 0) {
-    printInfo(`No sessions for connector: ${connectorId}`);
+    printInfo(`No sessions for target: ${targetId}`);
     printInfo('Run: plans run basic-mcp');
     return;
   }
@@ -1030,11 +1030,11 @@ export async function handleShow(
     }
 
     if (ref.kind === 'connector') {
-      if (!ref.connector) {
+      if (!ref.target) {
         printError(`Invalid connector reference: missing connector ID`);
         return;
       }
-      await executeCommand(['connectors', 'show', '--id', ref.connector, ...(isJson ? ['--json'] : []), ...htmlOptions]);
+      await executeCommand(['connectors', 'show', '--id', ref.target, ...(isJson ? ['--json'] : []), ...htmlOptions]);
       return;
     }
 
@@ -1346,14 +1346,15 @@ function getRpcRowsInternal(store: EventLineStore, sessionId: string): RpcRow[] 
 }
 
 /**
- * Get session rows for a connector (internal helper)
+ * Get session rows for a target (internal helper)
  */
-function getSessionRowsInternal(store: EventLineStore, connectorId: string): SessionRow[] {
-  const sessions = store.getSessions(connectorId, PIPELINE_SESSION_LIMIT);
+function getSessionRowsInternal(store: EventLineStore, targetId: string): SessionRow[] {
+  const sessions = store.getSessions(targetId, PIPELINE_SESSION_LIMIT);
 
   return sessions.map((session) => ({
     session_id: session.session_id,
-    connector_id: connectorId,
+    connector_id: targetId,
+    target_id: targetId,
     started_at: session.started_at,
     ended_at: session.ended_at,
     event_count: session.event_count ?? 0,

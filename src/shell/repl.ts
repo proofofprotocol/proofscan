@@ -1044,7 +1044,7 @@ Tips:
     };
 
     // Check if rows have connector_id (find results have it, ls does not)
-    const hasConnector = rows.some(r => r.connector_id);
+    const hasConnector = rows.some(r => r.target_id);
 
     console.log();
     if (hasConnector) {
@@ -1060,7 +1060,7 @@ Tips:
       console.log(dimText('-'.repeat(90)));
 
       rows.forEach((row) => {
-        const connector = (row.connector_id ?? '').slice(0, 10).padEnd(10);
+        const connector = (row.target_id ?? '').slice(0, 10).padEnd(10);
         const sessionShort = shortenSessionId(row.session_id);
         const method = row.method.slice(0, 16).padEnd(16);
         const status = statusColor(row.status).padEnd(isTTY ? 16 : 8);
@@ -1099,7 +1099,7 @@ Tips:
     const dimText = (text: string) => isTTY ? `\x1b[2m${text}\x1b[0m` : text;
 
     // Check if rows span multiple connectors (find at root level)
-    const connectorIds = new Set(rows.map(r => r.connector_id));
+    const connectorIds = new Set(rows.map(r => r.target_id));
     const multiConnector = connectorIds.size > 1;
 
     console.log();
@@ -1114,7 +1114,7 @@ Tips:
       console.log(dimText('-'.repeat(55)));
 
       rows.forEach((row) => {
-        const connector = (row.connector_id ?? '').slice(0, 12).padEnd(12);
+        const connector = (row.target_id ?? '').slice(0, 12).padEnd(12);
         const sessionShort = shortenSessionId(row.session_id);
         const rpcs = String(row.rpc_count).padEnd(6);
         const started = row.started_at ? row.started_at.slice(0, 19).replace('T', ' ') : '-';

@@ -57,13 +57,13 @@ function renderRpcLines(rows: RpcRow[], useColor: boolean): string[] {
     }
   };
 
-  // Check if rows have connector_id (find results have it, ls does not)
-  const hasConnector = rows.some(r => r.connector_id);
+  // Check if rows have target_id (find results have it, ls does not)
+  const hasTarget = rows.some(r => r.target_id);
 
-  if (hasConnector) {
-    // Extended format for find results: Connector, Session, Method, Status, Latency, Time
+  if (hasTarget) {
+    // Extended format for find results: Target, Session, Method, Status, Latency, Time
     lines.push(
-      dimText('Connector'.padEnd(10)) + '  ' +
+      dimText('Target'.padEnd(10)) + '  ' +
       dimText('Session'.padEnd(10)) + '  ' +
       dimText('Method'.padEnd(16)) + '  ' +
       dimText('Status'.padEnd(useColor ? 16 : 8)) + '  ' +
@@ -73,7 +73,7 @@ function renderRpcLines(rows: RpcRow[], useColor: boolean): string[] {
     lines.push(dimText('-'.repeat(90)));
 
     rows.forEach((row) => {
-      const connector = (row.connector_id ?? '').slice(0, 10).padEnd(10);
+      const target = (row.target_id ?? '').slice(0, 10).padEnd(10);
       const sessionShort = shortenSessionId(row.session_id);
       const method = row.method.slice(0, 16).padEnd(16);
       const status = statusColor(row.status).padEnd(useColor ? 16 : 8);
@@ -81,7 +81,7 @@ function renderRpcLines(rows: RpcRow[], useColor: boolean): string[] {
       // MM-DD HH:MM:SS format
       const time = row.request_ts ? row.request_ts.slice(5, 19).replace('T', ' ') : '-';
 
-      lines.push(`${connector}  ${sessionShort}  ${method}  ${status}  ${latency}  ${time}`);
+      lines.push(`${target}  ${sessionShort}  ${method}  ${status}  ${latency}  ${time}`);
     });
   } else {
     // Simple format for ls results (within a session)
@@ -113,14 +113,14 @@ function renderSessionLines(rows: SessionRow[], useColor: boolean): string[] {
   const lines: string[] = [];
   const dimText = (text: string) => useColor ? `\x1b[2m${text}\x1b[0m` : text;
 
-  // Check if rows span multiple connectors (find at root level)
-  const connectorIds = new Set(rows.map(r => r.connector_id));
-  const multiConnector = connectorIds.size > 1;
+  // Check if rows span multiple targets (find at root level)
+  const targetIds = new Set(rows.map(r => r.target_id));
+  const multiTarget = targetIds.size > 1;
 
-  if (multiConnector) {
-    // Extended format with connector column
+  if (multiTarget) {
+    // Extended format with target column
     lines.push(
-      dimText('Connector'.padEnd(12)) + '  ' +
+      dimText('Target'.padEnd(12)) + '  ' +
       dimText('Session'.padEnd(10)) + '  ' +
       dimText('RPCs'.padEnd(6)) + '  ' +
       dimText('Started')
@@ -128,12 +128,12 @@ function renderSessionLines(rows: SessionRow[], useColor: boolean): string[] {
     lines.push(dimText('-'.repeat(55)));
 
     rows.forEach((row) => {
-      const connector = (row.connector_id ?? '').slice(0, 12).padEnd(12);
+      const target = (row.target_id ?? '').slice(0, 12).padEnd(12);
       const sessionShort = shortenSessionId(row.session_id);
       const rpcs = String(row.rpc_count).padEnd(6);
       const started = row.started_at ? row.started_at.slice(0, 19).replace('T', ' ') : '-';
 
-      lines.push(`${connector}  ${sessionShort}  ${rpcs}  ${started}`);
+      lines.push(`${target}  ${sessionShort}  ${rpcs}  ${started}`);
     });
   } else {
     // Simple format (within a connector)

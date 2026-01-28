@@ -17,7 +17,7 @@ export type PipelineValue =
 export interface RpcRow {
   rpc_id: string;
   session_id: string;
-  connector_id?: string; // Available in find results (cross-session search)
+  target_id?: string; // Available in find results (cross-session search)
   method: string;
   status: 'OK' | 'ERR' | 'pending';
   latency_ms: number | null;
@@ -30,7 +30,7 @@ export interface RpcRow {
 /** Session row (from ls in connector context) */
 export interface SessionRow {
   session_id: string;
-  connector_id: string;
+  target_id: string;
   started_at: string;
   ended_at: string | null;
   event_count: number;
