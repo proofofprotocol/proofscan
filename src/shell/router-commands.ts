@@ -431,14 +431,25 @@ export async function handleCc(
       if (segments.length === 2) {
         const [absConnector, absSession] = segments;
 
-        // Find connector
+        // Find connector or agent
         const connectors = store.getConnectors();
-        const connector = connectors.find(c => c.id === absConnector || c.id.startsWith(absConnector));
+        let connector = connectors.find(c => c.id === absConnector || c.id.startsWith(absConnector));
         if (!connector) {
-          printError(`Connector not found: ${absConnector}`);
+          try {
+            const configDir = configPath.replace(/\/[^/]+$/, '');
+            const targetsStore = new TargetsStore(configDir);
+            const agents = targetsStore.list({ type: 'agent' });
+            const agent = agents.find(a => a.id === absConnector || a.id.startsWith(absConnector));
+            if (agent) {
+              connector = { id: agent.id, session_count: 0, latest_session: undefined };
+            }
+          } catch { /* targets table may not exist */ }
+        }
+        if (!connector) {
+          printError(`Target not found: ${absConnector}`);
           const available = connectors.map(c => c.id);
           if (available.length > 0) {
-            printInfo(`Available connectors: ${available.join(', ')}`);
+            printInfo(`Available: ${available.join(', ')}`);
           }
           return;
         }
@@ -456,15 +467,29 @@ export async function handleCc(
         return;
       }
 
-      // Just /connectorId - navigate to connector (segments.length === 1)
+      // Just /connectorId - navigate to connector or agent (segments.length === 1)
       const absConnectorId = segments[0];
       const connectors = store.getConnectors();
-      const connector = connectors.find(c => c.id === absConnectorId || c.id.startsWith(absConnectorId));
+      let connector = connectors.find(c => c.id === absConnectorId || c.id.startsWith(absConnectorId));
+
+      // Also check A2A agents if not found in MCP connectors
       if (!connector) {
-        printError(`Connector not found: ${absConnectorId}`);
+        try {
+          const configDir = configPath.replace(/\/[^/]+$/, '');
+          const targetsStore = new TargetsStore(configDir);
+          const agents = targetsStore.list({ type: 'agent' });
+          const agent = agents.find(a => a.id === absConnectorId || a.id.startsWith(absConnectorId));
+          if (agent) {
+            connector = { id: agent.id, session_count: 0, latest_session: undefined };
+          }
+        } catch { /* targets table may not exist */ }
+      }
+
+      if (!connector) {
+        printError(`Target not found: ${absConnectorId}`);
         const available = connectors.map(c => c.id);
         if (available.length > 0) {
-          printInfo(`Available connectors: ${available.join(', ')}`);
+          printInfo(`Available: ${available.join(', ')}`);
         }
         return;
       }
@@ -516,11 +541,18 @@ export async function handleCc(
     const manager = new ConfigManager(configPath);
     const configuredConnectors = await manager.getConnectors();
 
-    // Merge IDs from both sources (deduplicated)
+    // Merge IDs from all sources (deduplicated): history + config + A2A agents
     const allConnectorIds = new Set([
       ...historyConnectors.map(c => c.id),
       ...configuredConnectors.map(c => c.id),
     ]);
+    try {
+      const configDir = configPath.replace(/\/[^/]+$/, '');
+      const targetsStore = new TargetsStore(configDir);
+      for (const a of targetsStore.list({ type: 'agent' })) {
+        allConnectorIds.add(a.id);
+      }
+    } catch { /* targets table may not exist */ }
 
     // Find matching connector (exact match first, then prefix)
     let matchId: string | undefined;
@@ -1070,8 +1102,21 @@ export async function handleShow(
 
   if (level === 'root') {
     if (target) {
-      // Show connector details with HTML support
-      await executeCommand(['connectors', 'show', '--id', target, ...(isJson ? ['--json'] : []), ...htmlOptions]);
+      // Check if target is an A2A agent
+      let isAgent = false;
+      try {
+        const configDir = configPath.replace(/\/[^/]+$/, '');
+        const targetsStore = new TargetsStore(configDir);
+        const agents = targetsStore.list({ type: 'agent' });
+        isAgent = agents.some(a => a.id === target || a.id.startsWith(target));
+      } catch { /* targets table may not exist */ }
+
+      if (isAgent) {
+        await executeCommand(['agent', 'show', target]);
+      } else {
+        // Show connector details with HTML support
+        await executeCommand(['connectors', 'show', '--id', target, ...(isJson ? ['--json'] : []), ...htmlOptions]);
+      }
     } else {
       printInfo('At root level. Use: show <connector> or cc <connector>');
     }
