@@ -1541,19 +1541,12 @@ export async function handleA2ASend(
   // Generate RPC ID for request/response pairing
   const rpcId = randomUUID();
 
-  // Record outgoing message
-  if (sessionManager) {
-    sessionManager.recordMessage(
-      undefined, // No contextId yet (will get from response)
-      {
-        role: 'user',
-        parts: [{ text: message }],
-        messageId: randomUUID(),
-      },
-      true, // isRequest
-      rpcId
-    );
-  }
+  // Store request message to record later with correct contextId
+  const requestMessage = {
+    role: 'user' as const,
+    parts: [{ text: message }] as { text: string }[],
+    messageId: randomUUID(),
+  };
 
   // Send message via A2A client
   try {
@@ -1572,24 +1565,21 @@ export async function handleA2ASend(
     const isTTY = process.stdout.isTTY;
     const botPrefix = isTTY ? '\x1b[36m🤖\x1b[0m' : '🤖';
 
-    // Record response
+    // Determine contextId from response (or undefined if no response)
+    const contextId = result.message?.contextId ?? result.task?.contextId;
+
+    // Record request first with the same contextId as the response
     if (sessionManager) {
+      sessionManager.recordMessage(contextId, requestMessage, true, rpcId);
+
+      // Record response
       if (result.message) {
-        sessionManager.recordMessage(
-          result.message.contextId,
-          result.message,
-          false, // isResponse
-          rpcId
-        );
+        sessionManager.recordMessage(contextId, result.message, false, rpcId);
       } else if (result.task) {
-        sessionManager.recordTask(
-          result.task.contextId,
-          result.task,
-          rpcId
-        );
+        sessionManager.recordTask(contextId, result.task, rpcId);
       } else {
         // No response but success - complete RPC
-        const eventsStore = new EventsStore(configDir);
+        const eventsStore = sessionManager.getEventsStore();
         const sessionId = sessionManager.getOrCreateSession(undefined);
         eventsStore.completeRpcCall(sessionId, rpcId, true);
       }
