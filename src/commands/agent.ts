@@ -28,6 +28,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
     .requiredOption('--url <url>', 'Agent base URL')
     .option('--name <name>', 'Agent display name')
     .option('--ttl <seconds>', 'Agent card cache TTL in seconds', '3600')
+    .option('--allow-local', 'Allow private/local URLs (development only)')
     .action(async (id, options) => {
       try {
         const configDir = dirname(getConfigPath());
@@ -49,8 +50,8 @@ export function createAgentCommand(getConfigPath: () => string): Command {
         }
 
         // SSRF protection: Block private and local URLs
-        if (isPrivateUrl(options.url)) {
-          outputError(`Private or local URLs are not allowed: ${options.url}`);
+        if (isPrivateUrl(options.url) && !options.allowLocal) {
+          outputError(`Private or local URLs are not allowed: ${options.url}\n  Use --allow-local for development`);
           process.exit(1);
         }
 
@@ -289,6 +290,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
     .description('Fetch and cache Agent Card')
     .argument('<id>', 'Agent ID (or 8-char prefix)')
     .option('--refresh', 'Ignore cache and re-fetch')
+    .option('--allow-local', 'Allow private/local URLs (development only)')
     .action(async (id, options) => {
       try {
         const configDir = dirname(getConfigPath());
@@ -325,7 +327,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
 
         // Fetch Agent Card
         output(`Fetching Agent Card from ${config.url}...`);
-        const result = await fetchAgentCard(config.url);
+        const result = await fetchAgentCard(config.url, { allowLocal: options.allowLocal });
 
         if (!result.ok || !result.agentCard) {
           outputError(`Failed to fetch Agent Card: ${result.error}`);

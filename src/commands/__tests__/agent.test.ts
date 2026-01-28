@@ -377,7 +377,7 @@ describe('agent command', () => {
 
       await program.parseAsync(['node', 'test', 'agent', 'scan', 'agent-1']);
 
-      expect(fetchAgentCard).toHaveBeenCalledWith('https://agent1.example.com');
+      expect(fetchAgentCard).toHaveBeenCalledWith('https://agent1.example.com', expect.any(Object));
       expect(mockCacheStore.set).toHaveBeenCalledWith(
         expect.objectContaining({
           targetId: 'agent-1',
@@ -465,7 +465,7 @@ describe('agent command', () => {
 
       await program.parseAsync(['node', 'test', 'agent', 'scan', 'agent-1', '--refresh']);
 
-      expect(fetchAgentCard).toHaveBeenCalledWith('https://agent1.example.com');
+      expect(fetchAgentCard).toHaveBeenCalledWith('https://agent1.example.com', expect.any(Object));
     });
   });
 });

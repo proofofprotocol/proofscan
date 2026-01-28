@@ -22,8 +22,12 @@ export function getOutputOptions(): OutputOptions {
 export function output(data: unknown, humanReadable?: string): void {
   if (globalOptions.json) {
     console.log(JSON.stringify(data, null, 2));
+  } else if (humanReadable != null) {
+    console.log(humanReadable);
+  } else if (typeof data === 'object' && data !== null) {
+    console.log(JSON.stringify(data, null, 2));
   } else {
-    console.log(humanReadable ?? String(data));
+    console.log(String(data));
   }
 }
 
