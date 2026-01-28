@@ -96,6 +96,12 @@ export class A2ASessionManager {
       this.eventsStore.saveRpcCall(sessionId, rpcId, 'message/send');
     }
 
+    // For response messages, wrap in JSON-RPC result format for normalization
+    // This allows normalizeA2aEvent to process it correctly
+    const rawJson = isRequest
+      ? JSON.stringify(message)
+      : JSON.stringify({ jsonrpc: '2.0', id: rpcId, result: message });
+
     // Record event
     this.eventsStore.saveEvent(
       sessionId,
@@ -103,7 +109,7 @@ export class A2ASessionManager {
       isRequest ? 'request' : 'response',
       {
         rpcId,
-        rawJson: JSON.stringify(message),
+        rawJson,
         summary: this.createSummary(message, isRequest),
         protocol: 'a2a',
       }
