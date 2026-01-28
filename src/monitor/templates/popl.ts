@@ -78,7 +78,7 @@ function renderBreadcrumb(entry: MonitorPoplEntry): string {
     <nav class="breadcrumb">
       <a href="/" class="breadcrumb-item">Home</a>
       <span class="breadcrumb-sep">/</span>
-      <a href="/connectors/${encodeURIComponent(entry.connector_id)}" class="breadcrumb-item">${escapeHtml(entry.connector_id)}</a>
+      <a href="/connectors/${encodeURIComponent(entry.target_id)}" class="breadcrumb-item">${escapeHtml(entry.target_id)}</a>
       <span class="breadcrumb-sep">/</span>
       <span class="breadcrumb-current">Ledger:${escapeHtml(shortId)}</span>
     </nav>
@@ -125,10 +125,10 @@ function renderEntryHeader(entry: MonitorPoplEntry): string {
  * Render source links (Connector and Session) as a table
  */
 function renderSourceLinks(entry: MonitorPoplEntry): string {
-  const connectorLink = `/connectors/${encodeURIComponent(entry.connector_id)}`;
+  const connectorLink = `/connectors/${encodeURIComponent(entry.target_id)}`;
   const sessionShort = entry.session_id ? entry.session_id.slice(0, 8) : null;
   const sessionLink = entry.session_id
-    ? `/connectors/${encodeURIComponent(entry.connector_id)}?session=${encodeURIComponent(entry.session_id)}`
+    ? `/connectors/${encodeURIComponent(entry.target_id)}?session=${encodeURIComponent(entry.session_id)}`
     : null;
 
   return `
@@ -138,7 +138,7 @@ function renderSourceLinks(entry: MonitorPoplEntry): string {
           <th>Connector</th>
           <td>
             <a href="${connectorLink}" class="source-link">
-              ${escapeHtml(entry.connector_id)}
+              ${escapeHtml(entry.target_id)}
             </a>
           </td>
         </tr>

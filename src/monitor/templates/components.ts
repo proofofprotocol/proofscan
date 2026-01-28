@@ -446,9 +446,9 @@ export function renderConnectorCard(card: MonitorConnectorCard): string {
   });
 
   return `
-    <a href="/connectors/${escapeHtml(card.connector_id)}" class="connector-card ${disabledClass}" data-id="${escapeHtml(card.connector_id)}" data-capabilities="${getCapabilitiesData(card.capabilities)}" data-transport="${card.transport}" data-protocol="${card.protocol}">
+    <a href="/connectors/${escapeHtml(card.target_id)}" class="connector-card ${disabledClass}" data-id="${escapeHtml(card.target_id)}" data-capabilities="${getCapabilitiesData(card.capabilities)}" data-transport="${card.transport}" data-protocol="${card.protocol}">
       <div class="card-header">
-        <div class="card-title">${escapeHtml(card.connector_id)}</div>
+        <div class="card-title">${escapeHtml(card.target_id)}</div>
         <div class="card-badges">
           ${statusBadge}
         </div>

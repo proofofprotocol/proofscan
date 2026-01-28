@@ -44,7 +44,7 @@ apiRoutes.get('/connectors/:id', async (c) => {
   const connector = await getConnectorDetail(configPath, connectorId);
 
   if (!connector) {
-    return c.json({ error: 'Connector not found', connector_id: connectorId }, 404);
+    return c.json({ error: 'Connector not found', target_id: connectorId }, 404);
   }
 
   return c.json({
@@ -60,7 +60,7 @@ apiRoutes.get('/connectors/:id/popl', async (c) => {
 
   return c.json({
     generated_at: new Date().toISOString(),
-    connector_id: connectorId,
+    target_id: connectorId,
     entries,
   });
 });
