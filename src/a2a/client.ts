@@ -74,12 +74,15 @@ export class A2AClient {
   private defaultHeaders: Record<string, string>;
   private agentCard: AgentCard;
 
-  constructor(agentCard: AgentCard, options?: { headers?: Record<string, string> }) {
+  private allowLocal: boolean;
+
+  constructor(agentCard: AgentCard, options?: { headers?: Record<string, string>; allowLocal?: boolean }) {
     this.agentCard = agentCard;
     this.baseUrl = agentCard.url.replace(/\/$/, '');
+    this.allowLocal = options?.allowLocal ?? false;
 
     // SSRF protection: Block private URLs in constructor
-    if (isPrivateUrl(this.baseUrl)) {
+    if (isPrivateUrl(this.baseUrl) && !this.allowLocal) {
       throw new Error('Private or local URLs are not allowed');
     }
 
@@ -100,11 +103,12 @@ export class A2AClient {
   ): Promise<SendMessageResult> {
     const { timeout = 30000, headers = {}, blocking = false } = options;
 
-    // Convert string message to A2AMessage
+    // Convert string message to A2AMessage with unique messageId
+    const messageId = randomUUID();
     const a2aMessage: A2AMessage =
       typeof message === 'string'
-        ? { role: 'user', parts: [{ text: message }] }
-        : message;
+        ? { role: 'user', parts: [{ text: message }], messageId }
+        : { ...message, messageId: message.messageId ?? messageId };
 
     // Build JSON-RPC request with unique ID
     const requestId = randomUUID();
@@ -124,14 +128,14 @@ export class A2AClient {
 
     try {
       // SSRF protection (defense-in-depth): Double-check URL even though constructor validates
-      if (isPrivateUrl(this.baseUrl)) {
+      if (isPrivateUrl(this.baseUrl) && !this.allowLocal) {
         return {
           ok: false,
           error: 'Private or local URLs are not allowed',
         };
       }
 
-      const response = await fetch(`${this.baseUrl}/message/send`, {
+      const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: { ...this.defaultHeaders, ...headers },
         body: JSON.stringify(request),
@@ -583,7 +587,8 @@ export class A2AClient {
 
     const obj = data as Record<string, unknown>;
     const message: A2AMessage = {
-      role: obj.role === 'assistant' ? 'assistant' : 'user',
+      // A2A protocol uses 'agent' for assistant responses
+      role: (obj.role === 'assistant' || obj.role === 'agent') ? 'assistant' : 'user',
       parts: [],
       metadata: obj.metadata as Record<string, unknown> | undefined,
       contextId: obj.contextId ? String(obj.contextId) : undefined,

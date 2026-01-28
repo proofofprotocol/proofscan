@@ -7,6 +7,9 @@
 
 import type { ShellContext, ProtoType } from './types.js';
 import { PIPELINE_SESSION_LIMIT } from './types.js';
+import { AgentCacheStore } from '../db/agent-cache-store.js';
+import { A2AClient } from '../a2a/client.js';
+import type { AgentCard } from '../a2a/types.js';
 import { printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
 import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
@@ -1453,4 +1456,132 @@ function getConnectorRowsInternal(store: EventLineStore, configPath: string): Co
     session_count: c.session_count,
     created_at: c.latest_session ?? new Date().toISOString(),
   }));
+}
+
+// ===== send command (A2A) =====
+
+/**
+ * Send a message to an A2A agent
+ * Usage: send <message>
+ * Must be cd'd into an A2A agent target
+ */
+export async function handleA2ASend(
+  args: string[],
+  context: ShellContext,
+  configPath: string,
+): Promise<void> {
+  const level = getContextLevel(context);
+
+  if (level === 'root') {
+    printError('Not in a target context. Use: cd <agent-id> first, then send <message>');
+    return;
+  }
+
+  if (!context.connector) {
+    printError('No target in context');
+    return;
+  }
+
+  const message = args.join(' ').trim();
+  if (!message) {
+    printError('Usage: send <message>');
+    printInfo('Example: send hello');
+    return;
+  }
+
+  // Check if current target is an A2A agent
+  const configDir = configPath.replace(/\/[^/]+$/, '');
+  let agentCard: AgentCard | undefined;
+
+  try {
+    const targetsStore = new TargetsStore(configDir);
+    const agents = targetsStore.list({ type: 'agent' });
+    const agent = agents.find(a => a.id === context.connector);
+
+    if (!agent) {
+      printError(`'${context.connector}' is not an A2A agent. send is only for A2A agents.`);
+      return;
+    }
+
+    // Get cached agent card
+    const cacheStore = new AgentCacheStore(configDir);
+    const cache = cacheStore.get(agent.id);
+
+    if (!cache?.agentCard) {
+      printError(`No Agent Card cached for '${agent.id}'. Run: agent scan ${agent.id} --allow-local`);
+      return;
+    }
+
+    agentCard = cache.agentCard as AgentCard;
+  } catch (err) {
+    printError(`Failed to lookup agent: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+
+  // Determine if local URL
+  const isLocal = /^https?:\/\/(localhost|127\.|0\.0\.0\.|::1|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(agentCard.url);
+
+  // Send message via A2A client
+  try {
+    const client = new A2AClient(agentCard, { allowLocal: isLocal });
+    const result = await client.sendMessage(message);
+
+    if (!result.ok) {
+      printError(`A2A error: ${result.error}`);
+      return;
+    }
+
+    const isTTY = process.stdout.isTTY;
+    const botPrefix = isTTY ? '\x1b[36m🤖\x1b[0m' : '🤖';
+
+    // Display response - check message first, then task
+    if (result.message) {
+      const msg = result.message;
+      if (Array.isArray(msg.parts)) {
+        for (const part of msg.parts) {
+          if ('text' in part && part.text) {
+            console.log(`${botPrefix} ${part.text}`);
+          } else if ('data' in part) {
+            console.log('📎', JSON.stringify(part.data, null, 2));
+          }
+        }
+      }
+    } else if (result.task) {
+      const task = result.task;
+      const state = task.status ?? 'unknown';
+
+      if (state === 'completed' && Array.isArray(task.artifacts)) {
+        // Show artifacts for completed tasks
+        for (const artifact of task.artifacts) {
+          if (artifact.parts) {
+            for (const part of artifact.parts) {
+              if ('text' in part && part.text) {
+                console.log(`${botPrefix} ${part.text}`);
+              }
+            }
+          }
+        }
+      } else if (task.messages && task.messages.length > 0) {
+        // Show latest agent message
+        const agentMsgs = task.messages.filter(m => m.role === 'assistant');
+        const lastMsg = agentMsgs[agentMsgs.length - 1];
+        if (lastMsg && Array.isArray(lastMsg.parts)) {
+          for (const part of lastMsg.parts) {
+            if ('text' in part && part.text) {
+              console.log(`${botPrefix} ${part.text}`);
+            }
+          }
+        }
+        if (state !== 'completed') {
+          printInfo(`Task ${task.id} (state: ${state})`);
+        }
+      } else {
+        printInfo(`Task ${task.id} (state: ${state})`);
+      }
+    } else {
+      printInfo('(no response)');
+    }
+  } catch (err) {
+    printError(`Send failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }

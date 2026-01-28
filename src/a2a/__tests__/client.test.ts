@@ -95,7 +95,7 @@ describe('A2AClient', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => JSON.stringify(mockResponse),
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard);
@@ -129,7 +129,7 @@ describe('A2AClient', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => JSON.stringify(mockResponse),
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard);
@@ -157,7 +157,7 @@ describe('A2AClient', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => JSON.stringify(mockResponse),
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard);
@@ -185,7 +185,7 @@ describe('A2AClient', () => {
         status: 400,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => JSON.stringify(mockResponse),
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard);
@@ -239,7 +239,7 @@ describe('A2AClient', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => 'not valid json',
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard);
@@ -265,7 +265,7 @@ describe('A2AClient', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => JSON.stringify(mockResponse),
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard, {
@@ -274,7 +274,7 @@ describe('A2AClient', () => {
       await client.sendMessage('test');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://test.example.com/message/send',
+        'https://test.example.com',
         expect.objectContaining({
           headers: expect.objectContaining({
             'X-Custom-Header': 'custom-value',
@@ -299,7 +299,7 @@ describe('A2AClient', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => JSON.stringify(mockResponse),
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard);
@@ -343,7 +343,7 @@ describe('A2AClient', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => JSON.stringify(mockResponse),
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard);
@@ -372,7 +372,7 @@ describe('A2AClient', () => {
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
         text: async () => JSON.stringify(mockResponse),
-        url: 'https://test.example.com/message/send',
+        url: 'https://test.example.com',
       } as Response);
 
       const client = new A2AClient(validAgentCard);
@@ -409,7 +409,7 @@ describe('A2AClient', () => {
           status: 200,
           headers: new Headers({ 'content-type': 'application/json' }),
           text: async () => JSON.stringify(mockResponse),
-          url: 'https://test.example.com/message/send',
+          url: 'https://test.example.com',
         } as Response);
 
         const client = new A2AClient(validAgentCard);
