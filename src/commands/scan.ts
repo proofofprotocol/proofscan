@@ -20,16 +20,15 @@ export function createScanCommand(getConfigPath: () => string): Command {
     .option('--timeout <seconds>', 'Timeout in seconds', '30')
     .option('--dry-run', 'Run scan without saving to database')
     .action(async (connectorIdArg, options) => {
+      // Support both positional argument and --id option
+      const targetId = options.id || connectorIdArg; // CLI option name preserved, internal uses targetId
       // Show deprecation warning
       console.warn('\x1b[33m[DEPRECATED]\x1b[0m "scan start" is deprecated.');
       console.warn('  Use: pfscan plans run basic-mcp --connector <id>');
       console.warn('  Or:  pfscan plans run minimal-mcp --connector <id>');
       console.warn();
 
-      // Support both positional argument and --id option
-      const connectorId = options.id || connectorIdArg;
-
-      if (!connectorId) {
+      if (!targetId) {
         console.error('Error: Connector ID is required.\n');
         console.error('Usage:');
         console.error('  pfscan scan start <connectorId>');
@@ -39,19 +38,17 @@ export function createScanCommand(getConfigPath: () => string): Command {
         process.exit(1);
       }
 
-      // Use connectorId throughout (avoid mutating options object)
-      const effectiveId = connectorId;
       try {
         const manager = new ConfigManager(getConfigPath());
-        const connector = await manager.getConnector(effectiveId);
+        const connector = await manager.getConnector(targetId);
 
         if (!connector) {
-          outputError(`Connector not found: ${effectiveId}`);
+          outputError(`Connector not found: ${targetId}`);
           process.exit(1);
         }
 
         if (!connector.enabled) {
-          outputError(`Connector '${effectiveId}' is disabled. Enable it first.`);
+          outputError(`Connector '${targetId}' is disabled. Enable it first.`);
           process.exit(1);
         }
 
@@ -59,7 +56,7 @@ export function createScanCommand(getConfigPath: () => string): Command {
         const dryRun = options.dryRun || false;
 
         if (!opts.json) {
-          console.log(`${dryRun ? '[DRY RUN] ' : ''}Scanning connector: ${effectiveId}...`);
+          console.log(`${dryRun ? '[DRY RUN] ' : ''}Scanning connector: ${targetId}...`);
         }
 
         const scanner = new Scanner(manager.getConfigDir());
@@ -71,7 +68,7 @@ export function createScanCommand(getConfigPath: () => string): Command {
         if (result.success) {
           // Save as current session for future commands
           if (!dryRun) {
-            setCurrentSession(result.sessionId, result.connectorId);
+            setCurrentSession(result.sessionId, targetId);
           }
 
           const toolCount = result.tools?.length || 0;

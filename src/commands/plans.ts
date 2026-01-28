@@ -400,7 +400,7 @@ export function createPlansCommand(getConfigPath: () => string): Command {
 
         // Set current session for shell navigation
         if (result.sessionId) {
-          setCurrentSession(result.sessionId, connector.id);
+          setCurrentSession(result.sessionId, connector.id); // connector.id is connector ID (MCP connector)
         }
 
         // Human-readable output

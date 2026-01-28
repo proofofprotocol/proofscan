@@ -192,7 +192,7 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
           output(`  Config updated: ${fullKey}`);
         } else {
           // Connector mode (existing behavior)
-          const connectorId = namespaceOrConnector;
+          const targetId = namespaceOrConnector; // CLI option name preserved, internal uses targetId
           const envKey = key;
 
           // key is required in connector mode
@@ -215,10 +215,10 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
             outputError(`Invalid config file format: ${parseErr instanceof SyntaxError ? 'JSON parse error' : 'Read error'}`);
             process.exit(1);
           }
-          const connector = config.connectors?.find(c => c.id === connectorId);
+          const connector = config.connectors?.find(c => c.id === targetId);
 
           if (!connector) {
-            outputError(`Connector not found: ${connectorId}`);
+            outputError(`Connector not found: ${targetId}`);
             outputError(`Available connectors: ${config.connectors?.map(c => c.id).join(', ') || 'none'}`);
             process.exit(1);
           }
@@ -226,10 +226,10 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
           // Read secret value
           let secretValue: string;
           if (options.clip) {
-            output(`Reading secret for ${connectorId}.${envKey} from clipboard...`);
+            output(`Reading secret for ${targetId}.${envKey} from clipboard...`);
             secretValue = await readSecretFromClipboard();
           } else {
-            output(`Enter secret for ${connectorId}.${envKey}:`);
+            output(`Enter secret for ${targetId}.${envKey}:`);
             secretValue = await readSecretHidden();
           }
 
@@ -241,13 +241,13 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
           // Store secret and update config
           const result = await setSecret({
             configPath,
-            connectorId,
+            connectorId: targetId, // API param name preserved
             envKey,
             secretValue: secretValue.trim(),
           });
 
           output(`\n  Secret stored: ${result.secretRef}`);
-          output(`  Config updated: ${connectorId}.transport.env.${envKey}`);
+          output(`  Config updated: ${targetId}.transport.env.${envKey}`);
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -503,9 +503,10 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
             continue;
           }
 
+          const targetId = item.connector.id; // Internal uses targetId
           await setSecret({
             configPath,
-            connectorId: item.connector.id,
+            connectorId: targetId, // API param name preserved
             envKey: item.key,
             secretValue: secretValue.trim(),
           });

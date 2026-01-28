@@ -162,11 +162,11 @@ function generateOverallAnalysis(configDir: string): OverallAnalysisData {
  */
 function generateConnectorAnalysis(
   configDir: string,
-  connectorId: string
+  targetId: string
 ): ConnectorAnalysisData {
-  const sessions = getSessionsForConnector(configDir, connectorId);
-  const tools = getLatestToolsForConnector(configDir, connectorId);
-  const toolUsage = getToolUsageForConnector(configDir, connectorId);
+  const sessions = getSessionsForConnector(configDir, targetId);
+  const tools = getLatestToolsForConnector(configDir, targetId);
+  const toolUsage = getToolUsageForConnector(configDir, targetId);
 
   // Get date range for this connector
   const startDate = sessions.length > 0 ? sessions[sessions.length - 1].started_at : null;
@@ -186,7 +186,7 @@ function generateConnectorAnalysis(
 
   return {
     schema_version: 'analyze.connector.v1',
-    connector_id: connectorId,
+    connector_id: targetId, // Target ID (may be MCP connector ID)
     period: {
       start: startDate,
       end: endDate,
@@ -208,7 +208,7 @@ function generateConnectorAnalysis(
 function generateSessionAnalysis(
   configDir: string,
   sessionId: string,
-  connectorId: string,
+  connectorId: string, // DB field name preserved for schema compatibility
   resolvedBy: 'option' | 'latest' | 'current'
 ): SessionAnalysisData {
   const allowedTools = extractToolsFromSession(configDir, sessionId);
@@ -464,12 +464,12 @@ Examples:
         // Determine analysis mode
         if (options.session || options.latest) {
           // Session-level analysis (replaces permissions)
-          const connectorId = connectorArg || options.connector;
+          const targetId = connectorArg || options.connector; // CLI option name preserved, internal uses targetId
 
           const result = resolveSession({
             sessionId: options.session,
-            latest: options.latest || !!connectorId,
-            connectorId,
+            latest: options.latest || !!targetId,
+            connectorId: targetId,
             configDir,
           });
 
@@ -492,7 +492,8 @@ Examples:
           }
         } else if (connectorArg) {
           // Connector-level analysis
-          const data = generateConnectorAnalysis(configDir, connectorArg);
+          const targetId = connectorArg; // CLI option name preserved, internal uses targetId
+          const data = generateConnectorAnalysis(configDir, targetId);
 
           if (jsonMode) {
             output(data);

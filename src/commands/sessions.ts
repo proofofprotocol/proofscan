@@ -262,7 +262,7 @@ export function createSessionsCommand(getConfigPath: () => string): Command {
 
         let sessions: SessionWithStats[];
         if (options.connector) {
-          sessions = eventsStore.getSessionsByConnector(options.connector, limit);
+          sessions = eventsStore.getSessionsByTarget(options.connector, limit);
         } else {
           sessions = eventsStore.getAllSessions(limit);
         }
