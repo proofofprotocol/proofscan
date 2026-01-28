@@ -10,7 +10,7 @@ import Database from 'better-sqlite3';
 import { AgentCacheStore } from '../agent-cache-store.js';
 import { TargetsStore } from '../targets-store.js';
 import { closeAllDbs } from '../connection.js';
-import { EVENTS_DB_SCHEMA, EVENTS_DB_MIGRATION_5_TO_6 } from '../schema.js';
+import { EVENTS_DB_SCHEMA } from '../schema.js';
 
 describe('AgentCacheStore', () => {
   let testDir: string;
@@ -38,10 +38,7 @@ describe('AgentCacheStore', () => {
     const dbPath = join(testDir, 'events.db');
     const db = new Database(dbPath);
     db.exec(EVENTS_DB_SCHEMA);
-    db.pragma('user_version = 5'); // Start at version 5
-    // Run migration to version 6 to create targets and agent_cache tables
-    db.exec(EVENTS_DB_MIGRATION_5_TO_6);
-    db.pragma('user_version = 6');
+    db.pragma('user_version = 6'); // Schema already includes Phase 7.0 tables
     db.close();
 
     store = new AgentCacheStore(testDir);

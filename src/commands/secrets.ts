@@ -85,8 +85,8 @@ export function createSecretsCommand(getConfigPath: () => string): Command {
               identifier = (b.env_key || '-').padEnd(20);
               key = '-'.padEnd(25);
             } else {
-              // For connector, show connector_id and env_key
-              identifier = (b.connector_id || '-').padEnd(20);
+              // For connector, show target_id and env_key
+              identifier = (b.target_id || '-').padEnd(20);
               key = (b.env_key || '-').padEnd(25);
             }
             const status = b.status.padEnd(8);

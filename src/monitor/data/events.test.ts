@@ -38,9 +38,9 @@ describe('Events data queries', () => {
 
     // Insert test session
     db.prepare(`
-      INSERT INTO sessions (session_id, connector_id, started_at, ended_at, exit_reason, protected, created_at, secret_ref_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('sess-001', 'test-connector', '2024-01-01T10:00:00Z', '2024-01-01T10:05:00Z', 'normal', 0, '2024-01-01T10:00:00Z', 0);
+      INSERT INTO sessions (session_id, connector_id, target_id, started_at, ended_at, exit_reason, protected, created_at, secret_ref_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('sess-001', 'test-connector', 'test-connector', '2024-01-01T10:00:00Z', '2024-01-01T10:05:00Z', 'normal', 0, '2024-01-01T10:00:00Z', 0);
 
     // Insert test RPC calls
     db.prepare(`

@@ -58,6 +58,7 @@ describe('diagnoseEventsDb', () => {
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY,
         connector_id TEXT NOT NULL,
+        target_id TEXT,
         started_at TEXT NOT NULL
       );
       CREATE TABLE rpc_calls (id TEXT PRIMARY KEY);
@@ -98,6 +99,7 @@ describe('diagnoseEventsDb', () => {
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY,
         connector_id TEXT NOT NULL,
+        target_id TEXT,
         started_at TEXT NOT NULL,
         actor_id TEXT,
         actor_kind TEXT,
@@ -168,6 +170,7 @@ describe('fixEventsDb', () => {
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY,
         connector_id TEXT NOT NULL,
+        target_id TEXT,
         started_at TEXT NOT NULL,
         actor_id TEXT,
         actor_kind TEXT,
@@ -206,6 +209,7 @@ describe('fixEventsDb', () => {
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY,
         connector_id TEXT NOT NULL,
+        target_id TEXT,
         started_at TEXT NOT NULL
       );
       CREATE TABLE actors (id TEXT PRIMARY KEY);
@@ -244,6 +248,7 @@ describe('fixEventsDb', () => {
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY,
         connector_id TEXT NOT NULL,
+        target_id TEXT,
         started_at TEXT NOT NULL,
         actor_id TEXT,
         actor_kind TEXT,
@@ -285,6 +290,7 @@ describe('fixEventsDb', () => {
       CREATE TABLE sessions (
         id TEXT PRIMARY KEY,
         connector_id TEXT NOT NULL,
+        target_id TEXT,
         started_at TEXT NOT NULL,
         actor_id TEXT,
         actor_kind TEXT,

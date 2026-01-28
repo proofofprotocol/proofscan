@@ -89,7 +89,7 @@ export interface PayloadData {
 export interface HtmlRpcData {
   rpc_id: string;
   session_id: string;
-  connector_id: string;
+  target_id: string;
   method: string;
   status: RpcStatus;
   latency_ms: number | null;

@@ -61,6 +61,7 @@ const sampleSessionRows: SessionRow[] = [
   {
     session_id: 'session-1',
     connector_id: 'conn-1',
+    target_id: 'conn-1',
     started_at: '2025-01-01T00:00:00Z',
     ended_at: '2025-01-01T01:00:00Z',
     event_count: 100,
@@ -70,6 +71,7 @@ const sampleSessionRows: SessionRow[] = [
   {
     session_id: 'session-2',
     connector_id: 'conn-1',
+    target_id: 'conn-1',
     started_at: '2025-01-01T02:00:00Z',
     ended_at: '2025-01-01T03:00:00Z',
     event_count: 200,

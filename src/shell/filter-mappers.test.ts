@@ -61,6 +61,7 @@ describe('sessionRowToFilterContext', () => {
   const baseRow: SessionRow = {
     session_id: 'session-789',
     connector_id: 'connector-abc',
+    target_id: 'connector-abc',
     started_at: '2025-01-01T00:00:00Z',
     ended_at: '2025-01-01T01:00:00Z',
     event_count: 100,
