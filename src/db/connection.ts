@@ -566,6 +566,7 @@ const VALID_SESSION_COLUMNS = new Map<string, string>([
   ['actor_kind', 'TEXT'],
   ['actor_label', 'TEXT'],
   ['secret_ref_count', 'INTEGER NOT NULL DEFAULT 0'],
+  ['target_id', 'TEXT'],
 ]);
 
 /**
