@@ -88,7 +88,7 @@ function buildConnectorCard(
   const db = getEventsDb(configDir);
 
   // Get recent sessions for status determination
-  const recentSessions = eventsStore.getSessionsByConnector(connector.id, 5);
+  const recentSessions = eventsStore.getSessionsByTarget(connector.id, 5);
 
   // Get protocol and server info from initialize response
   const protocolInfo = getProtocolInfo(db, connector.id);
@@ -106,7 +106,7 @@ function buildConnectorCard(
   const lastActivity = getLastActivity(db, connector.id);
 
   return {
-    connector_id: connector.id,
+    target_id: connector.id,
     package_name: protocolInfo?.name ?? connector.id,
     package_version: protocolInfo?.version ?? 'unknown',
     protocol: protocolInfo?.protocol ?? 'Unknown',
@@ -131,7 +131,7 @@ function buildOrphanConnectorCard(
   const eventsStore = new EventsStore(configDir);
   const db = getEventsDb(configDir);
 
-  const recentSessions = eventsStore.getSessionsByConnector(connectorId, 5);
+  const recentSessions = eventsStore.getSessionsByTarget(connectorId, 5);
   const protocolInfo = getProtocolInfo(db, connectorId);
   const kpis = calculateKpis(db, connectorId);
   const capabilities = detectCapabilities(db, connectorId);
@@ -139,7 +139,7 @@ function buildOrphanConnectorCard(
   const lastActivity = getLastActivity(db, connectorId);
 
   return {
-    connector_id: connectorId,
+    target_id: connectorId,
     package_name: protocolInfo?.name ?? connectorId,
     package_version: protocolInfo?.version ?? 'unknown',
     protocol: protocolInfo?.protocol ?? 'Unknown',

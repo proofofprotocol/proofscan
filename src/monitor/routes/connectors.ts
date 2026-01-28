@@ -31,7 +31,7 @@ export const connectorsRoutes = new Hono<MonitorEnv>();
 
 // Connector detail page
 connectorsRoutes.get('/:id', async (c) => {
-  const connectorId = c.req.param('id');
+  const targetId = c.req.param('id');
   const configPath = c.get('configPath');
 
   const manager = new ConfigManager(configPath);
@@ -40,19 +40,19 @@ connectorsRoutes.get('/:id', async (c) => {
   // Get connector config
   let connector = null;
   try {
-    connector = await manager.getConnector(connectorId);
+    connector = await manager.getConnector(targetId);
   } catch {
     // Config might not exist
   }
 
   // Build connector report
-  const report = await buildConnectorReport(connectorId, connector, configDir);
+  const report = await buildConnectorReport(targetId, connector, configDir);
 
   // Get connector detail for badge row (protocol, capabilities, etc.)
-  const connectorCard = await getConnectorDetail(configPath, connectorId);
+  const connectorCard = await getConnectorDetail(configPath, targetId);
 
   // Get POPL entries for this connector
-  const poplEntries = await getPoplEntriesByConnector(connectorId);
+  const poplEntries = await getPoplEntriesByConnector(targetId);
   const sessionPoplMap = await buildSessionPoplMap();
 
   // Generate base HTML
@@ -1162,7 +1162,7 @@ function addPoplBadgesToSessions(
  * Build connector report for HTML generation
  */
 async function buildConnectorReport(
-  connectorId: string,
+  targetId: string,
   connector: import('../../types/config.js').Connector | null,
   configDir: string
 ): Promise<HtmlConnectorReportV1> {
@@ -1173,7 +1173,7 @@ async function buildConnectorReport(
   const countStmt = db.prepare(
     `SELECT COUNT(*) as count FROM sessions WHERE connector_id = ?`
   );
-  const totalSessionCount = (countStmt.get(connectorId) as { count: number }).count;
+  const totalSessionCount = (countStmt.get(targetId) as { count: number }).count;
 
   // Get sessions with pagination (limit 50 for web view)
   const maxSessions = 50;
@@ -1189,7 +1189,7 @@ async function buildConnectorReport(
     ORDER BY s.started_at DESC
     LIMIT ? OFFSET ?
   `);
-  const displayedSessions = sessionsStmt.all(connectorId, maxSessions, offset) as Array<{
+  const displayedSessions = sessionsStmt.all(targetId, maxSessions, offset) as Array<{
     session_id: string;
     started_at: string;
     ended_at: string | null;
@@ -1218,14 +1218,14 @@ async function buildConnectorReport(
     : { type: 'stdio' as const };
 
   // Get server info from initialize response
-  const serverInfo = getServerInfo(db, connectorId);
+  const serverInfo = getServerInfo(db, targetId);
 
   // Build session reports
   const sessionReports: Record<string, HtmlSessionReportV1> = {};
 
   for (const session of displayedSessions) {
     const rpcCalls = eventsStore.getRpcCallsBySession(session.session_id);
-    const report = buildSessionReport(session, rpcCalls, connectorId, configDir);
+    const report = buildSessionReport(session, rpcCalls, targetId, configDir);
     sessionReports[session.session_id] = report;
   }
 
@@ -1244,7 +1244,7 @@ async function buildConnectorReport(
       redacted: false,
     },
     connector: {
-      connector_id: connectorId,
+      target_id: targetId,
       enabled: connector?.enabled ?? true,
       transport: transportInfo,
       server: serverInfo ?? undefined,
@@ -1272,7 +1272,7 @@ async function buildConnectorReport(
  */
 function getServerInfo(
   db: ReturnType<typeof getEventsDb>,
-  connectorId: string
+  targetId: string
 ): HtmlConnectorInfo['server'] | null {
   // NOTE: rpc_calls has composite PK (rpc_id, session_id), so we must join on both
   // to avoid cross-connector data leakage
@@ -1288,7 +1288,7 @@ function getServerInfo(
     ORDER BY e.ts DESC
     LIMIT 1
   `);
-  const row = stmt.get(connectorId) as { raw_json: string } | undefined;
+  const row = stmt.get(targetId) as { raw_json: string } | undefined;
   if (!row?.raw_json) return null;
 
   try {
@@ -1324,7 +1324,7 @@ function buildSessionReport(
     event_count?: number;
   },
   rpcCalls: import('../../db/types.js').RpcCall[],
-  connectorId: string,
+  targetId: string,
   configDir: string
 ): HtmlSessionReportV1 {
   const db = getEventsDb(configDir);
@@ -1426,7 +1426,7 @@ function buildSessionReport(
     },
     session: {
       session_id: session.session_id,
-      connector_id: connectorId,
+      target_id: targetId,
       started_at: session.started_at,
       ended_at: session.ended_at,
       exit_reason: session.exit_reason ?? null,

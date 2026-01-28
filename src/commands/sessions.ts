@@ -209,7 +209,7 @@ async function exportSessionHtml(
     },
     session: {
       session_id: session.session_id,
-      connector_id: session.connector_id,
+      target_id: session.target_id ?? session.connector_id,
       started_at: session.started_at,
       ended_at: session.ended_at,
       exit_reason: session.exit_reason,

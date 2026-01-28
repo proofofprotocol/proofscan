@@ -150,7 +150,7 @@ function parsePoplDocument(
       trust_level: (trust?.level as number) ?? 0,
       trust_label: (trust?.label as string) ?? 'Recorded',
       target_kind: (target.kind as MonitorPoplEntry['target_kind']) ?? 'session',
-      connector_id: targetIds?.connector_id ?? '',
+      target_id: targetIds?.connector_id ?? '',
       session_id: targetIds?.session_id ?? null,
       capture: {
         started_at: window?.started_at ?? '',
@@ -228,7 +228,7 @@ export async function getPoplEntriesByConnector(
         const doc = parseYaml(content) as Record<string, unknown>;
         const parsed = parsePoplDocument(entryDir, doc);
 
-        if (parsed && parsed.connector_id === connectorId) {
+        if (parsed && parsed.target_id === connectorId) {
           results.push(toSummary(parsed));
         }
       } catch {

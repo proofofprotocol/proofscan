@@ -46,7 +46,7 @@ export interface MonitorConnectorKpis {
  * Connector card data for Home page display
  */
 export interface MonitorConnectorCard {
-  connector_id: string;
+  target_id: string;
 
   // Package identification (required)
   package_name: string; // serverInfo.name from initialize response
@@ -130,7 +130,7 @@ export interface MonitorPoplEntry {
 
   // ターゲットリンク
   target_kind: 'session' | 'connector' | 'plan' | 'run';
-  connector_id: string;
+  target_id: string;
   session_id: string | null;
 
   // キャプチャサマリー

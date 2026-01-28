@@ -865,7 +865,7 @@ export function generateSessionHtml(report: HtmlSessionReportV1): string {
           <dt>Session ID</dt>
           <dd><span class="badge">${escapeHtml(session.session_id)}</span></dd>
           <dt>Connector</dt>
-          <dd><span class="badge">${escapeHtml(session.connector_id)}</span></dd>
+          <dd><span class="badge">${escapeHtml(session.target_id)}</span></dd>
           <dt>Started</dt>
           <dd>${formatTimestamp(session.started_at)}</dd>
           <dt>Ended</dt>
@@ -3080,7 +3080,7 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Connector: ${escapeHtml(connector.connector_id)} - proofscan</title>
+  <title>Connector: ${escapeHtml(connector.target_id)} - proofscan</title>
   <style>${getConnectorReportStyles()}</style>
 </head>
 <body>
@@ -3105,7 +3105,7 @@ export function generateConnectorHtml(report: HtmlConnectorReportV1): string {
   </header>
   <div class="page-header">
     <div class="page-header-left">
-      <h1>Connector: <span class="badge">${escapeHtml(connector.connector_id)}</span></h1>
+      <h1>Connector: <span class="badge">${escapeHtml(connector.target_id)}</span></h1>
     </div>
     ${renderKpiRow(analytics.kpis)}
   </div>

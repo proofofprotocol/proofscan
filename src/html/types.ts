@@ -128,7 +128,7 @@ export interface SessionRpcDetail {
  */
 export interface HtmlSessionData {
   session_id: string;
-  connector_id: string;
+  target_id: string;
   started_at: string;
   ended_at: string | null;
   exit_reason: string | null;
@@ -260,7 +260,7 @@ export interface HtmlMcpServerInfo {
  * Connector configuration info for HTML display
  */
 export interface HtmlConnectorInfo {
-  connector_id: string;
+  target_id: string;
   enabled: boolean;
   transport: {
     type: 'stdio' | 'rpc-http' | 'rpc-sse';
