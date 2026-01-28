@@ -408,14 +408,14 @@ export async function handleCc(
       // Validate absoluteTarget is not empty (handles "cd //" case)
       if (!absoluteTarget || absoluteTarget.trim() === '') {
         printError('Invalid path: empty connector ID');
-        printInfo('Use: cd /connector or cd /connector/session');
+        printInfo('Use: cd /target or cd /target/session');
         return;
       }
 
       // Validate against path traversal attempts (e.g., /.. or /../foo)
       if (absoluteTarget.includes('..')) {
         printError('Invalid path: path traversal not allowed');
-        printInfo('Use: cd /connector or cd /connector/session');
+        printInfo('Use: cd /target or cd /target/session');
         return;
       }
 
@@ -424,7 +424,7 @@ export async function handleCc(
       const segments = absoluteTarget.split('/').filter(s => s !== '');
       if (segments.length > 2) {
         printError('Invalid path format: too many segments');
-        printInfo('Use: cd /connector or cd /connector/session');
+        printInfo('Use: cd /target or cd /target/session');
         return;
       }
 
@@ -514,7 +514,7 @@ export async function handleCc(
     const connectors = store.getConnectors();
     const connector = connectors.find(c => c.id === connectorPart || c.id.startsWith(connectorPart));
     if (!connector) {
-      printError(`Connector not found: ${connectorPart}`);
+      printError(`Target not found: ${connectorPart}`);
       return;
     }
 
@@ -572,7 +572,7 @@ export async function handleCc(
     }
 
     if (!matchId) {
-      printError(`Connector not found: ${arg}`);
+      printError(`Target not found: ${arg}`);
       printInfo('Available: ' + [...allConnectorIds].join(', '));
       return;
     }
@@ -884,7 +884,7 @@ async function listConnectors(
   if (hasHistoryOnly || hasConfigOnly) {
     console.log();
     if (hasConfigOnly) {
-      printInfo('+ = ready (run: plans run basic-mcp)');
+      printInfo('+ = ready (mcp: plans run basic-mcp, a2a: agent scan <id>)');
     }
     if (hasHistoryOnly) {
       printInfo('* = history only (not in config)');
@@ -892,7 +892,7 @@ async function listConnectors(
   }
 
   console.log();
-  printInfo(`Hint: cd <connector> to enter, show <connector> for details`);
+  printInfo(`Hint: cd <target> to enter, show <target> for details`);
 }
 
 /**
@@ -909,7 +909,7 @@ async function listSessions(
 
   if (sessions.length === 0) {
     printInfo(`No sessions for target: ${targetId}`);
-    printInfo('Run: plans run basic-mcp');
+    printInfo('Start a session first (mcp: plans run basic-mcp, a2a: agent scan <id>)');
     return;
   }
 
@@ -1150,8 +1150,20 @@ export async function handleShow(
 
       await executeCommand(['sessions', 'show', '--id', matches[0].session_id, ...(isJson ? ['--json'] : []), ...htmlOptions]);
     } else {
-      // Show connector details with HTML support (connector-level)
-      await executeCommand(['connectors', 'show', '--id', context.connector, ...(isJson ? ['--json'] : []), ...htmlOptions]);
+      // Show connector/agent details (connector-level)
+      let isAgent = false;
+      try {
+        const configDir = configPath.replace(/\/[^/]+$/, '');
+        const targetsStore = new TargetsStore(configDir);
+        const agents = targetsStore.list({ type: 'agent' });
+        isAgent = agents.some(a => a.id === context.connector || a.id.startsWith(context.connector!));
+      } catch { /* targets table may not exist */ }
+
+      if (isAgent) {
+        await executeCommand(['agent', 'show', context.connector]);
+      } else {
+        await executeCommand(['connectors', 'show', '--id', context.connector, ...(isJson ? ['--json'] : []), ...htmlOptions]);
+      }
     }
     return;
   }
