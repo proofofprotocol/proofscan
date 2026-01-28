@@ -28,6 +28,7 @@ import { loadHistory, saveHistory, addToHistory } from './history.js';
 import { createCompleter, type DynamicDataProvider } from './completer.js';
 import { selectConnector, selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
+import { TargetsStore } from '../db/targets-store.js';
 import { ConfigManager } from '../config/index.js';
 import {
   getCurrentSession,
@@ -140,6 +141,8 @@ export class ShellRepl {
 
   /**
    * Get all connector IDs (MCP connectors with sessions + A2A agents)
+   * Note: This is synchronous for readline completer compatibility.
+   * Agent IDs are loaded asynchronously and cached.
    */
   private getAllConnectorIds(configDir: string): string[] {
     const now = Date.now();
@@ -150,11 +153,9 @@ export class ShellRepl {
       const store = new EventLineStore(configDir);
       const sessionIds = store.getConnectors().map(c => c.id);
 
-      // Also include A2A agents from TargetsStore
+      // Also include A2A agents from TargetsStore (loaded synchronously via static import)
       let agentIds: string[] = [];
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { TargetsStore } = require('../db/targets-store.js');
         const ts = new TargetsStore(configDir);
         agentIds = ts.list({ type: 'agent' }).map((a: { id: string }) => a.id);
       } catch { /* ignore if TargetsStore unavailable */ }
