@@ -11,6 +11,8 @@ import { parseAgentCard } from './config.js';
 export interface FetchAgentCardOptions {
   timeout?: number; // default: 10000ms
   headers?: Record<string, string>;
+  /** Allow private/local URLs (development only) */
+  allowLocal?: boolean;
 }
 
 export interface FetchAgentCardResult {
@@ -135,7 +137,7 @@ export async function fetchAgentCard(
   url: string,
   options: FetchAgentCardOptions = {}
 ): Promise<FetchAgentCardResult> {
-  const { timeout = 10000, headers = {} } = options;
+  const { timeout = 10000, headers = {}, allowLocal = false } = options;
   const agentCardUrl = normalizeAgentCardUrl(url);
 
   // Validate URL format
@@ -149,7 +151,7 @@ export async function fetchAgentCard(
   }
 
   // SSRF protection: Block private and local URLs
-  if (isPrivateUrl(agentCardUrl)) {
+  if (isPrivateUrl(agentCardUrl) && !allowLocal) {
     return {
       ok: false,
       error: 'Private or local URLs are not allowed',

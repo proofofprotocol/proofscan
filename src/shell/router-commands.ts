@@ -12,6 +12,7 @@ import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
 import { EventsStore } from '../db/events-store.js';
 import { ConfigManager } from '../config/index.js';
+import { TargetsStore } from '../db/targets-store.js';
 import { setCurrentSession, clearCurrentSession, formatRelativeTime } from '../utils/index.js';
 import {
   createRefFromContext,
@@ -724,6 +725,7 @@ async function listConnectors(
     latest_session: string | null;
     configured: boolean;
     hasHistory: boolean;
+    proto?: ProtoType;
   }
 
   const mergedConnectors: MergedConnector[] = [];
@@ -750,6 +752,25 @@ async function listConnectors(
         hasHistory: false,
       });
     }
+  }
+
+  // Add A2A agents from targets store
+  try {
+    const configDir = configPath.replace(/\/[^/]+$/, '');
+    const targetsStore = new TargetsStore(configDir);
+    const agents = targetsStore.list({ type: 'agent' });
+    for (const agent of agents) {
+      mergedConnectors.push({
+        id: agent.id,
+        session_count: 0,
+        latest_session: null,
+        configured: true,
+        hasHistory: false,
+        proto: 'a2a' as const,
+      });
+    }
+  } catch {
+    // targets table may not exist yet
   }
 
   if (mergedConnectors.length === 0) {
@@ -779,7 +800,7 @@ async function listConnectors(
   const isTTY = process.stdout.isTTY;
   const data = mergedConnectors.map(c => ({
     id: c.id,
-    proto: c.hasHistory ? detectConnectorProto(store, c.id) : '?',
+    proto: c.proto || (c.hasHistory ? detectConnectorProto(store, c.id) : '?'),
     sessions: c.session_count,
     latest: c.latest_session ? formatRelativeTime(c.latest_session) : '-',
     configured: c.configured,
