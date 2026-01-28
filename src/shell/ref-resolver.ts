@@ -33,8 +33,8 @@ export type RefKind = 'connector' | 'session' | 'rpc' | 'tool_call' | 'context' 
 export interface RefStruct {
   /** Reference kind */
   kind: RefKind;
-  /** Connector ID (always present except for root context) */
-  connector?: string;
+  /** Target ID (connector or agent ID - always present except for root context) */
+  target?: string;
   /** Session ID (present for session/rpc/tool_call refs) */
   session?: string;
   /** RPC ID (present for rpc refs) */
@@ -48,7 +48,7 @@ export interface RefStruct {
   /** Original reference string (e.g., "@this", "@rpc:abc123") */
   source?: string;
   /** Target path for popl kind (e.g., "popl/<entry_id>") - no local absolute paths */
-  target?: string;
+  target_path?: string;
   /** POPL entry ID (for kind='popl') */
   entry_id?: string;
   /** Plan name (for kind='plan') */
@@ -83,8 +83,8 @@ export interface ResolveResult {
  * Allows RefResolver to query database without direct dependency
  */
 export interface RefDataProvider {
-  /** Get latest session for a connector (or globally if no connector) */
-  getLatestSession(connectorId?: string): { session_id: string; connector_id: string } | null;
+  /** Get latest session for a target (or globally if no target) */
+  getLatestSession(targetId?: string): { session_id: string; connector_id: string } | null;
   /** Get latest RPC for a session */
   getLatestRpc(sessionId: string): { rpc_id: string; method: string } | null;
   /** Get RPC by ID */
@@ -204,7 +204,7 @@ export class RefResolver {
         success: true,
         ref: {
           kind: 'connector',
-          connector: context.connector,
+          target: context.connector,
           proto: context.proto,
           level: 'connector',
           captured_at: new Date().toISOString(),
@@ -218,7 +218,7 @@ export class RefResolver {
         success: true,
         ref: {
           kind: 'session',
-          connector: context.connector,
+          target: context.connector,
           session: context.session,
           proto: context.proto,
           level: 'session',
@@ -248,7 +248,7 @@ export class RefResolver {
           success: true,
           ref: {
             kind: 'rpc',
-            connector: context.connector,
+            target: context.connector,
             session: context.session,
             rpc: latestRpc.rpc_id,
             proto: context.proto,
@@ -271,7 +271,7 @@ export class RefResolver {
         success: true,
         ref: {
           kind: 'session',
-          connector: latestSession.connector_id,
+          target: latestSession.connector_id,
           session: latestSession.session_id,
           level: 'connector',
           captured_at: new Date().toISOString(),
@@ -283,7 +283,7 @@ export class RefResolver {
     return {
       success: false,
       error: context.connector
-        ? `No sessions for connector: ${context.connector}`
+        ? `No sessions for target: ${context.connector}`
         : 'No sessions found',
     };
   }
@@ -307,7 +307,7 @@ export class RefResolver {
       success: true,
       ref: {
         kind: 'rpc',
-        connector: context.connector,
+        target: context.connector,
         session: rpc.session_id,
         rpc: rpc.rpc_id,
         proto: context.proto,
@@ -336,7 +336,7 @@ export class RefResolver {
       success: true,
       ref: {
         kind: 'session',
-        connector: session.connector_id,
+        target: session.connector_id,
         session: session.session_id,
         captured_at: new Date().toISOString(),
         source: `@session:${sessionId}`,
@@ -404,7 +404,7 @@ export class RefResolver {
       ref: {
         kind: 'popl',
         entry_id: entryId,
-        target: `popl/${entryId}`,
+        target_path: `popl/${entryId}`,
         captured_at: new Date().toISOString(),
         source: `@popl:${entryId}`,
       },
@@ -617,8 +617,8 @@ export class RefResolver {
         resolved.push(ref.rpc);
       } else if (ref.session) {
         resolved.push(ref.session);
-      } else if (ref.connector) {
-        resolved.push(ref.connector);
+      } else if (ref.target) {
+        resolved.push(ref.target);
       } else {
         resolved.push(arg); // Keep original for context refs
       }
@@ -637,7 +637,7 @@ export function createRefFromContext(context: ShellContext): RefStruct {
   if (level === 'session' && context.connector && context.session) {
     return {
       kind: 'session',
-      connector: context.connector,
+      target: context.connector,
       session: context.session,
       proto: context.proto,
       level: 'session',
@@ -648,7 +648,7 @@ export function createRefFromContext(context: ShellContext): RefStruct {
   if (level === 'connector' && context.connector) {
     return {
       kind: 'connector',
-      connector: context.connector,
+      target: context.connector,
       proto: context.proto,
       level: 'connector',
       captured_at: new Date().toISOString(),
@@ -671,21 +671,35 @@ export function refToJson(ref: RefStruct): string {
 
 /**
  * Parse RefStruct from JSON string
- * Also supports popl-style JSON with target field
+ * Also supports popl-style JSON with target_path field
  */
 export function refFromJson(json: string): RefStruct | null {
   try {
     const parsed = JSON.parse(json);
 
-    // Check for popl-style JSON: { kind?: 'popl', target: 'popl/<id>', entry_id?: '<id>' }
-    if (parsed.target && typeof parsed.target === 'string') {
+    // Check for popl-style JSON: { kind?: 'popl', target_path: 'popl/<id>', entry_id?: '<id>' }
+    if (parsed.target_path && typeof parsed.target_path === 'string') {
+      const targetMatch = parsed.target_path.match(/^popl\/(.+)$/);
+      if (targetMatch) {
+        const entryId = targetMatch[1];
+        return {
+          kind: 'popl',
+          entry_id: parsed.entry_id || entryId,
+          target_path: parsed.target_path,
+          captured_at: parsed.captured_at || new Date().toISOString(),
+        };
+      }
+    }
+
+    // Support legacy `target` field for popl (rename to target_path)
+    if (parsed.kind === 'popl' && parsed.target && typeof parsed.target === 'string') {
       const targetMatch = parsed.target.match(/^popl\/(.+)$/);
       if (targetMatch) {
         const entryId = targetMatch[1];
         return {
           kind: 'popl',
           entry_id: parsed.entry_id || entryId,
-          target: parsed.target,
+          target_path: parsed.target,
           captured_at: parsed.captured_at || new Date().toISOString(),
         };
       }
@@ -707,14 +721,14 @@ export function refFromJson(json: string): RefStruct | null {
  * This adapts the EventsStore to the RefDataProvider interface
  */
 export function createRefDataProvider(eventsStore: {
-  getLatestSession(connectorId?: string): { session_id: string; connector_id: string } | null;
+  getLatestSession(targetId?: string): { session_id: string; connector_id: string } | null;
   getLatestRpc(sessionId: string): { rpc_id: string; method: string } | null;
   getRpcById(rpcId: string, sessionId?: string): { rpc_id: string; session_id: string; method: string } | null;
   getSessionByPrefix(prefix: string, connectorId?: string): { session_id: string; connector_id: string } | null;
-  getUserRef(name: string): { kind: RefKind; connector: string | null; session: string | null; rpc: string | null; proto: string | null; level: string | null; captured_at: string; entry_id?: string | null; target?: string | null } | null;
+  getUserRef(name: string): { kind: RefKind; target: string | null; session: string | null; rpc: string | null; proto: string | null; level: string | null; captured_at: string; entry_id?: string | null; target_path?: string | null } | null;
 }): RefDataProvider {
   return {
-    getLatestSession: (connectorId?: string) => eventsStore.getLatestSession(connectorId),
+    getLatestSession: (targetId?: string) => eventsStore.getLatestSession(targetId),
     getLatestRpc: (sessionId: string) => eventsStore.getLatestRpc(sessionId),
     getRpcById: (rpcId: string, sessionId?: string) => eventsStore.getRpcById(rpcId, sessionId),
     getSessionByPrefix: (prefix: string, connectorId?: string) => eventsStore.getSessionByPrefix(prefix, connectorId),
@@ -722,19 +736,19 @@ export function createRefDataProvider(eventsStore: {
       const ref = eventsStore.getUserRef(name);
       if (!ref) return null;
 
-      // For popl kind, include entry_id and target
+      // For popl kind, include entry_id and target_path
       if (ref.kind === 'popl') {
         return {
           kind: ref.kind,
           entry_id: ref.entry_id || undefined,
-          target: ref.target || undefined,
+          target_path: ref.target_path || ref.target || undefined,
           captured_at: ref.captured_at,
         };
       }
 
       return {
         kind: ref.kind,
-        connector: ref.connector || undefined,
+        target: ref.target || ref.target || undefined,
         session: ref.session || undefined,
         rpc: ref.rpc || undefined,
         proto: ref.proto as ProtoType | undefined,

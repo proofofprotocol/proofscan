@@ -158,7 +158,7 @@ export function executeFind(
  */
 interface FindScope {
   level: ContextLevel;
-  connectorId?: string;
+  targetId?: string;
   sessionId?: string;
 }
 
@@ -168,7 +168,7 @@ interface FindScope {
 function determineScope(level: ContextLevel, context: ShellContext): FindScope {
   return {
     level,
-    connectorId: context.connector,
+    targetId: context.connector,
     sessionId: context.session,
   };
 }
@@ -186,12 +186,12 @@ function findSessions(
 
   if (scope.level === 'session' && scope.sessionId) {
     // Session level - return just this session info
-    const sessions = store.getSessions(scope.connectorId, options.sessions);
+    const sessions = store.getSessions(scope.targetId, options.sessions);
     const session = sessions.find(s => s.session_id === scope.sessionId);
     if (session) {
       rows.push({
         session_id: session.session_id,
-        connector_id: scope.connectorId!,
+        target_id: scope.targetId!,
         started_at: session.started_at ?? '',
         ended_at: session.ended_at ?? null,
         event_count: session.event_count ?? 0,
@@ -199,14 +199,14 @@ function findSessions(
       });
       sessionCount = 1;
     }
-  } else if (scope.level === 'connector' && scope.connectorId) {
+  } else if (scope.level === 'connector' && scope.targetId) {
     // Connector level - return sessions for this connector
-    const sessions = store.getSessions(scope.connectorId, options.sessions);
+    const sessions = store.getSessions(scope.targetId, options.sessions);
     for (const session of sessions) {
       if (rows.length >= options.limit) break;
       rows.push({
         session_id: session.session_id,
-        connector_id: scope.connectorId,
+        target_id: scope.targetId ?? '',
         started_at: session.started_at ?? '',
         ended_at: session.ended_at ?? null,
         event_count: session.event_count ?? 0,
@@ -224,7 +224,7 @@ function findSessions(
         if (rows.length >= options.limit) break;
         rows.push({
           session_id: session.session_id,
-          connector_id: connector.id,
+          target_id: connector.id,
           started_at: session.started_at ?? '',
           ended_at: session.ended_at ?? null,
           event_count: session.event_count ?? 0,
@@ -284,14 +284,14 @@ function findRpcs(
   // Collect session IDs to search
   const sessionIds: Array<{ sessionId: string; connectorId: string }> = [];
 
-  if (scope.level === 'session' && scope.sessionId && scope.connectorId) {
+  if (scope.level === 'session' && scope.sessionId && scope.targetId) {
     // Session level - search only this session
-    sessionIds.push({ sessionId: scope.sessionId, connectorId: scope.connectorId });
-  } else if (scope.level === 'connector' && scope.connectorId) {
+    sessionIds.push({ sessionId: scope.sessionId, connectorId: scope.targetId });
+  } else if (scope.level === 'connector' && scope.targetId) {
     // Connector level - search sessions for this connector
-    const sessions = store.getSessions(scope.connectorId, options.sessions);
+    const sessions = store.getSessions(scope.targetId, options.sessions);
     for (const session of sessions) {
-      sessionIds.push({ sessionId: session.session_id, connectorId: scope.connectorId });
+      sessionIds.push({ sessionId: session.session_id, connectorId: scope.targetId });
     }
   } else {
     // Root level - search across all connectors
@@ -366,7 +366,7 @@ function findRpcs(
       rows.push({
         rpc_id: rpc.rpc_id,
         session_id: rpc.session_id,
-        connector_id: connectorId,
+        target_id: connectorId,
         method: rpc.method,
         status,
         latency_ms,

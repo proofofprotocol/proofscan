@@ -251,7 +251,7 @@ async function handleRefResolve(
     if (ref.entry_id) console.log(`  Entry ID: ${ref.entry_id}`);
     if (ref.target) console.log(`  Target: ${ref.target}`);
   } else {
-    if (ref.connector) console.log(`  Connector: ${ref.connector}`);
+    if (ref.target) console.log(`  Connector: ${ref.target}`);
     if (ref.session) console.log(`  Session: ${ref.session.slice(0, 8)}...`);
     if (ref.rpc) console.log(`  RPC: ${ref.rpc}`);
     if (ref.proto) console.log(`  Proto: ${ref.proto}`);
@@ -395,7 +395,7 @@ async function saveRef(name: string, ref: RefStruct, configPath: string): Promis
 
   eventsStore.saveUserRef(name, {
     kind: ref.kind,
-    connector: ref.connector,
+    connector: ref.target,
     session: ref.session,
     rpc: ref.rpc,
     proto: ref.proto,
@@ -414,7 +414,7 @@ async function saveRef(name: string, ref: RefStruct, configPath: string): Promis
     if (ref.entry_id) printInfo(`  Entry ID: ${ref.entry_id.slice(0, 12)}...`);
     if (ref.target) printInfo(`  Target: ${ref.target}`);
   } else {
-    if (ref.connector) printInfo(`  Connector: ${ref.connector}`);
+    if (ref.target) printInfo(`  Connector: ${ref.target}`);
     if (ref.session) printInfo(`  Session: ${ref.session.slice(0, 8)}`);
     if (ref.rpc) printInfo(`  RPC: ${ref.rpc}`);
   }
@@ -467,7 +467,7 @@ async function handleRefLs(args: string[], configPath: string): Promise<void> {
       target = ref.target || `popl/${ref.entry_id || '?'}`;
     } else {
       // For other refs, build path from connector/session/rpc
-      if (ref.connector) target = ref.connector;
+      if (ref.target) target = ref.target;
       if (ref.session) target += '/' + ref.session.slice(0, 8);
       if (ref.rpc) target += '/' + ref.rpc.slice(0, 8);
       if (!target) target = '(root)';

@@ -90,8 +90,8 @@ export async function selectConnector(connectors: string[]): Promise<string | nu
 /**
  * Show session selection UI
  */
-export async function selectSession(sessions: Array<{ id: string; connector_id: string }>): Promise<string | null> {
-  const items = sessions.map(s => `${s.id.slice(0, 8)} (${s.connector_id})`);
+export async function selectSession(sessions: Array<{ id: string; connector_id: string | null }>): Promise<string | null> {
+  const items = sessions.map(s => `${s.id.slice(0, 8)} (${s.connector_id ?? 'unknown'})`);
   const selected = await selectFromList(items, 'Select a session:');
 
   if (!selected) {
