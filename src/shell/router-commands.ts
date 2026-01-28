@@ -17,6 +17,8 @@ import { EventsStore } from '../db/events-store.js';
 import { ConfigManager } from '../config/index.js';
 import { TargetsStore } from '../db/targets-store.js';
 import { setCurrentSession, clearCurrentSession, formatRelativeTime } from '../utils/index.js';
+import { createA2ASessionManager, type A2ASessionManager } from '../a2a/session-manager.js';
+import { randomUUID } from 'crypto';
 import {
   createRefFromContext,
   refToJson,
@@ -1527,18 +1529,61 @@ export async function handleA2ASend(
     return;
   }
 
+  // Initialize session manager for recording
+  let sessionManager: A2ASessionManager | undefined;
+  try {
+    const eventsStore = new EventsStore(configDir);
+    sessionManager = createA2ASessionManager(eventsStore, context.connector);
+  } catch {
+    // Session manager initialization failed - continue without recording
+  }
+
+  // Generate RPC ID for request/response pairing
+  const rpcId = randomUUID();
+
+  // Store request message to record later with correct contextId
+  const requestMessage = {
+    role: 'user' as const,
+    parts: [{ text: message }] as { text: string }[],
+    messageId: randomUUID(),
+  };
+
   // Send message via A2A client
   try {
     const client = new A2AClient(agentCard, { allowLocal });
     const result = await client.sendMessage(message);
 
     if (!result.ok) {
+      // Record error
+      if (sessionManager) {
+        sessionManager.recordError(undefined, rpcId, result.error || 'Unknown error');
+      }
       printError(`A2A error: ${result.error}`);
       return;
     }
 
     const isTTY = process.stdout.isTTY;
     const botPrefix = isTTY ? '\x1b[36m🤖\x1b[0m' : '🤖';
+
+    // Determine contextId from response (or undefined if no response)
+    const contextId = result.message?.contextId ?? result.task?.contextId;
+
+    // Record request first with the same contextId as the response
+    if (sessionManager) {
+      sessionManager.recordMessage(contextId, requestMessage, true, rpcId);
+
+      // Record response
+      if (result.message) {
+        sessionManager.recordMessage(contextId, result.message, false, rpcId);
+      } else if (result.task) {
+        sessionManager.recordTask(contextId, result.task, rpcId);
+      } else {
+        // No response but success - complete RPC
+        const eventsStore = sessionManager.getEventsStore();
+        const sessionId = sessionManager.getOrCreateSession(undefined);
+        eventsStore.completeRpcCall(sessionId, rpcId, true);
+      }
+    }
 
     // Display response - check message first, then task
     if (result.message) {

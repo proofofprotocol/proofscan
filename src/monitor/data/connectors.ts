@@ -5,6 +5,7 @@
 import { createHash } from 'crypto';
 import { ConfigManager } from '../../config/manager.js';
 import { EventsStore } from '../../db/events-store.js';
+import { TargetsStore } from '../../db/targets-store.js';
 import { getEventsDb } from '../../db/connection.js';
 import { listPoplEntries, hasPoplDir } from '../../popl/index.js';
 import type { Connector } from '../../types/config.js';
@@ -50,6 +51,15 @@ export async function getHomeData(
   const orphanConnectorIds = getOrphanConnectorIds(configDir, knownIds);
   for (const id of orphanConnectorIds) {
     connectorCards.push(buildOrphanConnectorCard(id, configDir));
+  }
+
+  // Include A2A agents from targets table
+  // These may not have sessions yet but should be visible in monitor
+  const agentIds = getAgentIds(configDir);
+  for (const id of agentIds) {
+    if (!knownIds.has(id)) {
+      connectorCards.push(buildAgentCard(id, configDir));
+    }
   }
 
   // Sort by last activity (most recent first)
@@ -156,17 +166,83 @@ function buildOrphanConnectorCard(
 
 /**
  * Get connector IDs that have sessions but are not in config
+ * Also checks target_id for A2A agents
  */
 function getOrphanConnectorIds(
   configDir: string,
   knownIds: Set<string>
 ): string[] {
   const db = getEventsDb(configDir);
-  const stmt = db.prepare(`SELECT DISTINCT connector_id FROM sessions`);
-  const rows = stmt.all() as { connector_id: string }[];
+
+  // Check both connector_id and target_id for A2A compatibility
+  const stmt = db.prepare(`
+    SELECT DISTINCT COALESCE(target_id, connector_id) as id FROM sessions
+    WHERE COALESCE(target_id, connector_id) IS NOT NULL
+  `);
+  const rows = stmt.all() as { id: string }[];
   return rows
-    .map((r) => r.connector_id)
+    .map((r) => r.id)
     .filter((id) => !knownIds.has(id));
+}
+
+/**
+ * Get A2A agent IDs from targets table
+ */
+function getAgentIds(configDir: string): string[] {
+  try {
+    const targetsStore = new TargetsStore(configDir);
+    const targets = targetsStore.list({ type: 'agent' });
+    return targets.map((t) => t.id);
+  } catch {
+    // Targets table might not exist yet
+    return [];
+  }
+}
+
+/**
+ * Build card for A2A agent from targets table
+ */
+function buildAgentCard(
+  agentId: string,
+  configDir: string
+): MonitorConnectorCard {
+  const eventsStore = new EventsStore(configDir);
+  const db = getEventsDb(configDir);
+
+  const recentSessions = eventsStore.getSessionsByTarget(agentId, 5);
+  const protocolInfo = getProtocolInfo(db, agentId);
+  const kpis = calculateKpis(db, agentId);
+  const capabilities = detectCapabilities(db, agentId);
+  const status = determineStatus(recentSessions);
+  const lastActivity = getLastActivity(db, agentId);
+
+  // Try to get agent name from targets
+  let agentName = agentId;
+  try {
+    const targetsStore = new TargetsStore(configDir);
+    const targets = targetsStore.list({ type: 'agent' });
+    const agent = targets.find((t) => t.id === agentId);
+    if (agent?.name) {
+      agentName = agent.name;
+    }
+  } catch {
+    // Ignore
+  }
+
+  return {
+    target_id: agentId,
+    package_name: agentName,
+    package_version: protocolInfo?.version ?? 'unknown',
+    protocol: protocolInfo?.protocol ?? 'A2A',
+    protocol_version: protocolInfo?.protocolVersion,
+    status,
+    enabled: true, // Agents are enabled by default in targets table
+    capabilities,
+    transport: 'http', // A2A uses HTTP
+    kpis,
+    last_activity: lastActivity,
+    last_activity_relative: formatRelativeTime(lastActivity),
+  };
 }
 
 /**
@@ -183,8 +259,8 @@ interface ProtocolInfo {
  * Get protocol and server info from latest initialize response
  * Detection rules:
  * - MCP: Has initialize RPC with serverInfo in response (typical MCP pattern)
- * - A2A: Placeholder for Agent-to-Agent detection (future)
- * - JSON-RPC: Has RPC calls but no MCP evidence
+ * - A2A: Has message/send RPC (A2A message/send method)
+ * - JSON-RPC: Has RPC calls but no MCP/A2A evidence
  * - Unknown: No observed traffic to determine
  */
 function getProtocolInfo(
@@ -232,6 +308,45 @@ function getProtocolInfo(
     } catch {
       // Parse error - fall through
     }
+  }
+
+  // Check for A2A traffic: message/send method
+  const a2aStmt = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM rpc_calls r
+    JOIN sessions s ON r.session_id = s.session_id
+    WHERE s.connector_id = ?
+      AND r.method = 'message/send'
+  `);
+  const a2aCount = (a2aStmt.get(connectorId) as { count: number }).count;
+
+  if (a2aCount > 0) {
+    // A2A traffic detected
+    // Try to get agent name from cached agent card
+    let agentName = connectorId;
+    const agentCardStmt = db.prepare(`
+      SELECT ac.agent_card_json
+      FROM agent_cache ac
+      JOIN targets t ON ac.target_id = t.id
+      WHERE t.id = ?
+    `);
+    const agentCardRow = agentCardStmt.get(connectorId) as { agent_card_json: string } | undefined;
+    if (agentCardRow?.agent_card_json) {
+      try {
+        const agentCard = JSON.parse(agentCardRow.agent_card_json);
+        if (agentCard.name) {
+          agentName = agentCard.name;
+        }
+      } catch {
+        // Ignore parse error
+      }
+    }
+
+    return {
+      name: agentName,
+      version: 'unknown',
+      protocol: 'A2A',
+    };
   }
 
   // Check if there are any RPC calls at all
