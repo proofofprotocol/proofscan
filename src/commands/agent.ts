@@ -67,6 +67,7 @@ export function createAgentCommand(getConfigPath: () => string): Command {
           schema_version: 1,
           url: options.url,
           ttl_seconds: ttlSeconds,
+          allow_local: options.allowLocal || undefined,
         };
 
         // Add to targets

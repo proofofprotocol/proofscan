@@ -1492,6 +1492,7 @@ export async function handleA2ASend(
   // Check if current target is an A2A agent
   const configDir = configPath.replace(/\/[^/]+$/, '');
   let agentCard: AgentCard | undefined;
+  let allowLocal = false;
 
   try {
     const targetsStore = new TargetsStore(configDir);
@@ -1503,27 +1504,32 @@ export async function handleA2ASend(
       return;
     }
 
+    // Get allow_local from agent config (set during agent add --allow-local)
+    const agentConfig = agent.config as { allow_local?: boolean } | undefined;
+    allowLocal = agentConfig?.allow_local ?? false;
+
     // Get cached agent card
     const cacheStore = new AgentCacheStore(configDir);
     const cache = cacheStore.get(agent.id);
 
     if (!cache?.agentCard) {
-      printError(`No Agent Card cached for '${agent.id}'. Run: agent scan ${agent.id} --allow-local`);
+      printError(`No Agent Card cached for '${agent.id}'. Run: agent scan ${agent.id}${allowLocal ? ' --allow-local' : ''}`);
       return;
     }
 
     agentCard = cache.agentCard as AgentCard;
   } catch (err) {
+    // Log error for debugging (visible with DEBUG=1 or similar)
+    if (process.env.DEBUG) {
+      console.error('[handleA2ASend] Agent lookup failed:', err);
+    }
     printError(`Failed to lookup agent: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
 
-  // Determine if local URL
-  const isLocal = /^https?:\/\/(localhost|127\.|0\.0\.0\.|::1|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(agentCard.url);
-
   // Send message via A2A client
   try {
-    const client = new A2AClient(agentCard, { allowLocal: isLocal });
+    const client = new A2AClient(agentCard, { allowLocal });
     const result = await client.sendMessage(message);
 
     if (!result.ok) {
