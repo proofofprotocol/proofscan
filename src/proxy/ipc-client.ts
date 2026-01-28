@@ -12,7 +12,7 @@ import type {
   IpcMessage,
   ReloadResult,
 } from './ipc-types.js';
-import { IPC_TIMEOUT_MS, generateRequestId } from './ipc-types.js';
+import { IPC_TIMEOUT_MS, generateRequestId, getSocketPath } from './ipc-types.js';
 import type { ProxyRuntimeState } from './runtime-state.js';
 
 /**
@@ -197,6 +197,5 @@ export class IpcClient {
  * Create an IPC client for the given config directory
  */
 export function createIpcClient(configDir: string): IpcClient {
-  const { getSocketPath } = require('./ipc-types.js');
   return new IpcClient(getSocketPath(configDir));
 }

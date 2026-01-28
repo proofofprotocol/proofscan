@@ -155,7 +155,7 @@ function parseValue(
   }
 
   // Number (including negative)
-  if (/[0-9\-]/.test(char)) {
+  if (/[0-9-]/.test(char)) {
     return parseNumber(input, pos);
   }
 
@@ -248,7 +248,7 @@ function parseUnquotedValue(
 ): { ok: true; value: string; pos: number } | { ok: false; error: string; position: number } {
   const start = pos;
 
-  while (pos < input.length && /[a-zA-Z0-9_/\-]/.test(input[pos])) {
+  while (pos < input.length && /[a-zA-Z0-9_/-]/.test(input[pos])) {
     pos++;
   }
 

@@ -149,7 +149,7 @@ export class IpcServer {
 
     try {
       switch (command.type) {
-        case 'reload':
+        case 'reload': {
           const reloadResult = await this.handlers.onReload();
           response = {
             type: 'ok',
@@ -159,6 +159,7 @@ export class IpcServer {
             data: reloadResult,
           };
           break;
+        }
 
         case 'stop':
           // Send response before stopping
@@ -173,13 +174,14 @@ export class IpcServer {
           }, 100);
           return;
 
-        case 'status':
+        case 'status': {
           const state = this.handlers.onStatus();
           response = {
             type: 'status',
             data: state,
           };
           break;
+        }
 
         default:
           response = {
