@@ -139,6 +139,36 @@ export class ShellRepl {
   }
 
   /**
+   * Get all connector IDs (MCP connectors with sessions + A2A agents)
+   */
+  private getAllConnectorIds(configDir: string): string[] {
+    const now = Date.now();
+    if (this.connectorsCache && this.connectorsCache.expiry > now) {
+      return this.connectorsCache.data;
+    }
+    try {
+      const store = new EventLineStore(configDir);
+      const sessionIds = store.getConnectors().map(c => c.id);
+
+      // Also include A2A agents from TargetsStore
+      let agentIds: string[] = [];
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { TargetsStore } = require('../db/targets-store.js');
+        const ts = new TargetsStore(configDir);
+        agentIds = ts.list({ type: 'agent' }).map((a: { id: string }) => a.id);
+      } catch { /* ignore if TargetsStore unavailable */ }
+
+      // Merge and deduplicate
+      const ids = [...new Set([...sessionIds, ...agentIds])];
+      this.connectorsCache = { data: ids, expiry: now + CACHE_TTL_MS };
+      return ids;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Get data provider for configure mode completions
    */
   private getConfigureDataProvider(): ConfigureDataProvider {
@@ -146,20 +176,7 @@ export class ShellRepl {
     const configDir = manager.getConfigDir();
 
     return {
-      getConnectorIds: () => {
-        const now = Date.now();
-        if (this.connectorsCache && this.connectorsCache.expiry > now) {
-          return this.connectorsCache.data;
-        }
-        try {
-          const store = new EventLineStore(configDir);
-          const ids = store.getConnectors().map(c => c.id);
-          this.connectorsCache = { data: ids, expiry: now + CACHE_TTL_MS };
-          return ids;
-        } catch {
-          return [];
-        }
-      },
+      getConnectorIds: () => this.getAllConnectorIds(configDir),
     };
   }
 
@@ -171,20 +188,7 @@ export class ShellRepl {
     const configDir = manager.getConfigDir();
 
     return {
-      getConnectorIds: () => {
-        const now = Date.now();
-        if (this.connectorsCache && this.connectorsCache.expiry > now) {
-          return this.connectorsCache.data;
-        }
-        try {
-          const store = new EventLineStore(configDir);
-          const ids = store.getConnectors().map(c => c.id);
-          this.connectorsCache = { data: ids, expiry: now + CACHE_TTL_MS };
-          return ids;
-        } catch {
-          return [];
-        }
-      },
+      getConnectorIds: () => this.getAllConnectorIds(configDir),
       getSessionPrefixes: (connectorId?: string, limit: number = DEFAULT_COMPLETION_LIMIT) => {
         const now = Date.now();
         const cacheKey = `${connectorId || '*'}:${limit}`;
