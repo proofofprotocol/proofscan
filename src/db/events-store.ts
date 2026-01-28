@@ -31,13 +31,15 @@ export class EventsStore {
 
   // ==================== Sessions ====================
 
-  createSession(connectorId: string, options?: {
-    targetId?: string;
+  createSession(targetId: string, options?: {
+    /** @deprecated Use targetId instead */
+    connectorId?: string;
     actorId?: string;
     actorKind?: string;
     actorLabel?: string;
   }): Session {
-    const targetId = options?.targetId || connectorId;
+    // Support legacy connectorId for backward compatibility
+    const connectorId = options?.connectorId || targetId;
     const session: Session = {
       session_id: randomUUID(),
       connector_id: connectorId,
@@ -88,20 +90,27 @@ export class EventsStore {
     return stmt.get(sessionId) as Session | null;
   }
 
-  getSessionsByConnector(connectorId: string, limit?: number): SessionWithStats[] {
+  getSessionsByTarget(targetId: string, limit?: number): SessionWithStats[] {
     let sql = `
       SELECT s.*,
         (SELECT COUNT(*) FROM events WHERE session_id = s.session_id) as event_count,
         (SELECT COUNT(*) FROM rpc_calls WHERE session_id = s.session_id) as rpc_count
       FROM sessions s
-      WHERE s.connector_id = ?
+      WHERE COALESCE(s.target_id, s.connector_id) = ?
       ORDER BY s.started_at DESC
     `;
     if (limit) {
       sql += ` LIMIT ${limit}`;
     }
     const stmt = this.db.prepare(sql);
-    return stmt.all(connectorId) as SessionWithStats[];
+    return stmt.all(targetId) as SessionWithStats[];
+  }
+
+  /**
+   * @deprecated Use getSessionsByTarget instead
+   */
+  getSessionsByConnector(connectorId: string, limit?: number): SessionWithStats[] {
+    return this.getSessionsByTarget(connectorId, limit);
   }
 
   getAllSessions(limit?: number): SessionWithStats[] {
@@ -231,16 +240,23 @@ export class EventsStore {
     return stmt.all(sessionId) as Event[];
   }
 
-  getRecentEventsByConnector(connectorId: string, limit: number = 20): Event[] {
+  getRecentEventsByTarget(targetId: string, limit: number = 20): Event[] {
     const stmt = this.db.prepare(`
       SELECT e.* FROM events e
       JOIN sessions s ON e.session_id = s.session_id
-      WHERE s.connector_id = ?
+      WHERE COALESCE(s.target_id, s.connector_id) = ?
       ORDER BY e.ts DESC
       LIMIT ?
     `);
-    const events = stmt.all(connectorId, limit) as Event[];
+    const events = stmt.all(targetId, limit) as Event[];
     return events.reverse(); // Return in chronological order
+  }
+
+  /**
+   * @deprecated Use getRecentEventsByTarget instead
+   */
+  getRecentEventsByConnector(connectorId: string, limit: number = 20): Event[] {
+    return this.getRecentEventsByTarget(connectorId, limit);
   }
 
   // ==================== RPC Calls ====================
@@ -313,23 +329,28 @@ export class EventsStore {
   getPruneCandidates(options: {
     keepLast?: number;
     before?: string; // ISO date
+    targetId?: string;
+    /** @deprecated Use targetId instead */
     connectorId?: string;
   } = {}): PruneCandidate[] {
-    const { keepLast, before, connectorId } = options;
+    const { keepLast, before, targetId, connectorId } = options;
     const candidates: PruneCandidate[] = [];
+
+    // Use targetId if provided, otherwise fall back to connectorId
+    const filterId = targetId || connectorId;
 
     // Get all unprotected sessions
     let sql = `
-      SELECT s.session_id, s.connector_id, s.started_at, s.protected,
+      SELECT s.session_id, COALESCE(s.target_id, s.connector_id) as connector_id, s.started_at, s.protected,
         (SELECT COUNT(*) FROM events WHERE session_id = s.session_id) as event_count
       FROM sessions s
       WHERE s.protected = 0
     `;
     const params: unknown[] = [];
 
-    if (connectorId) {
-      sql += ` AND s.connector_id = ?`;
-      params.push(connectorId);
+    if (filterId) {
+      sql += ` AND COALESCE(s.target_id, s.connector_id) = ?`;
+      params.push(filterId);
     }
 
     if (before) {
@@ -605,16 +626,16 @@ export class EventsStore {
   }
 
   /**
-   * Get latest session (optionally for a specific connector)
+   * Get latest session (optionally for a specific target)
    * Used by RefResolver
    */
-  getLatestSession(connectorId?: string): { session_id: string; connector_id: string } | null {
-    let sql = `SELECT session_id, connector_id FROM sessions`;
+  getLatestSession(targetId?: string): { session_id: string; connector_id: string } | null {
+    let sql = `SELECT session_id, COALESCE(target_id, connector_id) as connector_id FROM sessions`;
     const params: unknown[] = [];
 
-    if (connectorId) {
-      sql += ` WHERE connector_id = ?`;
-      params.push(connectorId);
+    if (targetId) {
+      sql += ` WHERE COALESCE(target_id, connector_id) = ?`;
+      params.push(targetId);
     }
 
     sql += ` ORDER BY started_at DESC LIMIT 1`;
@@ -658,12 +679,12 @@ export class EventsStore {
    * Get session by ID or prefix
    * Used by RefResolver
    */
-  getSessionByPrefix(prefix: string, connectorId?: string): { session_id: string; connector_id: string } | null {
+  getSessionByPrefix(prefix: string, targetId?: string): { session_id: string; connector_id: string } | null {
     // Try exact match first
-    let stmt = this.db.prepare(`SELECT session_id, connector_id FROM sessions WHERE session_id = ?`);
+    let stmt = this.db.prepare(`SELECT session_id, COALESCE(target_id, connector_id) as connector_id FROM sessions WHERE session_id = ?`);
     let result = stmt.get(prefix) as { session_id: string; connector_id: string } | null;
     if (result) {
-      if (connectorId && result.connector_id !== connectorId) {
+      if (targetId && result.connector_id !== targetId) {
         return null; // Wrong connector
       }
       return result;
@@ -671,12 +692,12 @@ export class EventsStore {
 
     // Try prefix match (escape SQL wildcards in user input)
     const escapedPrefix = prefix.replace(/[%_]/g, '\\$&');
-    let sql = `SELECT session_id, connector_id FROM sessions WHERE session_id LIKE ? ESCAPE '\\'`;
+    let sql = `SELECT session_id, COALESCE(target_id, connector_id) as connector_id FROM sessions WHERE session_id LIKE ? ESCAPE '\\'`;
     const params: unknown[] = [escapedPrefix + '%'];
 
-    if (connectorId) {
-      sql += ` AND connector_id = ?`;
-      params.push(connectorId);
+    if (targetId) {
+      sql += ` AND COALESCE(target_id, connector_id) = ?`;
+      params.push(targetId);
     }
 
     sql += ` ORDER BY started_at DESC LIMIT 1`;

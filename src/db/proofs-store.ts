@@ -22,7 +22,9 @@ export class ProofsStore {
    * Create a new proof record
    */
   createProof(params: {
-    connectorId: string;
+    targetId: string;
+    /** @deprecated Use targetId instead */
+    connectorId?: string;
     sessionId?: string;
     rpcId?: string;
     method?: string;
@@ -32,6 +34,9 @@ export class ProofsStore {
     inscriberRef: string;
     artifactUri?: string;
   }): Proof {
+    // Support legacy connectorId for backward compatibility
+    const connectorId = params.connectorId || params.targetId;
+
     const hashAlgo = params.hashAlgo || 'sha256';
     const payloadHash = createHash(hashAlgo)
       .update(typeof params.payload === 'string' ? params.payload : params.payload)
@@ -39,7 +44,7 @@ export class ProofsStore {
 
     const proof: Proof = {
       proof_id: randomUUID(),
-      connector_id: params.connectorId,
+      connector_id: connectorId,
       session_id: params.sessionId || null,
       rpc_id: params.rpcId || null,
       method: params.method || null,

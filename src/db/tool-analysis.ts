@@ -433,12 +433,12 @@ export function getConnectorSummaries(configDir: string): ConnectorSummary[] {
 
   const rows = db.prepare(`
     SELECT
-      s.connector_id,
+      COALESCE(s.target_id, s.connector_id) as connector_id,
       COUNT(DISTINCT s.session_id) as session_count,
       COUNT(r.rpc_id) as rpc_count
     FROM sessions s
     LEFT JOIN rpc_calls r ON s.session_id = r.session_id
-    GROUP BY s.connector_id
+    GROUP BY COALESCE(s.target_id, s.connector_id)
     ORDER BY session_count DESC
   `).all() as Array<{
     connector_id: string;
@@ -450,11 +450,11 @@ export function getConnectorSummaries(configDir: string): ConnectorSummary[] {
 }
 
 /**
- * Get sessions for a connector
+ * Get sessions for a target
  */
-export function getSessionsForConnector(
+export function getSessionsForTarget(
   configDir: string,
-  connectorId: string,
+  targetId: string,
   limit?: number
 ): SessionInfo[] {
   const db = getEventsDb(configDir);
@@ -464,14 +464,25 @@ export function getSessionsForConnector(
   const limitClause = safeLimit !== undefined && Number.isFinite(safeLimit) ? `LIMIT ${safeLimit}` : '';
 
   const sql = `
-    SELECT session_id, connector_id, started_at
+    SELECT session_id, COALESCE(target_id, connector_id) as connector_id, started_at
     FROM sessions
-    WHERE connector_id = ?
+    WHERE COALESCE(target_id, connector_id) = ?
     ORDER BY started_at DESC
     ${limitClause}
   `;
 
-  return db.prepare(sql).all(connectorId) as SessionInfo[];
+  return db.prepare(sql).all(targetId) as SessionInfo[];
+}
+
+/**
+ * @deprecated Use getSessionsForTarget instead
+ */
+export function getSessionsForConnector(
+  configDir: string,
+  connectorId: string,
+  limit?: number
+): SessionInfo[] {
+  return getSessionsForTarget(configDir, connectorId, limit);
 }
 
 /**
@@ -484,7 +495,7 @@ export function getAllToolUsage(configDir: string): ToolUsageSummary[] {
   const rows = db.prepare(`
     SELECT
       e.raw_json,
-      s.connector_id
+      COALESCE(s.target_id, s.connector_id) as connector_id
     FROM events e
     JOIN sessions s ON e.session_id = s.session_id
     JOIN rpc_calls r ON e.session_id = r.session_id AND e.rpc_id = r.rpc_id
@@ -533,11 +544,11 @@ export function getAllToolUsage(configDir: string): ToolUsageSummary[] {
 }
 
 /**
- * Get tool usage for a specific connector across all its sessions
+ * Get tool usage for a specific target across all its sessions
  */
-export function getToolUsageForConnector(
+export function getToolUsageForTarget(
   configDir: string,
-  connectorId: string
+  targetId: string
 ): ToolUsageSummary[] {
   const db = getEventsDb(configDir);
 
@@ -547,8 +558,8 @@ export function getToolUsageForConnector(
     FROM events e
     JOIN sessions s ON e.session_id = s.session_id
     JOIN rpc_calls r ON e.session_id = r.session_id AND e.rpc_id = r.rpc_id
-    WHERE s.connector_id = ? AND r.method = 'tools/call' AND e.kind = 'request'
-  `).all(connectorId) as Array<{ raw_json: string | null }>;
+    WHERE COALESCE(s.target_id, s.connector_id) = ? AND r.method = 'tools/call' AND e.kind = 'request'
+  `).all(targetId) as Array<{ raw_json: string | null }>;
 
   // Count by tool name
   const counts = new Map<string, number>();
@@ -573,7 +584,7 @@ export function getToolUsageForConnector(
     results.push({
       name,
       call_count: count,
-      connector_id: connectorId,
+      connector_id: targetId,
       category: classifyTool(name),
     });
   }
@@ -582,6 +593,16 @@ export function getToolUsageForConnector(
   results.sort((a, b) => b.call_count - a.call_count);
 
   return results;
+}
+
+/**
+ * @deprecated Use getToolUsageForTarget instead
+ */
+export function getToolUsageForConnector(
+  configDir: string,
+  connectorId: string
+): ToolUsageSummary[] {
+  return getToolUsageForTarget(configDir, connectorId);
 }
 
 /**
@@ -625,25 +646,35 @@ export function getSessionDateRange(configDir: string): { min: string | null; ma
 }
 
 /**
- * Get tools from latest session for a connector (capabilities)
+ * Get tools from latest session for a target (capabilities)
  */
-export function getLatestToolsForConnector(
+export function getLatestToolsForTarget(
   configDir: string,
-  connectorId: string
+  targetId: string
 ): ToolInfo[] {
   const db = getEventsDb(configDir);
 
   // Find latest session
   const latestSession = db.prepare(`
     SELECT session_id FROM sessions
-    WHERE connector_id = ?
+    WHERE COALESCE(target_id, connector_id) = ?
     ORDER BY started_at DESC
     LIMIT 1
-  `).get(connectorId) as { session_id: string } | undefined;
+  `).get(targetId) as { session_id: string } | undefined;
 
   if (!latestSession) {
     return [];
   }
 
   return extractToolsFromSession(configDir, latestSession.session_id);
+}
+
+/**
+ * @deprecated Use getLatestToolsForTarget instead
+ */
+export function getLatestToolsForConnector(
+  configDir: string,
+  connectorId: string
+): ToolInfo[] {
+  return getLatestToolsForTarget(configDir, connectorId);
 }
