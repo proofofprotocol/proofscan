@@ -21,6 +21,7 @@ import {
   handlePwd,
   handleLs,
   handleShow,
+  handleA2ASend,
 } from './router-commands.js';
 import { generatePrompt, printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
 import { loadHistory, saveHistory, addToHistory } from './history.js';
@@ -373,13 +374,28 @@ export class ShellRepl {
       return;
     }
 
-    // Handle send command (shell-native with interactive input)
+    // Handle send command (A2A or MCP tool)
     if (command === 'send') {
-      if (!this.rl) {
-        printError('Shell not initialized');
-        return;
+      // Check if current target is an A2A agent
+      let isA2A = false;
+      if (this.context.connector) {
+        try {
+          const configDir = this.configPath.replace(/\/[^/]+$/, '');
+          const { TargetsStore } = await import('../db/targets-store.js');
+          const ts = new TargetsStore(configDir);
+          isA2A = ts.list({ type: 'agent' }).some(a => a.id === this.context.connector);
+        } catch { /* ignore */ }
       }
-      await handleSend(args, this.context, this.configPath, this.rl);
+
+      if (isA2A) {
+        await handleA2ASend(args, this.context, this.configPath);
+      } else {
+        if (!this.rl) {
+          printError('Shell not initialized');
+          return;
+        }
+        await handleSend(args, this.context, this.configPath, this.rl);
+      }
       return;
     }
 

@@ -125,6 +125,7 @@ export interface TaskArtifactUpdateEvent {
 export interface A2AMessage {
   role: 'user' | 'assistant';
   parts: Array<{ text: string } | { data: string; mimeType: string }>;
+  messageId?: string;
   metadata?: Record<string, unknown>;
   contextId?: string;
   referenceTaskIds?: string[];
