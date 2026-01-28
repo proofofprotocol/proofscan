@@ -71,6 +71,8 @@ export interface AgentConfigV1 {
   url: string;
   ttl_seconds?: number;
   auth?: AuthConfig;
+  /** Allow local/private URLs (development only) */
+  allow_local?: boolean;
 }
 
 /**
