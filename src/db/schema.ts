@@ -13,9 +13,10 @@ export const PROOFS_DB_VERSION = 2;
 // events.db schema (version 3)
 export const EVENTS_DB_SCHEMA = `
 -- Sessions table (Phase 7.0: added target_id for unified connector/agent)
+-- Note: connector_id is legacy, target_id is the unified identifier
 CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY,
-  connector_id TEXT NOT NULL,
+  connector_id TEXT NOT NULL, -- Legacy: use target_id instead
   target_id TEXT,
   started_at TEXT NOT NULL,
   ended_at TEXT,
