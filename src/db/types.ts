@@ -12,9 +12,16 @@ export type ActorKind = 'human' | 'agent' | 'system';
 export type EventDirection = 'client_to_server' | 'server_to_client';
 export type EventKind = 'request' | 'response' | 'notification' | 'transport_event';
 
-// Sessions table (Phase 3.4: added actor_*, secret_ref_count; Phase 6: added target_id)
+// Target ID (unified connector/agent identifier)
+export type TargetId = string;
+
+/** @deprecated Use TargetId instead */
+export type ConnectorId = string;
+
+// Sessions table (Phase 3.4: added actor_*, secret_ref_count; Phase 6: added target_id; Phase 7: connector_id deprecated)
 export interface Session {
   session_id: string;
+  /** @deprecated Use target_id instead */
   connector_id: string;
   target_id: string | null; // Phase 6: Unified connector/agent target ID
   started_at: string; // ISO8601
