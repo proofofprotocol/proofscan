@@ -296,6 +296,7 @@ export const PROOFS_DB_SCHEMA = `
 -- Proofs table (immutable, never pruned)
 CREATE TABLE IF NOT EXISTS proofs (
   proof_id TEXT PRIMARY KEY,
+  target_id TEXT,
   connector_id TEXT NOT NULL,
   session_id TEXT,
   rpc_id TEXT,
@@ -308,6 +309,7 @@ CREATE TABLE IF NOT EXISTS proofs (
   created_at TEXT NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_proofs_target ON proofs(COALESCE(target_id, connector_id));
 CREATE INDEX IF NOT EXISTS idx_proofs_connector ON proofs(connector_id);
 CREATE INDEX IF NOT EXISTS idx_proofs_session ON proofs(session_id);
 CREATE INDEX IF NOT EXISTS idx_proofs_created ON proofs(created_at);

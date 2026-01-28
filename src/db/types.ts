@@ -75,7 +75,10 @@ export interface Event {
 // Proofs table (proofs.db)
 export interface Proof {
   proof_id: string;
-  connector_id: string;
+  /** Target ID (connector or agent) */
+  target_id: string;
+  /** @deprecated Use target_id instead */
+  connector_id?: string;
   session_id: string | null;
   rpc_id: string | null;
   method: string | null;
