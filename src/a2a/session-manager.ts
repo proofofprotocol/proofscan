@@ -26,7 +26,7 @@ export interface A2AMessageRecord {
 /**
  * Summary truncation length constant
  */
-const SUMMARY_MAX_LENGTH = 50;
+const SUMMARY_CONTENT_MAX_LENGTH = 50;
 
 /**
  * Session manager for A2A conversations
@@ -180,18 +180,6 @@ export class A2ASessionManager {
   }
 
   /**
-   * Find an existing session by contextId using in-memory cache
-   *
-   * @param contextId - A2A context ID
-   * @param targetId - Target ID (unused in in-memory implementation)
-   * @returns Session ID or null if not found
-   * @private
-   */
-  private findSessionByContextId(contextId: string, targetId: string): string | null {
-    return this.contextIdToSessionId.get(contextId) ?? null;
-  }
-
-  /**
    * Extract text content from an A2A message
    */
   private extractTextContent(message: A2AMessage): string {
@@ -211,8 +199,8 @@ export class A2ASessionManager {
   private createSummary(message: A2AMessage, isRequest: boolean): string {
     const role = message.role === 'assistant' ? '🤖' : '👤';
     const content = this.extractTextContent(message);
-    const truncated = content.length > SUMMARY_MAX_LENGTH
-      ? content.slice(0, SUMMARY_MAX_LENGTH) + '...'
+    const truncated = content.length > SUMMARY_CONTENT_MAX_LENGTH
+      ? content.slice(0, SUMMARY_CONTENT_MAX_LENGTH) + '...'
       : content;
 
     return `${role} ${isRequest ? '→' : '←'} ${truncated}`;
