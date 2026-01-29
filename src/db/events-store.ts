@@ -771,7 +771,7 @@ export class EventsStore {
     const sql = `
       SELECT
         s.session_id,
-        (SELECT COUNT(*) FROM events WHERE session_id = s.session_id AND normalized_json LIKE '%"actor":"user"%') as message_count,
+        (SELECT COUNT(*) FROM events WHERE session_id = s.session_id AND (normalized_json LIKE '%"actor":"user"%' OR normalized_json LIKE '%"actor":"assistant"%')) as message_count,
         COALESCE(
           (SELECT ts FROM events WHERE session_id = s.session_id ORDER BY ts DESC LIMIT 1),
           s.started_at
@@ -921,7 +921,7 @@ export class EventsStore {
         s.session_id,
         s.target_id,
         s.started_at,
-        (SELECT COUNT(*) FROM events WHERE session_id = s.session_id AND normalized_json LIKE '%"actor":"user"%') as message_count,
+        (SELECT COUNT(*) FROM events WHERE session_id = s.session_id AND (normalized_json LIKE '%"actor":"user"%' OR normalized_json LIKE '%"actor":"assistant"%')) as message_count,
         COALESCE(
           (SELECT ts FROM events WHERE session_id = s.session_id ORDER BY ts DESC LIMIT 1),
           s.started_at
