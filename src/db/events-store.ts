@@ -751,4 +751,200 @@ export class EventsStore {
       response: response || undefined,
     };
   }
+
+  // ==================== A2A Sessions (Phase 7.0) ====================
+
+  /**
+   * Get A2A sessions for a target
+   *
+   * A2A sessions are sessions with actor_kind = 'agent'
+   *
+   * @param targetId - Target ID (agent ID)
+   * @param limit - Maximum number of sessions to return
+   * @returns Array of sessions with message count and last activity
+   */
+  getA2ASessions(targetId: string, limit = 50): Array<{
+    session_id: string;
+    message_count: number;
+    last_activity: string;
+  }> {
+    const sql = `
+      SELECT
+        s.session_id,
+        (SELECT COUNT(*) FROM events WHERE session_id = s.session_id AND normalized_json LIKE '%"actor":"user"%') as message_count,
+        COALESCE(
+          (SELECT ts FROM events WHERE session_id = s.session_id ORDER BY ts DESC LIMIT 1),
+          s.started_at
+        ) as last_activity
+      FROM sessions s
+      WHERE s.target_id = ? AND s.actor_kind = 'agent'
+      ORDER BY last_activity DESC
+      LIMIT ?
+    `;
+    const stmt = this.db.prepare(sql);
+    return stmt.all(targetId, limit) as Array<{
+      session_id: string;
+      message_count: number;
+      last_activity: string;
+    }>;
+  }
+
+  /**
+   * Get A2A messages for a session
+   *
+   * Returns messages with role, content, and timestamp from normalized_json
+   *
+   * @param sessionId - Session ID
+   * @param limit - Maximum number of messages to return
+   * @returns Array of A2A messages
+   */
+  getA2AMessages(sessionId: string, limit = 100): Array<{
+    id: number;
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+    rawJson: string | null;
+  }> {
+    const sql = `
+      SELECT
+        e.event_id,
+        e.normalized_json,
+        e.raw_json,
+        e.ts
+      FROM events e
+      WHERE e.session_id = ?
+        AND e.normalized_json IS NOT NULL
+        AND (e.normalized_json LIKE '%"actor":"user"%' OR e.normalized_json LIKE '%"actor":"assistant"%')
+      ORDER BY e.ts ASC
+      LIMIT ?
+    `;
+    const stmt = this.db.prepare(sql);
+    const events = stmt.all(sessionId, limit) as Array<{
+      event_id: string;
+      normalized_json: string | null;
+      raw_json: string | null;
+      ts: string;
+    }>;
+
+    const messages: Array<{
+      id: number;
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp: string;
+      rawJson: string | null;
+    }> = [];
+
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      let role: 'user' | 'assistant' = 'user';
+      let content = '';
+
+      if (event.normalized_json) {
+        try {
+          const normalized = JSON.parse(event.normalized_json);
+          if (normalized.actor === 'assistant') {
+            role = 'assistant';
+          }
+          if (normalized.content && normalized.content.type === 'text') {
+            content = normalized.content.text || '';
+          }
+        } catch {
+          // If parsing fails, try raw_json
+          if (event.raw_json) {
+            try {
+              const raw = JSON.parse(event.raw_json);
+              // Raw format: { jsonrpc: '2.0', id: '...', result: { role: '...', parts: [...] } }
+              const result = raw.result || raw;
+              if (result.role === 'assistant') {
+                role = 'assistant';
+              }
+              if (result.parts && Array.isArray(result.parts)) {
+                content = result.parts
+                  .filter((p: unknown) => p && typeof p === 'object' && 'text' in p)
+                  .map((p: { text: string }) => p.text)
+                  .join('');
+              }
+            } catch {
+              // Parsing failed, use summary or empty
+              content = '';
+            }
+          }
+        }
+      }
+
+      messages.push({
+        id: i + 1,
+        role,
+        content,
+        timestamp: event.ts,
+        rawJson: event.raw_json,
+      });
+    }
+
+    return messages;
+  }
+
+  /**
+   * Get A2A message detail by index
+   *
+   * @param sessionId - Session ID
+   * @param index - Message index (1-based)
+   * @returns Message detail or null if not found
+   */
+  getA2AMessageByIndex(sessionId: string, index: number): {
+    id: number;
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+    rawJson: string | null;
+  } | null {
+    const messages = this.getA2AMessages(sessionId, index);
+    return messages[index - 1] || null;
+  }
+
+  /**
+   * Get A2A session by session ID (with metadata)
+   *
+   * @param sessionId - Session ID (or prefix)
+   * @param targetId - Optional target ID for filtering
+   * @returns Session or null
+   */
+  getA2ASessionById(sessionId: string, targetId?: string): {
+    session_id: string;
+    target_id: string;
+    started_at: string;
+    message_count: number;
+    last_activity: string;
+  } | null {
+    let sql = `
+      SELECT
+        s.session_id,
+        s.target_id,
+        s.started_at,
+        (SELECT COUNT(*) FROM events WHERE session_id = s.session_id AND normalized_json LIKE '%"actor":"user"%') as message_count,
+        COALESCE(
+          (SELECT ts FROM events WHERE session_id = s.session_id ORDER BY ts DESC LIMIT 1),
+          s.started_at
+        ) as last_activity
+      FROM sessions s
+      WHERE s.session_id LIKE ? AND s.actor_kind = 'agent'
+    `;
+    const params: unknown[] = [sessionId + '%'];
+
+    if (targetId) {
+      sql += ` AND s.target_id = ?`;
+      params.push(targetId);
+    }
+
+    sql += ` ORDER BY s.started_at DESC LIMIT 1`;
+
+    const stmt = this.db.prepare(sql);
+    return stmt.get(...params) as {
+      session_id: string;
+      target_id: string;
+      started_at: string;
+      message_count: number;
+      last_activity: string;
+    } | null;
+  }
 }

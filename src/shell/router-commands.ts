@@ -721,16 +721,37 @@ export async function handleLs(
       printError('No connector in context');
       return;
     }
-    await listSessions(store, context.connector, isLong, isJson, idsOnly);
+
+    // Check if this is an A2A agent
+    const configDir = configPath.replace(/\/[^/]+$/, '');
+    let isA2A = false;
+    try {
+      const targetsStore = new TargetsStore(configDir);
+      const agents = targetsStore.list({ type: 'agent' });
+      isA2A = agents.some(a => a.id === context.connector);
+    } catch { /* targets table may not exist */ }
+
+    if (isA2A) {
+      await listA2ASessions(configDir, context.connector, isLong, isJson, idsOnly);
+    } else {
+      await listSessions(store, context.connector, isLong, isJson, idsOnly);
+    }
     return;
   }
 
-  // Session level - list RPC calls
+  // Session level - list RPC calls or A2A messages
   if (!context.session) {
     printError('No session in context');
     return;
   }
-  await listRpcs(store, context.session, isLong, isJson, idsOnly, executeCommand);
+
+  // Check if this is an A2A session (proto = 'a2a')
+  if (context.proto === 'a2a') {
+    const configDir = configPath.replace(/\/[^/]+$/, '');
+    await listA2AMessages(configDir, context.session, isLong, isJson, idsOnly);
+  } else {
+    await listRpcs(store, context.session, isLong, isJson, idsOnly, executeCommand);
+  }
 }
 
 /**
@@ -1635,4 +1656,133 @@ export async function handleA2ASend(
   } catch (err) {
     printError(`Send failed: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+// ==================== A2A Session Display Functions ====================
+
+/**
+ * List A2A sessions for an agent
+ */
+async function listA2ASessions(
+  configDir: string,
+  targetId: string,
+  _isLong: boolean,
+  isJson: boolean,
+  idsOnly: boolean
+): Promise<void> {
+  const eventsStore = new EventsStore(configDir);
+  const sessions = eventsStore.getA2ASessions(targetId, 50);
+
+  if (sessions.length === 0) {
+    printInfo(`No A2A sessions for agent: ${targetId}`);
+    printInfo('Start a conversation with: send <message>');
+    return;
+  }
+
+  if (isJson) {
+    const data = sessions.map(s => ({
+      id: s.session_id,
+      prefix: shortenSessionId(s.session_id),
+      message_count: s.message_count,
+      last_activity: s.last_activity,
+    }));
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  if (idsOnly) {
+    sessions.forEach(s => console.log(shortenSessionId(s.session_id)));
+    return;
+  }
+
+  const isTTY = process.stdout.isTTY;
+  console.log();
+
+  // Header
+  console.log(
+    dimText('Session ID', isTTY).padEnd(isTTY ? 19 : 12) + '  ' +
+    dimText('Messages', isTTY).padEnd(9) + '  ' +
+    dimText('Last Activity', isTTY)
+  );
+  console.log(dimText('-'.repeat(40), isTTY));
+
+  // Rows
+  sessions.forEach(s => {
+    const prefix = shortenSessionId(s.session_id);
+    const activity = s.last_activity ? formatRelativeTime(s.last_activity) : '-';
+    console.log(
+      prefix.padEnd(isTTY ? 16 : 10) + '  ' +
+      String(s.message_count).padEnd(9) + '  ' +
+      activity
+    );
+  });
+
+  console.log();
+  printInfo('Hint: cd <session> to enter, show <session> for details');
+}
+
+/**
+ * List A2A messages for a session
+ */
+async function listA2AMessages(
+  configDir: string,
+  sessionId: string,
+  _isLong: boolean,
+  isJson: boolean,
+  idsOnly: boolean
+): Promise<void> {
+  const eventsStore = new EventsStore(configDir);
+  const messages = eventsStore.getA2AMessages(sessionId, 100);
+
+  if (messages.length === 0) {
+    printInfo('No messages in this session');
+    printInfo('Start a conversation with: send <message>');
+    return;
+  }
+
+  if (isJson) {
+    const data = messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    }));
+    console.log(JSON.stringify(data, null, 2));
+    return;
+  }
+
+  if (idsOnly) {
+    messages.forEach(m => console.log(m.id));
+    return;
+  }
+
+  const isTTY = process.stdout.isTTY;
+  console.log();
+
+  // Header
+  console.log(
+    dimText('#', isTTY).padEnd(4) + '  ' +
+    dimText('Role', isTTY).padEnd(12) + '  ' +
+    dimText('Content', isTTY).padEnd(28) + '  ' +
+    dimText('Time', isTTY)
+  );
+  console.log(dimText('-'.repeat(60), isTTY));
+
+  // Rows
+  messages.forEach(m => {
+    const roleColor = isTTY && m.role === 'assistant' ? '\x1b[36m' : '';
+    const roleReset = isTTY && m.role === 'assistant' ? '\x1b[0m' : '';
+    const roleDisplay = `${roleColor}${m.role}${roleReset}`;
+    const contentPreview = m.content.length > 25 ? m.content.slice(0, 25) + '...' : m.content;
+    const time = m.timestamp ? formatRelativeTime(m.timestamp) : '-';
+    console.log(
+      String(m.id).padEnd(4) + '  ' +
+      roleDisplay.padEnd(isTTY ? 21 : 12) + '  ' +
+      contentPreview.padEnd(28) + '  ' +
+      time
+    );
+  });
+
+  console.log();
+  printInfo('Hint: show <id> to view details, cd .. to go back');
 }
