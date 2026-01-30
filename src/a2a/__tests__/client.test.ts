@@ -565,6 +565,188 @@ describe('A2AClient', () => {
       expect(result.error).toBe('Network error');
     });
   });
+
+  // ===== listTasks Tests (Phase 2) =====
+
+  describe('listTasks', () => {
+    it('should list tasks successfully with no filters', async () => {
+      const mockResponse = {
+        jsonrpc: '2.0',
+        id: 'req-1',
+        result: {
+          tasks: [
+            { id: 'task-1', status: 'completed', contextId: 'ctx-1' },
+            { id: 'task-2', status: 'working', contextId: 'ctx-1' },
+          ],
+          nextPageToken: '',
+          pageSize: 50,
+          totalSize: 2,
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(mockResponse),
+      } as Response);
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.listTasks();
+
+      expect(result.ok).toBe(true);
+      expect(result.response?.tasks).toHaveLength(2);
+      expect(result.response?.totalSize).toBe(2);
+    });
+
+    it('should list tasks with contextId filter', async () => {
+      const mockResponse = {
+        jsonrpc: '2.0',
+        id: 'req-1',
+        result: {
+          tasks: [{ id: 'task-1', status: 'completed', contextId: 'ctx-123' }],
+          nextPageToken: '',
+          pageSize: 50,
+          totalSize: 1,
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(mockResponse),
+      } as Response);
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.listTasks({ contextId: 'ctx-123' });
+
+      expect(result.ok).toBe(true);
+      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body as string);
+      expect(requestBody.method).toBe('tasks/list');
+      expect(requestBody.params.contextId).toBe('ctx-123');
+    });
+
+    it('should list tasks with status filter', async () => {
+      const mockResponse = {
+        jsonrpc: '2.0',
+        id: 'req-1',
+        result: {
+          tasks: [{ id: 'task-1', status: 'working' }],
+          nextPageToken: '',
+          pageSize: 50,
+          totalSize: 1,
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(mockResponse),
+      } as Response);
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.listTasks({ status: 'working' });
+
+      expect(result.ok).toBe(true);
+      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body as string);
+      expect(requestBody.params.status).toBe('working');
+    });
+
+    it('should handle pagination', async () => {
+      const mockResponse = {
+        jsonrpc: '2.0',
+        id: 'req-1',
+        result: {
+          tasks: [{ id: 'task-3', status: 'completed' }],
+          nextPageToken: 'next-page-token',
+          pageSize: 10,
+          totalSize: 25,
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(mockResponse),
+      } as Response);
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.listTasks({ pageSize: 10, pageToken: 'prev-token' });
+
+      expect(result.ok).toBe(true);
+      expect(result.response?.nextPageToken).toBe('next-page-token');
+      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body as string);
+      expect(requestBody.params.pageSize).toBe(10);
+      expect(requestBody.params.pageToken).toBe('prev-token');
+    });
+
+    it('should handle empty results', async () => {
+      const mockResponse = {
+        jsonrpc: '2.0',
+        id: 'req-1',
+        result: {
+          tasks: [],
+          nextPageToken: '',
+          pageSize: 50,
+          totalSize: 0,
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(mockResponse),
+      } as Response);
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.listTasks();
+
+      expect(result.ok).toBe(true);
+      expect(result.response?.tasks).toHaveLength(0);
+      expect(result.response?.totalSize).toBe(0);
+    });
+
+    it('should handle network errors', async () => {
+      vi.mocked(fetch).mockRejectedValueOnce(new Error('Network error'));
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.listTasks();
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('Network error');
+    });
+
+    it('should handle JSON-RPC error response', async () => {
+      const mockResponse = {
+        jsonrpc: '2.0',
+        id: 'req-1',
+        error: {
+          code: -32600,
+          message: 'Invalid request',
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify(mockResponse),
+      } as Response);
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.listTasks();
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toContain('Invalid request');
+    });
+  });
 });
 
 describe('createA2AClient', () => {
