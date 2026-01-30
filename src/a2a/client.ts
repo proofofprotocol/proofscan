@@ -2,20 +2,21 @@
  * A2A Client
  *
  * Client for sending messages to A2A agents via JSON-RPC 2.0.
- * Implements message/send, tasks/get, and tasks/cancel operations.
+ * Implements message/send, tasks/get, tasks/list, and tasks/cancel operations.
  *
  * Phase 4 - Client Implementation
+ * Phase 2 - Task Management (getTask, listTasks, cancelTask)
  */
 
 import { randomUUID } from 'crypto';
-import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult, A2AMessage, A2ATask } from './types.js';
+import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult, A2AMessage, A2ATask, Task, ListTasksParams, ListTasksResponse } from './types.js';
 import { isPrivateUrl } from './agent-card.js';
 
 // Maximum response size (1MB) to prevent DoS
 const MAX_RESPONSE_SIZE = 1024 * 1024;
 
 // Re-export types from types.ts for backward compatibility
-export type { A2AMessage, A2ATask } from './types.js';
+export type { A2AMessage, A2ATask, Task, ListTasksParams, ListTasksResponse } from './types.js';
 
 // ===== JSON-RPC Types =====
 
@@ -62,6 +63,35 @@ export interface StreamMessageOptions {
   onTask?: (task: A2ATask) => void;
   onError?: (error: string) => void;
   signal?: AbortSignal; // External abort signal
+}
+
+// ===== Task Management Options (Phase 2) =====
+
+export interface GetTaskOptions {
+  historyLength?: number;
+  headers?: Record<string, string>;
+  timeout?: number;
+}
+
+export interface GetTaskResult {
+  ok: boolean;
+  task?: Task;
+  error?: string;
+  statusCode?: number;
+}
+
+export interface CancelTaskResult {
+  ok: boolean;
+  task?: Task;
+  error?: string;
+  statusCode?: number;
+}
+
+export interface ListTasksResult {
+  ok: boolean;
+  response?: ListTasksResponse;
+  error?: string;
+  statusCode?: number;
 }
 
 // ===== A2A Client =====
@@ -245,28 +275,38 @@ export class A2AClient {
   }
 
   /**
-   * Get task status
-   * POST /tasks/get (JSON-RPC 2.0)
+   * Get task by ID (Phase 2 - A2A Protocol Compliant)
+   * POST /a2a (JSON-RPC 2.0)
+   *
+   * @param taskId - The task ID to retrieve
+   * @param options - Optional: historyLength, headers, timeout
+   * @returns Promise<GetTaskResult> with task or error
    */
-  async getTask(taskId: string): Promise<SendMessageResult> {
+  async getTask(taskId: string, options: GetTaskOptions = {}): Promise<GetTaskResult> {
+    const { historyLength, headers = {}, timeout = 30000 } = options;
+
     const requestId = randomUUID();
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
       method: 'tasks/get',
       params: {
-        name: `tasks/${taskId}`,
+        id: taskId,
+        ...(historyLength !== undefined && { historyLength }),
       },
     };
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
     try {
-      const response = await fetch(`${this.baseUrl}/tasks/get`, {
+      const response = await fetch(this.baseUrl, {
         method: 'POST',
-        headers: this.defaultHeaders,
+        headers: { ...this.defaultHeaders, ...headers },
         body: JSON.stringify(request),
+        signal: controller.signal,
       });
 
-      // Validate Content-Type
       const contentType = response.headers.get('content-type');
       if (!contentType?.includes('application/json')) {
         return {
@@ -278,7 +318,6 @@ export class A2AClient {
 
       const responseText = await response.text();
 
-      // Validate response size
       if (responseText.length > MAX_RESPONSE_SIZE) {
         return {
           ok: false,
@@ -319,6 +358,115 @@ export class A2AClient {
       return { ok: true, task };
     } catch (error) {
       if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          return {
+            ok: false,
+            error: `Request timeout after ${timeout}ms`,
+          };
+        }
+        return {
+          ok: false,
+          error: error.message,
+        };
+      }
+      return {
+        ok: false,
+        error: String(error),
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  /**
+   * List tasks with optional filters (Phase 2)
+   * POST /a2a (JSON-RPC 2.0)
+   *
+   * @param params - Optional: contextId, status, pageSize, pageToken, includeArtifacts
+   * @returns Promise<ListTasksResult> with tasks list or error
+   */
+  async listTasks(params?: ListTasksParams): Promise<ListTasksResult> {
+    const requestId = randomUUID();
+    const request: JsonRpcRequest = {
+      jsonrpc: '2.0',
+      id: requestId,
+      method: 'tasks/list',
+      params: (params || {}) as Record<string, unknown>,
+    };
+
+    try {
+      const response = await fetch(this.baseUrl, {
+        method: 'POST',
+        headers: this.defaultHeaders,
+        body: JSON.stringify(request),
+      });
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('application/json')) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Expected JSON response, got ${contentType || 'unknown'}`,
+        };
+      }
+
+      const responseText = await response.text();
+
+      if (responseText.length > MAX_RESPONSE_SIZE) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Response too large: ${responseText.length} bytes (max ${MAX_RESPONSE_SIZE})`,
+        };
+      }
+
+      let responseData: JsonRpcResponse;
+
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `Invalid JSON response: ${responseText.slice(0, 200)}`,
+        };
+      }
+
+      if (responseData.error) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: `${responseData.error.code}: ${responseData.error.message}`,
+        };
+      }
+
+      if (!responseData.result) {
+        return {
+          ok: false,
+          statusCode: response.status,
+          error: 'No result in response',
+        };
+      }
+
+      const result = responseData.result as Record<string, unknown>;
+      const tasks: Task[] = [];
+
+      if (Array.isArray(result.tasks)) {
+        for (const taskData of result.tasks) {
+          tasks.push(this.parseTask(taskData as Record<string, unknown>));
+        }
+      }
+
+      const listResponse: ListTasksResponse = {
+        tasks,
+        nextPageToken: result.nextPageToken ? String(result.nextPageToken) : '',
+        pageSize: typeof result.pageSize === 'number' ? result.pageSize : 50,
+        totalSize: typeof result.totalSize === 'number' ? result.totalSize : undefined,
+      };
+
+      return { ok: true, response: listResponse };
+    } catch (error) {
+      if (error instanceof Error) {
         return {
           ok: false,
           error: error.message,
@@ -332,42 +480,45 @@ export class A2AClient {
   }
 
   /**
-   * Cancel a task
-   * POST /tasks/cancel (JSON-RPC 2.0)
+   * Cancel a task (Phase 2 - A2A Protocol Compliant)
+   * POST /a2a (JSON-RPC 2.0)
+   *
+   * @param taskId - The task ID to cancel
+   * @returns Promise<CancelTaskResult> with canceled task or error
    */
-  async cancelTask(taskId: string): Promise<{ ok: boolean; error?: string }> {
+  async cancelTask(taskId: string): Promise<CancelTaskResult> {
     const requestId = randomUUID();
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       id: requestId,
       method: 'tasks/cancel',
       params: {
-        name: `tasks/${taskId}`,
+        id: taskId,
       },
     };
 
     try {
-      const response = await fetch(`${this.baseUrl}/tasks/cancel`, {
+      const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: this.defaultHeaders,
         body: JSON.stringify(request),
       });
 
-      // Validate Content-Type
       const contentType = response.headers.get('content-type');
       if (!contentType?.includes('application/json')) {
         return {
           ok: false,
+          statusCode: response.status,
           error: `Expected JSON response, got ${contentType || 'unknown'}`,
         };
       }
 
       const responseText = await response.text();
 
-      // Validate response size
       if (responseText.length > MAX_RESPONSE_SIZE) {
         return {
           ok: false,
+          statusCode: response.status,
           error: `Response too large: ${responseText.length} bytes (max ${MAX_RESPONSE_SIZE})`,
         };
       }
@@ -379,6 +530,7 @@ export class A2AClient {
       } catch {
         return {
           ok: false,
+          statusCode: response.status,
           error: `Invalid JSON response: ${responseText.slice(0, 200)}`,
         };
       }
@@ -386,8 +538,15 @@ export class A2AClient {
       if (responseData.error) {
         return {
           ok: false,
+          statusCode: response.status,
           error: `${responseData.error.code}: ${responseData.error.message}`,
         };
+      }
+
+      // Parse the canceled task from response
+      if (responseData.result) {
+        const task = this.parseTask(responseData.result as Record<string, unknown>);
+        return { ok: true, task };
       }
 
       return { ok: true };
