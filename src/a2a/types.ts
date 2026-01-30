@@ -168,6 +168,59 @@ export interface StreamMessageResult {
   error?: string;
 }
 
+// ===== Task Management Types (Phase 2) =====
+
+/**
+ * Task status states (A2A Protocol)
+ */
+export type TaskState =
+  | 'pending'
+  | 'working'
+  | 'input_required'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'rejected';
+
+/**
+ * Task representing a unit of work in A2A protocol
+ */
+export interface Task {
+  id: string;
+  contextId?: string;
+  status: TaskState;
+  messages?: A2AMessage[];
+  artifacts?: Array<{
+    name?: string;
+    description?: string;
+    parts: Array<{ text: string } | { data: string; mimeType: string }>;
+  }>;
+  createdAt?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Parameters for listing tasks
+ */
+export interface ListTasksParams {
+  contextId?: string;
+  status?: TaskState;
+  pageSize?: number;  // 1-100, default 50
+  pageToken?: string;
+  includeArtifacts?: boolean;
+}
+
+/**
+ * Response from listing tasks
+ */
+export interface ListTasksResponse {
+  tasks: Task[];
+  nextPageToken?: string;  // empty string means last page
+  pageSize: number;
+  totalSize?: number;
+}
+
 // ===== Discriminated Union for Type-Safe Config Parsing =====
 
 /**

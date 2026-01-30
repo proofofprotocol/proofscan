@@ -457,7 +457,7 @@ describe('A2AClient', () => {
       const fetchCall = vi.mocked(fetch).mock.calls[0];
       const requestBody = JSON.parse(fetchCall[1].body as string);
       expect(requestBody.method).toBe('tasks/get');
-      expect(requestBody.params.name).toBe('tasks/task-existing');
+      expect(requestBody.params.id).toBe('task-existing');
     });
 
     it('should handle task not found error', async () => {
@@ -526,7 +526,7 @@ describe('A2AClient', () => {
       const fetchCall = vi.mocked(fetch).mock.calls[0];
       const requestBody = JSON.parse(fetchCall[1].body as string);
       expect(requestBody.method).toBe('tasks/cancel');
-      expect(requestBody.params.name).toBe('tasks/task-to-cancel');
+      expect(requestBody.params.id).toBe('task-to-cancel');
     });
 
     it('should handle already canceled task', async () => {
