@@ -247,7 +247,7 @@ export function applyContext(
   }
 
   // === TASK ===
-  // - `task ls <agent>`, `task get <agent> <taskId>`, `task cancel <agent> <taskId>`, `task wait <agent> <taskId>`
+  // - `task ls <agent>`, `task show <agent> <taskId>`, `task cancel <agent> <taskId>`, `task wait <agent> <taskId>`
   // - Inject context.connector as agent argument if not provided
   if (command === 'task') {
     if (['ls', 'list'].includes(subcommand || '')) {
@@ -255,7 +255,7 @@ export function applyContext(
       if (!hasPositionalAt(args, 1) && context.connector) {
         args.push(context.connector);
       }
-    } else if (['get', 'show', 'cancel', 'wait'].includes(subcommand || '')) {
+    } else if (['show', 'cancel', 'wait'].includes(subcommand || '')) {
       // task get/show/cancel/wait needs agent + taskId
       // If only 1 positional provided, assume it's taskId and inject agent
       const hasPos1 = hasPositionalAt(args, 1);

@@ -13,11 +13,13 @@ vi.mock('../../a2a/client.js');
 describe('task command', () => {
   let program: Command;
   let mockConfigPath: string;
+  let expectedConfigDir: string;
   let mockClient: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockConfigPath = '/test/config';
+    mockConfigPath = '/test/config/config.json';  // Full path to config file
+    expectedConfigDir = '/test/config';  // dirname() extracts this
     program = new Command();
     program.addCommand(createTaskCommand(() => mockConfigPath));
 
@@ -61,7 +63,7 @@ describe('task command', () => {
         program.parseAsync(['node', 'test', 'task', 'ls', 'test-agent'])
       ).resolves.not.toThrow();
 
-      expect(createA2AClient).toHaveBeenCalledWith(mockConfigPath, 'test-agent');
+      expect(createA2AClient).toHaveBeenCalledWith(expectedConfigDir, 'test-agent');
       expect(mockClient.listTasks).toHaveBeenCalledWith({});
 
       processExitSpy.mockRestore();
@@ -127,8 +129,8 @@ describe('task command', () => {
     });
   });
 
-  describe('task get', () => {
-    it('should get task details', async () => {
+  describe('task show', () => {
+    it('should show task details', async () => {
       mockClient.getTask.mockResolvedValue({
         ok: true,
         task: {
@@ -151,9 +153,9 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001']);
+      await program.parseAsync(['node', 'test', 'task', 'show', 'test-agent', 'task-001']);
 
-      expect(createA2AClient).toHaveBeenCalledWith(mockConfigPath, 'test-agent');
+      expect(createA2AClient).toHaveBeenCalledWith(expectedConfigDir, 'test-agent');
       expect(mockClient.getTask).toHaveBeenCalledWith('task-001', { historyLength: 10 });
     });
 
@@ -167,7 +169,7 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001', '--history', '5']);
+      await program.parseAsync(['node', 'test', 'task', 'show', 'test-agent', 'task-001', '--history', '5']);
 
       expect(mockClient.getTask).toHaveBeenCalledWith('task-001', { historyLength: 5 });
     });
@@ -178,7 +180,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001', '--history', 'invalid'])
+        program.parseAsync(['node', 'test', 'task', 'show', 'test-agent', 'task-001', '--history', 'invalid'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -196,7 +198,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001'])
+        program.parseAsync(['node', 'test', 'task', 'show', 'test-agent', 'task-001'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -206,6 +208,12 @@ describe('task command', () => {
 
   describe('task cancel', () => {
     it('should cancel a task', async () => {
+      // Mock listTasks for resolveTaskId
+      mockClient.listTasks.mockResolvedValue({
+        ok: true,
+        response: { tasks: [{ id: 'task-001', status: 'working' }] },
+      });
+
       mockClient.cancelTask.mockResolvedValue({
         ok: true,
         task: {
@@ -217,11 +225,17 @@ describe('task command', () => {
 
       await program.parseAsync(['node', 'test', 'task', 'cancel', 'test-agent', 'task-001']);
 
-      expect(createA2AClient).toHaveBeenCalledWith(mockConfigPath, 'test-agent');
+      expect(createA2AClient).toHaveBeenCalledWith(expectedConfigDir, 'test-agent');
       expect(mockClient.cancelTask).toHaveBeenCalledWith('task-001');
     });
 
     it('should handle cancel without task details', async () => {
+      // Mock listTasks for resolveTaskId
+      mockClient.listTasks.mockResolvedValue({
+        ok: true,
+        response: { tasks: [{ id: 'task-001', status: 'working' }] },
+      });
+
       mockClient.cancelTask.mockResolvedValue({
         ok: true,
       });
@@ -232,6 +246,12 @@ describe('task command', () => {
     });
 
     it('should fail on cancel error', async () => {
+      // Mock listTasks for resolveTaskId
+      mockClient.listTasks.mockResolvedValue({
+        ok: true,
+        response: { tasks: [{ id: 'task-001', status: 'working' }] },
+      });
+
       mockClient.cancelTask.mockResolvedValue({
         ok: false,
         error: 'Task already completed',
@@ -252,6 +272,12 @@ describe('task command', () => {
 
   describe('task wait', () => {
     it('should wait for task completion', async () => {
+      // Mock listTasks for resolveTaskId
+      mockClient.listTasks.mockResolvedValue({
+        ok: true,
+        response: { tasks: [{ id: 'task-001', status: 'working' }] },
+      });
+
       let callCount = 0;
       mockClient.getTask.mockImplementation(async () => {
         callCount++;
@@ -285,6 +311,12 @@ describe('task command', () => {
     });
 
     it('should fail on timeout', async () => {
+      // Mock listTasks for resolveTaskId
+      mockClient.listTasks.mockResolvedValue({
+        ok: true,
+        response: { tasks: [{ id: 'task-001', status: 'working' }] },
+      });
+
       mockClient.getTask.mockResolvedValue({
         ok: true,
         task: { id: 'task-001', status: 'working', messages: [] },
@@ -311,6 +343,12 @@ describe('task command', () => {
     });
 
     it('should fail when task not found during wait', async () => {
+      // Mock listTasks for resolveTaskId - no matching task
+      mockClient.listTasks.mockResolvedValue({
+        ok: true,
+        response: { tasks: [] },
+      });
+
       mockClient.getTask.mockResolvedValue({
         ok: false,
         error: 'Task not found',

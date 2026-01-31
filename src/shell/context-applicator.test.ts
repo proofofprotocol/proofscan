@@ -267,8 +267,8 @@ describe('applyContext', () => {
       expect(result.args).toEqual(['task', 'ls', 'other-agent']);
     });
 
-    it('should inject agent for task get', () => {
-      const args = ['task', 'get'];
+    it('should inject agent for task show', () => {
+      const args = ['task', 'show'];
       const context: ShellContext = { connector: 'glm-dice' };
       const result = applyContext(args, context);
       expect(result.args).toContain('glm-dice');

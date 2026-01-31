@@ -851,7 +851,7 @@ describe('createA2AClient', () => {
 
     expect(result.ok).toBe(true);
     expect(result.agentCard).toEqual(freshAgentCard);
-    expect(vi.mocked(fetchAgentCard)).toHaveBeenCalledWith('https://fresh.example.com');
+    expect(vi.mocked(fetchAgentCard)).toHaveBeenCalledWith('https://fresh.example.com', { allowLocal: false });
     expect(mockAgentCacheStore.set).toHaveBeenCalled();
   });
 
@@ -889,7 +889,7 @@ describe('createA2AClient', () => {
 
     expect(result.ok).toBe(true);
     expect(result.agentCard).toEqual(freshAgentCard);
-    expect(vi.mocked(fetchAgentCard)).toHaveBeenCalledWith('https://new.example.com');
+    expect(vi.mocked(fetchAgentCard)).toHaveBeenCalledWith('https://new.example.com', { allowLocal: false });
     expect(mockAgentCacheStore.set).toHaveBeenCalled();
   });
 
