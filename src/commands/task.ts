@@ -6,6 +6,7 @@
  */
 
 import { Command } from 'commander';
+import { dirname } from 'node:path';
 import { createA2AClient } from '../a2a/client.js';
 import { output, outputError, outputSuccess, outputTable } from '../utils/output.js';
 import type { Task, TaskState, ListTasksParams } from '../a2a/types.js';
@@ -35,7 +36,7 @@ async function handleTaskList(
   }
 
   // Create client
-  const configDir = getConfigPath();
+  const configDir = dirname(getConfigPath());
   const clientResult = await createA2AClient(configDir, agent);
 
   if (!clientResult.ok) {
@@ -144,7 +145,7 @@ export function createTaskCommand(getConfigPath: () => string): Command {
         }
 
         // Create client
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {
@@ -202,7 +203,7 @@ export function createTaskCommand(getConfigPath: () => string): Command {
     .action(async (agent, taskId, options) => {
       try {
         // Create client
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {
@@ -271,7 +272,7 @@ export function createTaskCommand(getConfigPath: () => string): Command {
         const intervalMs = intervalSec * 1000;
 
         // Create client
-        const configDir = getConfigPath();
+        const configDir = dirname(getConfigPath());
         const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {

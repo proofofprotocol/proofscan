@@ -931,7 +931,7 @@ export async function createA2AClient(
   }
 
   // Get agent config
-  const config = agent.config as { url?: string; ttl_seconds?: number };
+  const config = agent.config as { url?: string; ttl_seconds?: number; allow_local?: boolean };
   if (!config.url) {
     return { ok: false, error: `Agent '${agentId}' has no URL configured` };
   }
@@ -950,7 +950,7 @@ export async function createA2AClient(
     agentCard = cached.agentCard as AgentCard;
   } else {
     // Fetch fresh agent card
-    const fetchResult = await fetchAgentCard(config.url);
+    const fetchResult = await fetchAgentCard(config.url, { allowLocal: config.allow_local ?? false });
     if (!fetchResult.ok || !fetchResult.agentCard) {
       return {
         ok: false,
@@ -972,7 +972,7 @@ export async function createA2AClient(
     });
   }
 
-  // Create client
-  const client = new A2AClient(agentCard);
+  // Create client with allowLocal from config
+  const client = new A2AClient(agentCard, { allowLocal: config.allow_local ?? false });
   return { ok: true, client, agentCard };
 }
