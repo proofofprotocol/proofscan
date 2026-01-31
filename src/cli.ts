@@ -237,7 +237,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'rpc', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'plans', 'monitor', 'i18n', 'help', 'agent', 'task'
+  'connectors', 'connector', 'sessions', 'rpc', 'task', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'plans', 'monitor', 'i18n', 'help', 'agent'
 ]);
 
 // Shell-only commands (not available as CLI commands)

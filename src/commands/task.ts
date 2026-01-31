@@ -11,6 +11,72 @@ import { output, outputError, outputSuccess, outputTable } from '../utils/output
 import type { Task, TaskState, ListTasksParams } from '../a2a/types.js';
 
 /**
+ * Handle task list logic (shared by ls and list commands)
+ */
+async function handleTaskList(
+  agent: string,
+  options: { context?: string; status?: string },
+  getConfigPath: () => string
+): Promise<void> {
+  // Validate status if provided
+  const validStatuses: TaskState[] = ['pending', 'working', 'input_required', 'completed', 'failed', 'canceled', 'rejected'];
+  if (options.status && !validStatuses.includes(options.status as TaskState)) {
+    outputError(`Invalid status: ${options.status}. Valid values: ${validStatuses.join(', ')}`);
+    process.exit(1);
+  }
+
+  // Build list params
+  const params: ListTasksParams = {};
+  if (options.context) {
+    params.contextId = options.context;
+  }
+  if (options.status) {
+    params.status = options.status as TaskState;
+  }
+
+  // Create client
+  const configDir = getConfigPath();
+  const clientResult = await createA2AClient(configDir, agent);
+
+  if (!clientResult.ok) {
+    outputError(clientResult.error);
+    process.exit(1);
+  }
+
+  // List tasks
+  const result = await clientResult.client.listTasks(params);
+
+  if (!result.ok || !result.response) {
+    outputError(result.error || 'Failed to list tasks');
+    process.exit(1);
+  }
+
+  const { tasks, totalSize } = result.response;
+
+  if (tasks.length === 0) {
+    output({ tasks: [], totalSize }, 'No tasks found.');
+    return;
+  }
+
+  // Output as table
+  const headers = ['ID', 'Status', 'Context', 'Messages', 'Created'];
+  const rows = tasks.map(t => [
+    t.id.slice(0, 8),
+    t.status,
+    t.contextId || '-',
+    t.messages ? String(t.messages.length) : '0',
+    t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-',
+  ]);
+
+  outputTable(headers, rows);
+
+  // Show total size if available
+  if (totalSize !== undefined && totalSize > tasks.length) {
+    console.log(`\nShowing ${tasks.length} of ${totalSize} tasks (first page)`);
+  }
+}
+
+/**
  * Create the task command group
  */
 export function createTaskCommand(getConfigPath: () => string): Command {
@@ -19,69 +85,13 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
   // ===== task ls =====
   cmd
-    .command('ls')
-    .description('List tasks')
+    .command('ls <agent>')
+    .description('List tasks for an agent')
     .option('--context <id>', 'Filter by context ID')
     .option('--status <state>', 'Filter by status (pending|working|input_required|completed|failed|canceled|rejected)')
-    .requiredOption('--agent <id>', 'Agent ID (or 8-char prefix)')
-    .action(async (options) => {
+    .action(async (agent, options) => {
       try {
-        // Validate status if provided
-        const validStatuses: TaskState[] = ['pending', 'working', 'input_required', 'completed', 'failed', 'canceled', 'rejected'];
-        if (options.status && !validStatuses.includes(options.status as TaskState)) {
-          outputError(`Invalid status: ${options.status}. Valid values: ${validStatuses.join(', ')}`);
-          process.exit(1);
-        }
-
-        // Build list params
-        const params: ListTasksParams = {};
-        if (options.context) {
-          params.contextId = options.context;
-        }
-        if (options.status) {
-          params.status = options.status as TaskState;
-        }
-
-        // Create client
-        const configDir = getConfigPath();
-        const clientResult = await createA2AClient(configDir, options.agent);
-
-        if (!clientResult.ok) {
-          outputError(clientResult.error);
-          process.exit(1);
-        }
-
-        // List tasks
-        const result = await clientResult.client.listTasks(params);
-
-        if (!result.ok || !result.response) {
-          outputError(result.error || 'Failed to list tasks');
-          process.exit(1);
-        }
-
-        const { tasks, totalSize } = result.response;
-
-        if (tasks.length === 0) {
-          output({ tasks: [], totalSize }, 'No tasks found.');
-          return;
-        }
-
-        // Output as table
-        const headers = ['ID', 'Status', 'Context', 'Messages', 'Created'];
-        const rows = tasks.map(t => [
-          t.id.slice(0, 8),
-          t.status,
-          t.contextId || '-',
-          t.messages ? String(t.messages.length) : '0',
-          t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '-',
-        ]);
-
-        outputTable(headers, rows);
-
-        // Show total size if available
-        if (totalSize !== undefined && totalSize > tasks.length) {
-          console.log(`\nShowing ${tasks.length} of ${totalSize} tasks (first page)`);
-        }
+        await handleTaskList(agent, options, getConfigPath);
       } catch (error) {
         outputError('Failed to list tasks', error instanceof Error ? error : undefined);
         process.exit(1);
@@ -90,27 +100,25 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
   // ===== task list =====
   cmd
-    .command('list')
+    .command('list <agent>')
     .description('Alias for ls')
     .option('--context <id>', 'Filter by context ID')
     .option('--status <state>', 'Filter by status')
-    .requiredOption('--agent <id>', 'Agent ID (or 8-char prefix)')
-    .action(async (options) => {
-      // Reuse ls logic
-      // Get the ls command from parent
-      const lsCmd = cmd.commands.find(c => c.name() === 'ls');
-      if (lsCmd) {
-        await lsCmd.action(options);
+    .action(async (agent, options) => {
+      try {
+        await handleTaskList(agent, options, getConfigPath);
+      } catch (error) {
+        outputError('Failed to list tasks', error instanceof Error ? error : undefined);
+        process.exit(1);
       }
     });
 
   // ===== task get =====
   cmd
-    .command('get <taskId>')
+    .command('get <agent> <taskId>')
     .description('Get task details')
     .option('--history <n>', 'Message history length (number of recent messages)', '10')
-    .requiredOption('--agent <id>', 'Agent ID (or 8-char prefix)')
-    .action(async (taskId, options) => {
+    .action(async (agent, taskId, options) => {
       try {
         // Parse history length
         const historyLength = parseInt(options.history, 10);
@@ -121,7 +129,7 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
         // Create client
         const configDir = getConfigPath();
-        const clientResult = await createA2AClient(configDir, options.agent);
+        const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {
           outputError(clientResult.error);
@@ -160,14 +168,13 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
   // ===== task cancel =====
   cmd
-    .command('cancel <taskId>')
+    .command('cancel <agent> <taskId>')
     .description('Cancel a task')
-    .requiredOption('--agent <id>', 'Agent ID (or 8-char prefix)')
-    .action(async (taskId, options) => {
+    .action(async (agent, taskId, options) => {
       try {
         // Create client
         const configDir = getConfigPath();
-        const clientResult = await createA2AClient(configDir, options.agent);
+        const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {
           outputError(clientResult.error);
@@ -200,12 +207,11 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
   // ===== task wait =====
   cmd
-    .command('wait <taskId>')
+    .command('wait <agent> <taskId>')
     .description('Wait for task completion (poll until completed/failed/canceled/rejected)')
     .option('--timeout <sec>', 'Timeout in seconds (default: 60)', '60')
     .option('--interval <sec>', 'Poll interval in seconds (default: 2)', '2')
-    .requiredOption('--agent <id>', 'Agent ID (or 8-char prefix)')
-    .action(async (taskId, options) => {
+    .action(async (agent, taskId, options) => {
       try {
         // Parse options
         const timeoutSec = parseInt(options.timeout, 10);
@@ -227,7 +233,7 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
         // Create client
         const configDir = getConfigPath();
-        const clientResult = await createA2AClient(configDir, options.agent);
+        const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {
           outputError(clientResult.error);
