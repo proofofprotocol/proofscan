@@ -50,6 +50,7 @@ export const TOP_LEVEL_COMMANDS = [
   'connectors',  // 'connector' alias removed to allow 'conn' prefix matching
   'sessions',
   'rpc',
+  'task',
   'summary',
   'analyze',
   'record',
@@ -73,6 +74,7 @@ export const COMMAND_SUBCOMMANDS: Record<string, string[]> = {
   archive: ['run', 'status'],
   events: ['ls', 'export'],
   rpc: ['list', 'show'],
+  task: ['ls', 'list', 'get', 'cancel', 'wait'],
   record: ['dry-run'],
   secrets: ['list', 'set', 'edit', 'prune', 'export', 'import'],
   secret: ['list', 'set', 'edit', 'prune', 'export', 'import'],

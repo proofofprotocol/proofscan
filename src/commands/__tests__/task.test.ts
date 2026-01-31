@@ -58,7 +58,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'ls', '--agent', 'test-agent'])
+        program.parseAsync(['node', 'test', 'task', 'ls', 'test-agent'])
       ).resolves.not.toThrow();
 
       expect(createA2AClient).toHaveBeenCalledWith(mockConfigPath, 'test-agent');
@@ -76,7 +76,7 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'ls', '--agent', 'test-agent', '--context', 'ctx-001']);
+      await program.parseAsync(['node', 'test', 'task', 'ls', 'test-agent', '--context', 'ctx-001']);
 
       expect(mockClient.listTasks).toHaveBeenCalledWith({ contextId: 'ctx-001' });
     });
@@ -90,7 +90,7 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'ls', '--agent', 'test-agent', '--status', 'completed']);
+      await program.parseAsync(['node', 'test', 'task', 'ls', 'test-agent', '--status', 'completed']);
 
       expect(mockClient.listTasks).toHaveBeenCalledWith({ status: 'completed' });
     });
@@ -101,7 +101,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'ls', '--agent', 'test-agent', '--status', 'invalid'])
+        program.parseAsync(['node', 'test', 'task', 'ls', 'test-agent', '--status', 'invalid'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -119,7 +119,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'ls', '--agent', 'test-agent'])
+        program.parseAsync(['node', 'test', 'task', 'ls', 'test-agent'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -151,7 +151,7 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'get', 'task-001', '--agent', 'test-agent']);
+      await program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001']);
 
       expect(createA2AClient).toHaveBeenCalledWith(mockConfigPath, 'test-agent');
       expect(mockClient.getTask).toHaveBeenCalledWith('task-001', { historyLength: 10 });
@@ -167,7 +167,7 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'get', 'task-001', '--agent', 'test-agent', '--history', '5']);
+      await program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001', '--history', '5']);
 
       expect(mockClient.getTask).toHaveBeenCalledWith('task-001', { historyLength: 5 });
     });
@@ -178,7 +178,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'get', 'task-001', '--agent', 'test-agent', '--history', 'invalid'])
+        program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001', '--history', 'invalid'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -196,7 +196,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'get', 'task-001', '--agent', 'test-agent'])
+        program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -215,7 +215,7 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'cancel', 'task-001', '--agent', 'test-agent']);
+      await program.parseAsync(['node', 'test', 'task', 'cancel', 'test-agent', 'task-001']);
 
       expect(createA2AClient).toHaveBeenCalledWith(mockConfigPath, 'test-agent');
       expect(mockClient.cancelTask).toHaveBeenCalledWith('task-001');
@@ -226,7 +226,7 @@ describe('task command', () => {
         ok: true,
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'cancel', 'task-001', '--agent', 'test-agent']);
+      await program.parseAsync(['node', 'test', 'task', 'cancel', 'test-agent', 'task-001']);
 
       expect(mockClient.cancelTask).toHaveBeenCalledWith('task-001');
     });
@@ -242,7 +242,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'cancel', 'task-001', '--agent', 'test-agent'])
+        program.parseAsync(['node', 'test', 'task', 'cancel', 'test-agent', 'task-001'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -279,7 +279,7 @@ describe('task command', () => {
         return {} as any;
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'wait', 'task-001', '--agent', 'test-agent', '--timeout', '10']);
+      await program.parseAsync(['node', 'test', 'task', 'wait', 'test-agent', 'task-001', '--timeout', '10']);
 
       expect(mockClient.getTask).toHaveBeenCalled();
     });
@@ -297,7 +297,7 @@ describe('task command', () => {
 
       // Simulate polling that times out
       const promise = program.parseAsync([
-        'node', 'test', 'task', 'wait', 'task-001', '--agent', 'test-agent', '--timeout', '1',
+        'node', 'test', 'task', 'wait', 'test-agent', 'task-001', '--timeout', '1',
       ]);
 
       // Advance time past timeout
@@ -321,7 +321,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'wait', 'task-001', '--agent', 'test-agent'])
+        program.parseAsync(['node', 'test', 'task', 'wait', 'test-agent', 'task-001'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
