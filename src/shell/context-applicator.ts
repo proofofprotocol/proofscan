@@ -250,10 +250,30 @@ export function applyContext(
   // - `task ls <agent>`, `task get <agent> <taskId>`, `task cancel <agent> <taskId>`, `task wait <agent> <taskId>`
   // - Inject context.connector as agent argument if not provided
   if (command === 'task') {
-    if (['ls', 'list', 'get', 'cancel', 'wait'].includes(subcommand || '')) {
-      // Check for positional agent after subcommand (position 1 = args[2])
+    if (['ls', 'list'].includes(subcommand || '')) {
+      // task ls only needs agent
       if (!hasPositionalAt(args, 1) && context.connector) {
         args.push(context.connector);
+      }
+    } else if (['get', 'show', 'cancel', 'wait'].includes(subcommand || '')) {
+      // task get/show/cancel/wait needs agent + taskId
+      // If only 1 positional provided, assume it's taskId and inject agent
+      const hasPos1 = hasPositionalAt(args, 1);
+      const hasPos2 = hasPositionalAt(args, 2);
+      
+      if (context.connector) {
+        if (!hasPos1) {
+          // No positional at all - just add agent
+          args.push(context.connector);
+        } else if (hasPos1 && !hasPos2) {
+          // Only 1 positional - assume it's taskId, insert agent before it
+          // Find where to insert (after subcommand)
+          const insertIdx = args.findIndex((a, i) => i > 1 && !a.startsWith('-'));
+          if (insertIdx > 0) {
+            args.splice(insertIdx, 0, context.connector);
+          }
+        }
+        // If both positionals exist, user provided both - do nothing
       }
     }
   }

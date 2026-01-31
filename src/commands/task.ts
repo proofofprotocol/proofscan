@@ -130,77 +130,135 @@ export function createTaskCommand(getConfigPath: () => string): Command {
       }
     });
 
+  /**
+   * Shared handler for task get/show with prefix matching
+   */
+  async function handleTaskGet(agent: string, taskIdPrefix: string, options: { history?: string }): Promise<void> {
+    // Parse history length
+    const historyLength = parseInt(options.history || '10', 10);
+    if (isNaN(historyLength) || historyLength < 0) {
+      outputError('History length must be a non-negative integer');
+      process.exit(1);
+    }
+
+    // Create client
+    const configDir = dirname(getConfigPath());
+    const clientResult = await createA2AClient(configDir, agent);
+
+    if (!clientResult.ok) {
+      if (clientResult.error?.includes('ECONNREFUSED') || clientResult.error?.includes('fetch failed')) {
+        outputError(`Cannot connect to agent. Is it running? (${clientResult.error})`);
+      } else {
+        outputError(clientResult.error || 'Failed to create client');
+      }
+      process.exit(1);
+    }
+
+    // First try exact match
+    let result = await clientResult.client.getTask(taskIdPrefix, { historyLength });
+
+    // If not found, try prefix matching via list
+    if (!result.ok && (result.error?.includes('not found') || result.error?.includes('-32001'))) {
+      const listResult = await clientResult.client.listTasks({});
+      if (listResult.ok && listResult.response) {
+        const matches = listResult.response.tasks.filter(t => t.id.startsWith(taskIdPrefix));
+        if (matches.length === 1) {
+          // Exactly one match - use full ID
+          result = await clientResult.client.getTask(matches[0].id, { historyLength });
+        } else if (matches.length > 1) {
+          outputError(`Ambiguous task ID prefix '${taskIdPrefix}'. Matches: ${matches.map(t => t.id).join(', ')}`);
+          process.exit(1);
+        }
+        // If no matches, fall through to original error
+      }
+    }
+
+    if (!result.ok) {
+      if (result.error?.includes('404') || result.error?.includes('not found') || result.error?.includes('-32001')) {
+        outputError(`Task not found: ${taskIdPrefix} (${result.error})`);
+      } else {
+        outputError(result.error || `Failed to get task: ${taskIdPrefix}`);
+      }
+      process.exit(1);
+    }
+
+    if (!result.task) {
+      outputError(`Task not found: ${taskIdPrefix}`);
+      process.exit(1);
+    }
+
+    const task = result.task;
+
+    // Build output
+    const outputData = {
+      id: task.id,
+      status: task.status,
+      contextId: task.contextId,
+      messageCount: task.messages?.length ?? 0,
+      artifactCount: task.artifacts?.length ?? 0,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+      messages: historyLength > 0 ? task.messages?.slice(-historyLength) : [],
+      artifacts: task.artifacts,
+    };
+
+    output(outputData);
+  }
+
   // ===== task get =====
   cmd
     .command('get <agent> <taskId>')
-    .description('Get task details')
-    .option('--history <n>', 'Message history length (number of recent messages)', '10')
+    .description('Get task details (alias: show)')
+    .option('--history <n>', 'Message history length', '10')
     .action(async (agent, taskId, options) => {
       try {
-        // Parse history length
-        const historyLength = parseInt(options.history, 10);
-        if (isNaN(historyLength) || historyLength < 0) {
-          outputError('History length must be a non-negative integer');
-          process.exit(1);
-        }
-
-        // Create client
-        const configDir = dirname(getConfigPath());
-        const clientResult = await createA2AClient(configDir, agent);
-
-        if (!clientResult.ok) {
-          if (clientResult.error?.includes('ECONNREFUSED') || clientResult.error?.includes('fetch failed')) {
-            outputError(`Cannot connect to agent. Is it running? (${clientResult.error})`);
-          } else {
-            outputError(clientResult.error || 'Failed to create client');
-          }
-          process.exit(1);
-        }
-
-        // Get task
-        const result = await clientResult.client.getTask(taskId, { historyLength });
-
-        if (!result.ok) {
-          if (result.error?.includes('404') || result.error?.includes('not found')) {
-            outputError(`Task not found: ${taskId} (${result.error})`);
-          } else {
-            outputError(result.error || `Failed to get task: ${taskId}`);
-          }
-          process.exit(1);
-        }
-
-        if (!result.task) {
-          outputError(`Task not found: ${taskId}`);
-          process.exit(1);
-        }
-
-        const task = result.task;
-
-        // Build output
-        const outputData = {
-          id: task.id,
-          status: task.status,
-          contextId: task.contextId,
-          messageCount: task.messages?.length ?? 0,
-          artifactCount: task.artifacts?.length ?? 0,
-          createdAt: task.createdAt,
-          updatedAt: task.updatedAt,
-          messages: historyLength > 0 ? task.messages?.slice(-historyLength) : [],
-          artifacts: task.artifacts,
-        };
-
-        output(outputData);
+        await handleTaskGet(agent, taskId, options);
       } catch (error) {
         outputError('Failed to get task', error instanceof Error ? error : undefined);
         process.exit(1);
       }
     });
 
+  // ===== task show (alias for get) =====
+  cmd
+    .command('show <agent> <taskId>')
+    .description('Show task details (alias for get)')
+    .option('--history <n>', 'Message history length', '10')
+    .action(async (agent, taskId, options) => {
+      try {
+        await handleTaskGet(agent, taskId, options);
+      } catch (error) {
+        outputError('Failed to get task', error instanceof Error ? error : undefined);
+        process.exit(1);
+      }
+    });
+
+  /**
+   * Resolve task ID prefix to full ID
+   */
+  async function resolveTaskId(client: { listTasks: (params: ListTasksParams) => Promise<{ ok: boolean; response?: { tasks: Task[] } }> }, taskIdPrefix: string): Promise<string | null> {
+    // First try to list tasks and find matches
+    const listResult = await client.listTasks({});
+    if (!listResult.ok || !listResult.response) {
+      return taskIdPrefix; // Fall back to original
+    }
+    
+    const matches = listResult.response.tasks.filter((t: Task) => t.id.startsWith(taskIdPrefix));
+    if (matches.length === 1) {
+      return matches[0].id;
+    } else if (matches.length > 1) {
+      outputError(`Ambiguous task ID prefix '${taskIdPrefix}'. Matches: ${matches.map((t: Task) => t.id).join(', ')}`);
+      process.exit(1);
+    }
+    
+    return taskIdPrefix; // No matches, return as-is
+  }
+
   // ===== task cancel =====
   cmd
     .command('cancel <agent> <taskId>')
     .description('Cancel a task')
-    .action(async (agent, taskId, options) => {
+    .action(async (agent, taskIdPrefix) => {
       try {
         // Create client
         const configDir = dirname(getConfigPath());
@@ -212,6 +270,13 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           } else {
             outputError(clientResult.error || 'Failed to create client');
           }
+          process.exit(1);
+        }
+
+        // Resolve task ID prefix
+        const taskId = await resolveTaskId(clientResult.client, taskIdPrefix);
+        if (!taskId) {
+          outputError(`Task not found: ${taskIdPrefix}`);
           process.exit(1);
         }
 
@@ -251,7 +316,7 @@ export function createTaskCommand(getConfigPath: () => string): Command {
     .description('Wait for task completion (poll until completed/failed/canceled/rejected)')
     .option('--timeout <sec>', 'Timeout in seconds (default: 60)', '60')
     .option('--interval <sec>', 'Poll interval in seconds (default: 2)', '2')
-    .action(async (agent, taskId, options) => {
+    .action(async (agent, taskIdPrefix, options) => {
       try {
         // Parse options
         const timeoutSec = parseInt(options.timeout, 10);
@@ -286,6 +351,13 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
         const client = clientResult.client;
         const finalStatuses: TaskState[] = ['completed', 'failed', 'canceled', 'rejected'];
+
+        // Resolve task ID prefix
+        const taskId = await resolveTaskId(client, taskIdPrefix);
+        if (!taskId) {
+          outputError(`Task not found: ${taskIdPrefix}`);
+          process.exit(1);
+        }
 
         // Poll loop
         while (true) {
