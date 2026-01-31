@@ -57,9 +57,10 @@ export function detectProto(store: EventLineStore, sessionId: string): ProtoType
       return 'mcp';
     }
 
-    // A2A detection: a2a.* or agent.* methods
+    // A2A detection: a2a.*, agent.*, message/*, or tasks/* methods
     for (const method of allMethods) {
-      if (method.startsWith('a2a.') || method.startsWith('agent.')) {
+      if (method.startsWith('a2a.') || method.startsWith('agent.') ||
+          method.startsWith('message/') || method.startsWith('tasks/')) {
         return 'a2a';
       }
     }
