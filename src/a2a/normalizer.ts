@@ -106,7 +106,7 @@ export function normalizeA2aEvent(raw: unknown): NormalizedEvent | null {
   const obj = raw as Record<string, unknown>;
 
   // Try to extract the message object from response format or use directly
-  const result = (obj.result as Record<string, unknown>) || obj;
+  const result = (obj.result as Record<string, unknown>) ?? obj;
 
   // Status event
   if ('status' in result && 'taskId' in result) {

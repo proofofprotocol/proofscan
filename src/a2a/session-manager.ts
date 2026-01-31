@@ -160,8 +160,12 @@ export class A2ASessionManager {
     if (rpcId) {
       try {
         this.eventsStore.saveRpcCall(sessionId, rpcId, 'message/send');
-      } catch {
-        // RPC already exists, ignore
+      } catch (error) {
+        // Only ignore UNIQUE constraint violations (RPC already exists)
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!msg.includes('UNIQUE constraint failed')) {
+          throw error;
+        }
       }
     }
 
