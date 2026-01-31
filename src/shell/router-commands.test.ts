@@ -44,6 +44,36 @@ describe('detectProto', () => {
     expect(result).toBe('a2a');
   });
 
+  it('should detect A2A from message/* methods', () => {
+    const store = createMockStore([{ method: 'message/send' }]);
+    const result = detectProto(store as any, 'session1');
+    expect(result).toBe('a2a');
+  });
+
+  it('should detect A2A from message/stream method', () => {
+    const store = createMockStore([{ method: 'message/stream' }]);
+    const result = detectProto(store as any, 'session1');
+    expect(result).toBe('a2a');
+  });
+
+  it('should detect A2A from tasks/* methods', () => {
+    const store = createMockStore([{ method: 'tasks/get' }]);
+    const result = detectProto(store as any, 'session1');
+    expect(result).toBe('a2a');
+  });
+
+  it('should detect A2A from tasks/list method', () => {
+    const store = createMockStore([{ method: 'tasks/list' }]);
+    const result = detectProto(store as any, 'session1');
+    expect(result).toBe('a2a');
+  });
+
+  it('should detect A2A from tasks/cancel method', () => {
+    const store = createMockStore([{ method: 'tasks/cancel' }]);
+    const result = detectProto(store as any, 'session1');
+    expect(result).toBe('a2a');
+  });
+
   it('should return ? for unknown protocols', () => {
     const store = createMockStore([{ method: 'custom.method' }]);
     const result = detectProto(store as any, 'session1');
