@@ -250,6 +250,58 @@ describe('applyContext', () => {
       expect(result.args).not.toContain('--connector');
     });
   });
+
+  describe('task command', () => {
+    it('should inject agent from context.connector for task ls', () => {
+      const args = ['task', 'ls'];
+      const context: ShellContext = { connector: 'glm-dice', proto: 'a2a' };
+      const result = applyContext(args, context);
+      expect(result.args).toContain('glm-dice');
+      expect(result.args).toEqual(['task', 'ls', 'glm-dice']);
+    });
+
+    it('should not inject agent if already provided', () => {
+      const args = ['task', 'ls', 'other-agent'];
+      const context: ShellContext = { connector: 'glm-dice', proto: 'a2a' };
+      const result = applyContext(args, context);
+      expect(result.args).toEqual(['task', 'ls', 'other-agent']);
+    });
+
+    it('should inject agent for task get', () => {
+      const args = ['task', 'get'];
+      const context: ShellContext = { connector: 'glm-dice' };
+      const result = applyContext(args, context);
+      expect(result.args).toContain('glm-dice');
+    });
+
+    it('should inject agent for task cancel', () => {
+      const args = ['task', 'cancel'];
+      const context: ShellContext = { connector: 'glm-dice' };
+      const result = applyContext(args, context);
+      expect(result.args).toContain('glm-dice');
+    });
+
+    it('should inject agent for task wait', () => {
+      const args = ['task', 'wait'];
+      const context: ShellContext = { connector: 'glm-dice' };
+      const result = applyContext(args, context);
+      expect(result.args).toContain('glm-dice');
+    });
+
+    it('should work with task list alias', () => {
+      const args = ['task', 'list'];
+      const context: ShellContext = { connector: 'glm-dice' };
+      const result = applyContext(args, context);
+      expect(result.args).toContain('glm-dice');
+    });
+
+    it('should not inject when no context', () => {
+      const args = ['task', 'ls'];
+      const context: ShellContext = {};
+      const result = applyContext(args, context);
+      expect(result.args).toEqual(['task', 'ls']);
+    });
+  });
 });
 
 describe('getContextHint', () => {
