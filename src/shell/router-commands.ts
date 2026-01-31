@@ -1930,34 +1930,6 @@ export async function handleHistory(
     limit = MAX_LIMIT;
   }
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-
-    if (arg === '-n' && i + 1 < args.length) {
-      const limitStr = args[i + 1];
-      const parsedLimit = parseInt(limitStr, 10);
-      if (!isNaN(parsedLimit) && parsedLimit > 0) {
-        limit = parsedLimit;
-        i++;
-      } else {
-        printError(`Invalid limit: ${limitStr}`);
-        return;
-      }
-    } else if (arg === '--role' && i + 1 < args.length) {
-      const role = args[i + 1];
-      if (role === 'user' || role === 'assistant') {
-        roleFilter = role;
-        i++;
-      } else {
-        printError(`Invalid role: ${role}. Use 'user' or 'assistant'`);
-        return;
-      }
-    } else if (arg === '--search' && i + 1 < args.length) {
-      searchQuery = args[i + 1];
-      i++;
-    }
-  }
-
   const configDir = configPath.replace(/\/[^/]+$/, '');
   const eventsStore = new EventsStore(configDir);
 
