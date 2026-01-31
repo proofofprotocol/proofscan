@@ -1839,3 +1839,137 @@ async function showA2AMessage(
   console.log(dimText(`Timestamp: ${message.timestamp}`, isTTY));
   console.log();
 }
+
+/**
+ * Handle history command - show A2A message history with filtering
+ *
+ * Usage:
+ *   history              - Show all messages
+ *   history -n 20        - Show last 20 messages
+ *   history --role user  - Show only user messages
+ *   history --search <query> - Search messages by text
+ *
+ * @param args - Command arguments
+ * @param context - Shell context
+ * @param configPath - Configuration path
+ */
+export async function handleHistory(
+  args: string[],
+  context: ShellContext,
+  configPath: string
+): Promise<void> {
+  const level = getContextLevel(context);
+
+  if (level === 'root') {
+    printError('Not in a session. Use: cd <agent-id> <session-id> first');
+    return;
+  }
+
+  if (level === 'connector') {
+    printError('Not in a session. Use: cd <session-id> to enter a session');
+    return;
+  }
+
+  if (!context.session) {
+    printError('No session in context');
+    return;
+  }
+
+  if (context.proto !== 'a2a') {
+    printError('history is only available for A2A sessions');
+    printInfo('Use: ls or rpc to view this session');
+    return;
+  }
+
+  // Parse arguments
+  let limit = 100;
+  let roleFilter: 'user' | 'assistant' | null = null;
+  let searchQuery: string | null = null;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    if (arg === '-n' && i + 1 < args.length) {
+      const limitStr = args[i + 1];
+      const parsedLimit = parseInt(limitStr, 10);
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        limit = parsedLimit;
+        i++;
+      } else {
+        printError(`Invalid limit: ${limitStr}`);
+        return;
+      }
+    } else if (arg === '--role' && i + 1 < args.length) {
+      const role = args[i + 1];
+      if (role === 'user' || role === 'assistant') {
+        roleFilter = role;
+        i++;
+      } else {
+        printError(`Invalid role: ${role}. Use 'user' or 'assistant'`);
+        return;
+      }
+    } else if (arg === '--search' && i + 1 < args.length) {
+      searchQuery = args[i + 1];
+      i++;
+    }
+  }
+
+  const configDir = configPath.replace(/\/[^/]+$/, '');
+  const eventsStore = new EventsStore(configDir);
+
+  // Get messages with higher limit for filtering
+  const messages = eventsStore.getA2AMessages(context.session, limit * 2);
+
+  // Apply filters
+  let filteredMessages = messages;
+
+  if (roleFilter) {
+    filteredMessages = filteredMessages.filter(m => m.role === roleFilter);
+  }
+
+  if (searchQuery) {
+    const lowerQuery = searchQuery.toLowerCase();
+    filteredMessages = filteredMessages.filter(m =>
+      m.content.toLowerCase().includes(lowerQuery)
+    );
+  }
+
+  // Apply limit after filtering
+  if (filteredMessages.length > limit) {
+    filteredMessages = filteredMessages.slice(-limit);
+  }
+
+  if (filteredMessages.length === 0) {
+    printInfo('No messages match the criteria');
+    return;
+  }
+
+  const isTTY = process.stdout.isTTY;
+  console.log();
+
+  // Header
+  console.log(
+    dimText('#', isTTY).padEnd(4) + '  ' +
+    dimText('Time', isTTY).padEnd(10) + '  ' +
+    dimText('Role', isTTY).padEnd(12) + '  ' +
+    dimText('Content', isTTY)
+  );
+  console.log(dimText('-'.repeat(70), isTTY));
+
+  // Rows
+  filteredMessages.forEach(m => {
+    const timeStr = m.timestamp ? m.timestamp.slice(11, 19) : '--:--:--';
+    const roleColor = isTTY && m.role === 'assistant' ? '\x1b[36m' : '';
+    const roleReset = isTTY && m.role === 'assistant' ? '\x1b[0m' : '';
+    const roleDisplay = `${roleColor}${m.role}${roleReset}`;
+    console.log(
+      String(m.id).padEnd(4) + '  ' +
+      timeStr.padEnd(10) + '  ' +
+      roleDisplay.padEnd(isTTY ? 21 : 12) + '  ' +
+      m.content
+    );
+  });
+
+  console.log();
+  printInfo(`Showing ${filteredMessages.length} message${filteredMessages.length !== 1 ? 's' : ''}`);
+}
