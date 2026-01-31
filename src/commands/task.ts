@@ -388,12 +388,16 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           if (follow && task.messages && task.messages.length > lastMessageCount) {
             const newMessages = task.messages.slice(lastMessageCount);
             for (const msg of newMessages) {
-              const timestamp = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+              const timestamp = new Date().toLocaleTimeString(undefined, { hour12: false });
               // Extract text from parts
               const text = msg.parts
-                ?.map(p => (p as { text?: string }).text || '')
+                ?.map(p => {
+                  if ('text' in p && p.text) return p.text;
+                  if ('data' in p) return `[${(p as { mimeType?: string }).mimeType || 'data'}]`;
+                  return '';
+                })
                 .filter(Boolean)
-                .join('') || '(no text)';
+                .join('') || '(no content)';
               console.log(`[${timestamp}] ${text}`);
             }
             lastMessageCount = task.messages.length;

@@ -127,8 +127,8 @@ describe('task command', () => {
     });
   });
 
-  describe('task get', () => {
-    it('should get task details', async () => {
+  describe('task show', () => {
+    it('should show task details', async () => {
       mockClient.getTask.mockResolvedValue({
         ok: true,
         task: {
@@ -151,7 +151,7 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001']);
+      await program.parseAsync(['node', 'test', 'task', 'show', 'test-agent', 'task-001']);
 
       expect(createA2AClient).toHaveBeenCalledWith(mockConfigPath, 'test-agent');
       expect(mockClient.getTask).toHaveBeenCalledWith('task-001', { historyLength: 10 });
@@ -167,7 +167,7 @@ describe('task command', () => {
         },
       });
 
-      await program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001', '--history', '5']);
+      await program.parseAsync(['node', 'test', 'task', 'show', 'test-agent', 'task-001', '--history', '5']);
 
       expect(mockClient.getTask).toHaveBeenCalledWith('task-001', { historyLength: 5 });
     });
@@ -178,7 +178,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001', '--history', 'invalid'])
+        program.parseAsync(['node', 'test', 'task', 'show', 'test-agent', 'task-001', '--history', 'invalid'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
@@ -196,7 +196,7 @@ describe('task command', () => {
       });
 
       await expect(
-        program.parseAsync(['node', 'test', 'task', 'get', 'test-agent', 'task-001'])
+        program.parseAsync(['node', 'test', 'task', 'show', 'test-agent', 'task-001'])
       ).rejects.toThrow('exit called');
 
       expect(processExitSpy).toHaveBeenCalledWith(1);
