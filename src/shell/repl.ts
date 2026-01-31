@@ -22,6 +22,7 @@ import {
   handleLs,
   handleShow,
   handleA2ASend,
+  handleHistory,
 } from './router-commands.js';
 import { generatePrompt, printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
 import { loadHistory, saveHistory, addToHistory } from './history.js';
@@ -379,6 +380,12 @@ export class ShellRepl {
       return;
     }
 
+    // Handle history command (A2A session message history)
+    if (command === 'history') {
+      await handleHistory(args, this.context, this.configPath);
+      return;
+    }
+
     // Handle send command (A2A or MCP tool)
     if (command === 'send') {
       // Check if current target is an A2A agent
@@ -583,6 +590,12 @@ Session Control:
   clear             Clear screen
   exit              Exit shell
 
+A2A Session Commands:
+  history           Show message history (A2A sessions only)
+    history -n 20   Show last 20 messages
+    history --role user  Show only user messages
+    history --search <query>  Search messages
+
 CLI Commands (also available here):
   view, tree, scan, summary, rpc, analyze, tool
   config, connectors, secrets, catalog, archive, doctor
@@ -692,6 +705,13 @@ Session Control:
   help [topic]            Show help
   clear                   Clear screen
   exit, quit              Exit shell
+
+A2A Session Commands (history):
+  history                 Show A2A message history
+    history -n <count>    Show last N messages (default: 100)
+    history --role user   Show only user messages
+    history --role assistant  Show only assistant messages
+    history --search <query>  Search messages by text
 
 CLI Commands (passthrough to pfscan):
   view (v)          View recent events timeline (use -f for follow mode)
