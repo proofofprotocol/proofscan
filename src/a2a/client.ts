@@ -717,9 +717,11 @@ export class A2AClient {
       contextId: data.contextId ? String(data.contextId) : undefined,
     };
 
-    // Parse messages
-    if (Array.isArray(data.messages)) {
-      task.messages = data.messages.map(msg => this.parseMessage(msg));
+    // Parse messages (A2A uses 'history' field, some agents use 'messages')
+    const messageList = Array.isArray(data.history) ? data.history : 
+                        Array.isArray(data.messages) ? data.messages : [];
+    if (messageList.length > 0) {
+      task.messages = messageList.map(msg => this.parseMessage(msg));
     }
 
     // Parse artifacts
