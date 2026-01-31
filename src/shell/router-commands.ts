@@ -1201,12 +1201,17 @@ export async function handleShow(
     return;
   }
 
-  // Handle --id option for specific RPC (e.g., show --html --id 1)
+  // Handle --id option for specific RPC/message (e.g., show --html --id 1)
   const rpcTarget = idValue || target;
 
   if (rpcTarget) {
-    // Show RPC details
-    await executeCommand(['rpc', 'show', '--session', context.session, '--id', rpcTarget, ...(isJson ? ['--json'] : []), ...htmlOptions]);
+    // A2A sessions show message details, MCP sessions show RPC details
+    if (context.proto === 'a2a') {
+      const configDir = configPath.replace(/\/[^/]+$/, '');
+      await showA2AMessage(configDir, context.session, rpcTarget, isJson);
+    } else {
+      await executeCommand(['rpc', 'show', '--session', context.session, '--id', rpcTarget, ...(isJson ? ['--json'] : []), ...htmlOptions]);
+    }
   } else {
     // Show session details
     await executeCommand(['sessions', 'show', '--id', context.session, ...(isJson ? ['--json'] : []), ...htmlOptions]);
@@ -1786,4 +1791,51 @@ async function listA2AMessages(
 
   console.log();
   printInfo('Hint: show <id> to view details, cd .. to go back');
+}
+
+/**
+ * Show A2A message details
+ */
+async function showA2AMessage(
+  configDir: string,
+  sessionId: string,
+  messageIndex: string,
+  isJson: boolean
+): Promise<void> {
+  const eventsStore = new EventsStore(configDir);
+  const messages = eventsStore.getA2AMessages(sessionId, 100);
+
+  const index = parseInt(messageIndex, 10);
+  if (isNaN(index) || index < 1 || index > messages.length) {
+    printError(`Message not found: ${messageIndex}`);
+    printInfo(`Valid range: 1-${messages.length}`);
+    return;
+  }
+
+  const message = messages[index - 1];
+
+  if (isJson) {
+    console.log(JSON.stringify({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      timestamp: message.timestamp,
+    }, null, 2));
+    return;
+  }
+
+  const isTTY = process.stdout.isTTY;
+  console.log();
+
+  // Role with color
+  const roleColor = isTTY && message.role === 'assistant' ? '\x1b[36m' : '';
+  const roleReset = isTTY && message.role === 'assistant' ? '\x1b[0m' : '';
+  const roleEmoji = message.role === 'assistant' ? '🤖' : '👤';
+
+  console.log(`${roleEmoji} ${roleColor}${message.role}${roleReset}`);
+  console.log(dimText('─'.repeat(60), isTTY));
+  console.log(message.content);
+  console.log(dimText('─'.repeat(60), isTTY));
+  console.log(dimText(`Timestamp: ${message.timestamp}`, isTTY));
+  console.log();
 }

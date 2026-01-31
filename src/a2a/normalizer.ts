@@ -95,13 +95,18 @@ export function normalizeMcpEvent(raw: unknown): NormalizedEvent | null {
 
 /**
  * Normalize A2A event to common format
+ *
+ * Handles both:
+ * - Response format: { jsonrpc, id, result: { role, parts, ... } }
+ * - Request format: { role, parts, ... } (direct message object)
  */
 export function normalizeA2aEvent(raw: unknown): NormalizedEvent | null {
   if (!raw || typeof raw !== 'object') return null;
 
   const obj = raw as Record<string, unknown>;
-  const result = obj.result as Record<string, unknown> | undefined;
-  if (!result) return null;
+
+  // Try to extract the message object from response format or use directly
+  const result = (obj.result as Record<string, unknown>) ?? obj;
 
   // Status event
   if ('status' in result && 'taskId' in result) {
@@ -137,7 +142,7 @@ export function normalizeA2aEvent(raw: unknown): NormalizedEvent | null {
     };
   }
 
-  // Message event
+  // Message event (response or request format)
   if ('role' in result && 'parts' in result) {
     return {
       version: 1,

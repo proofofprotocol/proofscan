@@ -97,12 +97,14 @@ export class A2ASessionManager {
    * @param message - A2A message
    * @param isRequest - True for sent (request), false for received (response)
    * @param rpcId - Optional RPC ID for request/response pairing
+   * @param skipRpcComplete - Skip RPC completion (for task multi-message recording)
    */
   recordMessage(
     contextId: string | undefined,
     message: A2AMessage,
     isRequest: boolean,
-    rpcId?: string
+    rpcId?: string,
+    skipRpcComplete: boolean = false
   ): void {
     const sessionId = this.getOrCreateSession(contextId);
 
@@ -134,7 +136,7 @@ export class A2ASessionManager {
     );
 
     // Complete RPC if this is a response
-    if (!isRequest && rpcId) {
+    if (!isRequest && rpcId && !skipRpcComplete) {
       this.eventsStore.completeRpcCall(sessionId, rpcId, true);
     }
   }
@@ -153,12 +155,33 @@ export class A2ASessionManager {
   ): void {
     const sessionId = this.getOrCreateSession(contextId);
 
+    // Create RPC record for the task if not already exists (needed for proto detection)
+    // RPC may already exist if recordMessage was called for the request
+    if (rpcId) {
+      try {
+        this.eventsStore.saveRpcCall(sessionId, rpcId, 'message/send');
+      } catch (error) {
+        // Only ignore UNIQUE constraint violations (RPC already exists)
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!msg.includes('UNIQUE constraint failed')) {
+          throw error;
+        }
+      }
+    }
+
     // Record all messages in the task
+    // For assistant messages, include rpcId for proper event recording
+    // but skip RPC completion (will complete once after all messages)
     for (const message of task.messages) {
       const isUserMessage = message.role === 'user';
-      const msgRpcId = isUserMessage ? undefined : rpcId; // Only record assistant messages as response
+      const msgRpcId = isUserMessage ? undefined : rpcId;
 
-      this.recordMessage(contextId, message, false, msgRpcId);
+      this.recordMessage(contextId, message, false, msgRpcId, true);
+    }
+
+    // Complete RPC once for the entire task
+    if (rpcId) {
+      this.eventsStore.completeRpcCall(sessionId, rpcId, true);
     }
   }
 

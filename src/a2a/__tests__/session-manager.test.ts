@@ -11,7 +11,7 @@ import { closeAllDbs } from '../../db/connection.js';
 import { EVENTS_DB_SCHEMA, EVENTS_DB_VERSION } from '../../db/schema.js';
 import { EventsStore } from '../../db/events-store.js';
 import { A2ASessionManager, createA2ASessionManager } from '../session-manager.js';
-import type { A2AMessage } from '../types.js';
+import type { A2AMessage, A2ATask } from '../types.js';
 
 describe('A2ASessionManager', () => {
   let tempDir: string;
@@ -275,6 +275,91 @@ describe('A2ASessionManager', () => {
 
       expect(eventsStoreFromGetter).toBeDefined();
       expect(eventsStoreFromGetter).toBe(eventsStore);
+    });
+  });
+
+  describe('Task recording', () => {
+    it('should record task response messages and complete RPC once', () => {
+      const contextId = 'ctx-task-001';
+      const rpcId = 'rpc-task-001';
+
+      const requestMessage: A2AMessage = {
+        role: 'user',
+        parts: [{ text: 'What is the weather?' }],
+        messageId: 'msg-req-001',
+      };
+
+      const task: A2ATask = {
+        id: 'task-001',
+        status: 'completed',
+        messages: [
+          {
+            role: 'assistant',
+            parts: [{ text: 'The weather is sunny.' }],
+            messageId: 'msg-task-002',
+          },
+          {
+            role: 'assistant',
+            parts: [{ text: 'Temperature is 25°C.' }],
+            messageId: 'msg-task-003',
+          },
+        ],
+        contextId,
+      };
+
+      // First record request (this saves RPC)
+      sessionManager.recordMessage(contextId, requestMessage, true, rpcId);
+
+      // Then record task response
+      sessionManager.recordTask(contextId, task, rpcId);
+
+      // Verify messages were recorded (1 request + 2 assistant messages)
+      const sessionId = sessionManager.getOrCreateSession(contextId);
+      const events = eventsStore.getEventsBySession(sessionId);
+
+      expect(events.length).toBe(3); // 1 request + 2 assistant messages
+
+      // Verify RPC was saved and completed
+      const rpcCalls = eventsStore.getRpcCallsBySession(sessionId);
+      expect(rpcCalls.length).toBe(1);
+      expect(rpcCalls[0].rpc_id).toBe(rpcId);
+      expect(rpcCalls[0].method).toBe('message/send');
+      expect(rpcCalls[0].success).toBe(1);
+    });
+
+    it('should record task without rpcId when not provided', () => {
+      const contextId = 'ctx-task-002';
+
+      const task: A2ATask = {
+        id: 'task-002',
+        status: 'pending',
+        messages: [
+          {
+            role: 'user',
+            parts: [{ text: 'Hello' }],
+            messageId: 'msg-task-004',
+          },
+          {
+            role: 'assistant',
+            parts: [{ text: 'Hi there!' }],
+            messageId: 'msg-task-005',
+          },
+        ],
+        contextId,
+      };
+
+      // Record task without rpcId
+      sessionManager.recordTask(contextId, task);
+
+      // Verify messages were recorded
+      const sessionId = sessionManager.getOrCreateSession(contextId);
+      const events = eventsStore.getEventsBySession(sessionId);
+
+      expect(events.length).toBe(2);
+
+      // Verify no RPC was recorded
+      const rpcCalls = eventsStore.getRpcCallsBySession(sessionId);
+      expect(rpcCalls.length).toBe(0);
     });
   });
 });
