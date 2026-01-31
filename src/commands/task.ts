@@ -2,7 +2,7 @@
  * Task Commands (A2A Phase 2.2)
  *
  * CLI commands for managing A2A tasks.
- * Implements: ls, get, cancel, wait
+ * Implements: ls, show, cancel, wait
  */
 
 import { Command } from 'commander';
@@ -131,9 +131,9 @@ export function createTaskCommand(getConfigPath: () => string): Command {
     });
 
   /**
-   * Shared handler for task get/show with prefix matching
+   * Handler for task show with prefix matching
    */
-  async function handleTaskGet(agent: string, taskIdPrefix: string, options: { history?: string }): Promise<void> {
+  async function handleTaskShow(agent: string, taskIdPrefix: string, options: { history?: string }): Promise<void> {
     // Parse history length
     const historyLength = parseInt(options.history || '10', 10);
     if (isNaN(historyLength) || historyLength < 0) {
@@ -205,28 +205,14 @@ export function createTaskCommand(getConfigPath: () => string): Command {
     output(outputData);
   }
 
-  // ===== task get =====
-  cmd
-    .command('get <agent> <taskId>')
-    .description('Get task details (alias: show)')
-    .option('--history <n>', 'Message history length', '10')
-    .action(async (agent, taskId, options) => {
-      try {
-        await handleTaskGet(agent, taskId, options);
-      } catch (error) {
-        outputError('Failed to get task', error instanceof Error ? error : undefined);
-        process.exit(1);
-      }
-    });
-
-  // ===== task show (alias for get) =====
+  // ===== task show =====
   cmd
     .command('show <agent> <taskId>')
-    .description('Show task details (alias for get)')
+    .description('Show task details')
     .option('--history <n>', 'Message history length', '10')
     .action(async (agent, taskId, options) => {
       try {
-        await handleTaskGet(agent, taskId, options);
+        await handleTaskShow(agent, taskId, options);
       } catch (error) {
         outputError('Failed to get task', error instanceof Error ? error : undefined);
         process.exit(1);
@@ -316,11 +302,13 @@ export function createTaskCommand(getConfigPath: () => string): Command {
     .description('Wait for task completion (poll until completed/failed/canceled/rejected)')
     .option('--timeout <sec>', 'Timeout in seconds (default: 60)', '60')
     .option('--interval <sec>', 'Poll interval in seconds (default: 2)', '2')
+    .option('--follow', 'Show new messages in real-time while waiting')
     .action(async (agent, taskIdPrefix, options) => {
       try {
         // Parse options
         const timeoutSec = parseInt(options.timeout, 10);
         const intervalSec = parseInt(options.interval, 10);
+        const follow = options.follow === true;
 
         if (isNaN(timeoutSec) || timeoutSec <= 0) {
           outputError('Timeout must be a positive integer');
@@ -359,6 +347,15 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
+        // Track last seen message count for --follow
+        let lastMessageCount = 0;
+        
+        // Initial fetch to get baseline
+        const initialResult = await client.getTask(taskId);
+        if (initialResult.ok && initialResult.task) {
+          lastMessageCount = initialResult.task.messages?.length ?? 0;
+        }
+
         // Poll loop
         while (true) {
           // Check timeout
@@ -386,6 +383,21 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           }
 
           const task = result.task;
+
+          // --follow: Show new messages since last check
+          if (follow && task.messages && task.messages.length > lastMessageCount) {
+            const newMessages = task.messages.slice(lastMessageCount);
+            for (const msg of newMessages) {
+              const timestamp = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+              // Extract text from parts
+              const text = msg.parts
+                ?.map(p => (p as { text?: string }).text || '')
+                .filter(Boolean)
+                .join('') || '(no text)';
+              console.log(`[${timestamp}] ${text}`);
+            }
+            lastMessageCount = task.messages.length;
+          }
 
           // Check if final status
           if (finalStatuses.includes(task.status)) {
