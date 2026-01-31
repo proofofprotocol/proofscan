@@ -947,4 +947,71 @@ export class EventsStore {
       last_activity: string;
     } | null;
   }
+
+  /**
+   * Get A2A messages across all sessions for a target (agent)
+   *
+   * Phase 2.3.1: Cross-session history search
+   *
+   * Returns messages in descending timestamp order (newest first)
+   *
+   * @param targetId - Target ID (agent ID)
+   * @param limit - Maximum number of messages to return
+   * @returns Array of A2A messages with session ID
+   */
+  getA2AMessagesForTarget(
+    targetId: string,
+    limit: number
+  ): Array<{
+    id: number;
+    sessionId: string;
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+  }> {
+    const sql = `
+      SELECT
+        e.session_id,
+        e.ts,
+        json_extract(e.normalized_json, '$.actor') as role,
+        json_extract(e.normalized_json, '$.content.text') as content
+      FROM events e
+      JOIN sessions s ON e.session_id = s.session_id
+      WHERE s.target_id = ?
+        AND e.normalized_json IS NOT NULL
+        AND (json_extract(e.normalized_json, '$.actor') = 'user'
+             OR json_extract(e.normalized_json, '$.actor') = 'assistant')
+      ORDER BY e.ts DESC
+      LIMIT ?
+    `;
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(targetId, limit) as Array<{
+      session_id: string;
+      ts: string;
+      role: string;
+      content: string | null;
+    }>;
+
+    const messages: Array<{
+      id: number;
+      sessionId: string;
+      role: 'user' | 'assistant';
+      content: string;
+      timestamp: string;
+    }> = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      messages.push({
+        id: i + 1,
+        sessionId: row.session_id,
+        role: (row.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
+        content: row.content || '',
+        timestamp: row.ts,
+      });
+    }
+
+    // Return in descending order (newest first)
+    return messages;
+  }
 }
