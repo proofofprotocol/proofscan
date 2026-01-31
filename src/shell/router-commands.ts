@@ -1864,15 +1864,41 @@ export async function handleHistory(
   context: ShellContext,
   configPath: string
 ): Promise<void> {
+  // Handle help flag first
+  if (args.includes('-h') || args.includes('--help')) {
+    console.log(`
+Usage: history [options]
+
+Show A2A message history for the current session.
+
+Options:
+  -n <count>        Show last N messages (default: 100, max: 10000)
+  --role <role>     Filter by role: 'user' or 'assistant'
+  --search <query>  Search messages (case-insensitive)
+  -h, --help        Show this help
+
+Examples:
+  history              Show all messages in current session
+  history -n 20        Show last 20 messages
+  history --role user  Show only user messages
+  history --search d20 Search for 'd20' in messages
+
+Note: Must be in an A2A session context (cd <agent>/<session>)
+`);
+    return;
+  }
+
   const level = getContextLevel(context);
 
   if (level === 'root') {
-    printError('Not in a session. Use: cd <agent-id> <session-id> first');
+    printError('Not in a session. Use: cd <agent-id>/<session-id> first');
+    printInfo('Tip: history -h for usage');
     return;
   }
 
   if (level === 'connector') {
     printError('Not in a session. Use: cd <session-id> to enter a session');
+    printInfo('Tip: history -h for usage');
     return;
   }
 
