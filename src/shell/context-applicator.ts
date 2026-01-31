@@ -246,6 +246,18 @@ export function applyContext(
     }
   }
 
+  // === TASK ===
+  // - `task ls <agent>`, `task get <agent> <taskId>`, `task cancel <agent> <taskId>`, `task wait <agent> <taskId>`
+  // - Inject context.connector as agent argument if not provided
+  if (command === 'task') {
+    if (['ls', 'list', 'get', 'cancel', 'wait'].includes(subcommand || '')) {
+      // Check for positional agent after subcommand (position 1 = args[2])
+      if (!hasPositionalAt(args, 1) && context.connector) {
+        args.push(context.connector);
+      }
+    }
+  }
+
   return { args, warnings };
 }
 

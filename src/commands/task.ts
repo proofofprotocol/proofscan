@@ -39,15 +39,31 @@ async function handleTaskList(
   const clientResult = await createA2AClient(configDir, agent);
 
   if (!clientResult.ok) {
-    outputError(clientResult.error);
+    if (clientResult.error?.includes('ECONNREFUSED') || clientResult.error?.includes('fetch failed')) {
+      outputError(`Cannot connect to agent. Is it running? (${clientResult.error})`);
+    } else {
+      outputError(clientResult.error || 'Failed to create client');
+    }
     process.exit(1);
   }
 
   // List tasks
   const result = await clientResult.client.listTasks(params);
 
-  if (!result.ok || !result.response) {
-    outputError(result.error || 'Failed to list tasks');
+  if (!result.ok) {
+    // Provide more specific error messages
+    if (result.error?.includes('ECONNREFUSED') || result.error?.includes('fetch failed')) {
+      outputError(`Cannot connect to agent. Is it running? (${result.error})`);
+    } else if (result.error?.includes('404') || result.error?.includes('not found')) {
+      outputError(`Agent does not support tasks/list endpoint. (${result.error})`);
+    } else {
+      outputError(result.error || 'Failed to list tasks');
+    }
+    process.exit(1);
+  }
+
+  if (!result.response) {
+    outputError('Failed to list tasks: no response from agent');
     process.exit(1);
   }
 
@@ -132,15 +148,28 @@ export function createTaskCommand(getConfigPath: () => string): Command {
         const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {
-          outputError(clientResult.error);
+          if (clientResult.error?.includes('ECONNREFUSED') || clientResult.error?.includes('fetch failed')) {
+            outputError(`Cannot connect to agent. Is it running? (${clientResult.error})`);
+          } else {
+            outputError(clientResult.error || 'Failed to create client');
+          }
           process.exit(1);
         }
 
         // Get task
         const result = await clientResult.client.getTask(taskId, { historyLength });
 
-        if (!result.ok || !result.task) {
-          outputError(result.error || `Task not found: ${taskId}`);
+        if (!result.ok) {
+          if (result.error?.includes('404') || result.error?.includes('not found')) {
+            outputError(`Task not found: ${taskId} (${result.error})`);
+          } else {
+            outputError(result.error || `Failed to get task: ${taskId}`);
+          }
+          process.exit(1);
+        }
+
+        if (!result.task) {
+          outputError(`Task not found: ${taskId}`);
           process.exit(1);
         }
 
@@ -177,7 +206,11 @@ export function createTaskCommand(getConfigPath: () => string): Command {
         const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {
-          outputError(clientResult.error);
+          if (clientResult.error?.includes('ECONNREFUSED') || clientResult.error?.includes('fetch failed')) {
+            outputError(`Cannot connect to agent. Is it running? (${clientResult.error})`);
+          } else {
+            outputError(clientResult.error || 'Failed to create client');
+          }
           process.exit(1);
         }
 
@@ -185,7 +218,13 @@ export function createTaskCommand(getConfigPath: () => string): Command {
         const result = await clientResult.client.cancelTask(taskId);
 
         if (!result.ok) {
-          outputError(result.error || `Failed to cancel task: ${taskId}`);
+          if (result.error?.includes('404') || result.error?.includes('not found')) {
+            outputError(`Task not found: ${taskId} (${result.error})`);
+          } else if (result.error?.includes('already')) {
+            outputError(`Task already canceled or in final state: ${taskId} (${result.error})`);
+          } else {
+            outputError(result.error || `Failed to cancel task: ${taskId}`);
+          }
           process.exit(1);
         }
 
@@ -236,7 +275,11 @@ export function createTaskCommand(getConfigPath: () => string): Command {
         const clientResult = await createA2AClient(configDir, agent);
 
         if (!clientResult.ok) {
-          outputError(clientResult.error);
+          if (clientResult.error?.includes('ECONNREFUSED') || clientResult.error?.includes('fetch failed')) {
+            outputError(`Cannot connect to agent. Is it running? (${clientResult.error})`);
+          } else {
+            outputError(clientResult.error || 'Failed to create client');
+          }
           process.exit(1);
         }
 
@@ -255,8 +298,17 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           // Get task status
           const result = await client.getTask(taskId);
 
-          if (!result.ok || !result.task) {
-            outputError(result.error || `Task not found: ${taskId}`);
+          if (!result.ok) {
+            if (result.error?.includes('404') || result.error?.includes('not found')) {
+              outputError(`Task not found: ${taskId} (${result.error})`);
+            } else {
+              outputError(result.error || `Failed to get task status: ${taskId}`);
+            }
+            process.exit(1);
+          }
+
+          if (!result.task) {
+            outputError(`Task not found: ${taskId}`);
             process.exit(1);
           }
 
