@@ -1840,6 +1840,12 @@ async function showA2AMessage(
   console.log();
 }
 
+// History command display constants
+const HISTORY_LINE_WIDTH = 70;
+// ANSI color codes add 9 chars (e.g., '\x1b[36m' + '\x1b[0m'), so TTY needs +9 for role padding
+const ROLE_PAD_TTY = 21;
+const ROLE_PAD_PLAIN = 12;
+
 /**
  * Handle history command - show A2A message history with filtering
  *
@@ -1881,10 +1887,48 @@ export async function handleHistory(
     return;
   }
 
+  // Default and maximum limit to prevent DoS
+  const DEFAULT_LIMIT = 100;
+  const MAX_LIMIT = 10000;
+
   // Parse arguments
-  let limit = 100;
+  let limit = DEFAULT_LIMIT;
   let roleFilter: 'user' | 'assistant' | null = null;
   let searchQuery: string | null = null;
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    if (arg === '-n' && i + 1 < args.length) {
+      const limitStr = args[i + 1];
+      const parsedLimit = parseInt(limitStr, 10);
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        limit = parsedLimit;
+        i++;
+      } else {
+        printError(`Invalid limit: ${limitStr}`);
+        return;
+      }
+    } else if (arg === '--role' && i + 1 < args.length) {
+      const role = args[i + 1];
+      if (role === 'user' || role === 'assistant') {
+        roleFilter = role;
+        i++;
+      } else {
+        printError(`Invalid role: ${role}. Use 'user' or 'assistant'`);
+        return;
+      }
+    } else if (arg === '--search' && i + 1 < args.length) {
+      searchQuery = args[i + 1];
+      i++;
+    }
+  }
+
+  // Cap limit to prevent DoS
+  if (limit > MAX_LIMIT) {
+    printInfo(`Limit capped to ${MAX_LIMIT}`);
+    limit = MAX_LIMIT;
+  }
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -1954,7 +1998,7 @@ export async function handleHistory(
     dimText('Role', isTTY).padEnd(12) + '  ' +
     dimText('Content', isTTY)
   );
-  console.log(dimText('-'.repeat(70), isTTY));
+  console.log(dimText('-'.repeat(HISTORY_LINE_WIDTH), isTTY));
 
   // Rows
   filteredMessages.forEach(m => {
@@ -1965,7 +2009,7 @@ export async function handleHistory(
     console.log(
       String(m.id).padEnd(4) + '  ' +
       timeStr.padEnd(10) + '  ' +
-      roleDisplay.padEnd(isTTY ? 21 : 12) + '  ' +
+      roleDisplay.padEnd(isTTY ? ROLE_PAD_TTY : ROLE_PAD_PLAIN) + '  ' +
       m.content
     );
   });

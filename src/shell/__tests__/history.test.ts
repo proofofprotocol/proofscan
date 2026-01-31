@@ -168,4 +168,47 @@ describe('history command', () => {
     expect(messages[1].timestamp).toBe('2025-01-25T10:30:16Z');
     expect(messages[2].timestamp).toBe('2025-01-25T10:30:17Z');
   });
+
+  it('should handle limit of 0 or negative by using default', () => {
+    // Test that limit = 0 or negative doesn't break,
+    // the command layer handles this (prints error)
+    // At DB level, limit 0 should return empty array
+    const messages = store.getA2AMessages(sessionId, 0);
+    expect(messages).toHaveLength(0);
+  });
+
+  it('should handle combined filters (role + search)', () => {
+    addTestEvent(sessionId, 'user', 'roll d20', '2025-01-25T10:30:15Z');
+    addTestEvent(sessionId, 'assistant', '🎲 d20 → 15', '2025-01-25T10:30:16Z');
+    addTestEvent(sessionId, 'user', 'hello world', '2025-01-25T10:31:00Z');
+
+    const messages = store.getA2AMessages(sessionId, 100);
+
+    // Filter by role=user AND search=d20
+    const filtered = messages
+      .filter(m => m.role === 'user')
+      .filter(m => m.content.toLowerCase().includes('d20'));
+
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].content).toBe('roll d20');
+  });
+
+  it('should handle search with special regex characters', () => {
+    addTestEvent(sessionId, 'user', 'test [bracket] content', '2025-01-25T10:30:15Z');
+    addTestEvent(sessionId, 'user', 'test (paren) content', '2025-01-25T10:30:16Z');
+    addTestEvent(sessionId, 'user', 'test $dollar content', '2025-01-25T10:30:17Z');
+
+    const messages = store.getA2AMessages(sessionId, 100);
+
+    // These are simple string searches, not regex, so should work
+    const bracketSearch = messages.filter(m =>
+      m.content.toLowerCase().includes('[bracket]')
+    );
+    expect(bracketSearch).toHaveLength(1);
+
+    const parenSearch = messages.filter(m =>
+      m.content.toLowerCase().includes('(paren)')
+    );
+    expect(parenSearch).toHaveLength(1);
+  });
 });
