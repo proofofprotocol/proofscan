@@ -13,7 +13,8 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 2.2 | Task CLI | ✅ 完了 | 2026-01-31 |
 | 2.2.1 | glm-dice-agent Task対応 | ✅ 完了 | 2026-01-31 |
 | 2.2.2 | task wait --follow | ✅ 完了 | 2026-01-31 |
-| 2.3 | history 強化 | 📋 未着手 | - |
+| 2.3 | history コマンド | ✅ 完了 | 2026-02-01 |
+| 2.3.1 | history 横断検索 | 📋 未着手 | - |
 | 2.4 | Task DB記録 | 📋 未着手 | - |
 | 2.5 | show に capabilities 追加 | 📋 未着手 | - |
 | 3 | ストリーミング | 📋 未着手 | - |
@@ -98,10 +99,21 @@ proofscan:/glm-dice/ctx_abc > ls
 
 **PR:** #87 (merged 2026-01-31)
 
-### 2.3 history 強化 📋
-- [ ] セッション内メッセージ履歴表示
-- [ ] `history` コマンド追加
-- [ ] メッセージ検索・フィルタ
+### 2.3 history コマンド ✅
+- [x] セッション内メッセージ履歴表示
+- [x] `history` コマンド追加
+- [x] メッセージ検索・フィルタ (`--search`, `--role`)
+- [x] `-n <count>` で件数制限
+- [x] `-h / --help` でUsage表示
+- [x] DoS防止 (MAX_LIMIT = 10000)
+
+**PR:** #90 (merged 2026-02-01)
+
+### 2.3.1 history 横断検索 📋
+- [ ] connector level での全セッション横断検索
+- [ ] `history --all --search <query>` オプション
+- [ ] 検索結果にセッションID表示
+- [ ] エラーメッセージで `--all` オプション案内
 
 ### 2.4 Task DB記録 📋
 - [ ] Task イベントを EventLineDB に記録
