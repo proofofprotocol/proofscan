@@ -10,8 +10,9 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 1.2 | send コマンド | ✅ 完了 | 2025-01-28 |
 | 1.3 | セッション記録 | ✅ 完了 | 2026-01-30 |
 | 2.1 | Task クライアント | ✅ 完了 | 2026-01-30 |
-| 2.2 | Task CLI | ⏳ PR#86 | - |
-| 2.2.1 | glm-dice-agent Task対応 | 📋 未着手 | - |
+| 2.2 | Task CLI | ✅ 完了 | 2026-01-31 |
+| 2.2.1 | glm-dice-agent Task対応 | ✅ 完了 | 2026-01-31 |
+| 2.2.2 | task wait --follow | ✅ 完了 | 2026-01-31 |
 | 2.3 | history 強化 | 📋 未着手 | - |
 | 2.4 | Task DB記録 | 📋 未着手 | - |
 | 2.5 | show に capabilities 追加 | 📋 未着手 | - |
@@ -80,7 +81,7 @@ proofscan:/glm-dice/ctx_abc > ls
 
 **PR:** #85 (merged 2026-01-30)
 
-### 2.2 Task CLI ⏳
+### 2.2 Task CLI ✅
 - [x] `task ls <agent>` — タスク一覧
 - [x] `task get <agent> <taskId>` — タスク詳細
 - [x] `task cancel <agent> <taskId>` — キャンセル
@@ -88,7 +89,14 @@ proofscan:/glm-dice/ctx_abc > ls
 - [x] psh context 対応 (`cd <agent>` 後は agent 省略可)
 - [x] エラーメッセージ改善
 
-**PR:** #86 (in review)
+**PR:** #86 (merged 2026-01-31)
+
+### 2.2.2 task wait --follow ✅
+- [x] `task wait --follow` でリアルタイム進捗表示
+- [x] ポーリング間隔設定
+- [x] 完了/失敗時の自動終了
+
+**PR:** #87 (merged 2026-01-31)
 
 ### 2.3 history 強化 📋
 - [ ] セッション内メッセージ履歴表示
@@ -105,24 +113,28 @@ proofscan:/glm-dice/ctx_abc > ls
 
 ---
 
-## Phase 2.2.1: glm-dice-agent Task対応
+## Phase 2.2.1: glm-dice-agent Task対応 ✅
 
 Phase 2.2 Task CLI の検証用に、glm-dice-agent に Task 管理機能を追加。
 
-**場所:** `projects/glm-dice-agent`
+**場所:** `/mnt/s3vo/clawdbot/projects/glm-dice-agent`
+**GitHub:** Shin-R2un/glm-dice-agent
 
-### 最小実装
-- [ ] `tasks/list` エンドポイント（タスク一覧返却）
-- [ ] `tasks/get` エンドポイント（タスク詳細返却）
-- [ ] `tasks/cancel` エンドポイント（キャンセル処理）
-- [ ] Task 状態管理 (in-memory)
-- [ ] `message/send` でタスク作成
+### 最小実装 ✅
+- [x] `tasks/list` エンドポイント（タスク一覧返却）
+- [x] `tasks/get` エンドポイント（タスク詳細返却）
+- [x] `tasks/cancel` エンドポイント（キャンセル処理）
+- [x] Task 状態管理 (in-memory)
+- [x] `message/send` でタスク作成
 
-### 検証項目
-- [ ] `pfs task ls glm-dice` → タスク一覧表示
-- [ ] `pfs task get glm-dice <taskId>` → 詳細表示
-- [ ] `pfs task cancel glm-dice <taskId>` → キャンセル成功
-- [ ] `pfs task wait glm-dice <taskId>` → 完了待機
+### 検証項目 ✅
+- [x] `pfs task ls glm-dice` → タスク一覧表示
+- [x] `pfs task get glm-dice <taskId>` → 詳細表示
+- [x] `pfs task cancel glm-dice <taskId>` → キャンセル成功
+- [x] `pfs task wait glm-dice <taskId>` → 完了待機
+
+### 追加機能
+- [x] 新構文: `roll d20`, `roll 3d6 c5 i3` (count/interval)
 
 ---
 
@@ -182,4 +194,4 @@ Phase 2.2 Task CLI の検証用に、glm-dice-agent に Task 管理機能を追�
 
 ---
 
-*Last updated: 2026-01-31*
+*Last updated: 2026-02-01*
