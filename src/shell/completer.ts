@@ -184,9 +184,14 @@ function getRouterCompletions(
       if (tokens.length > 0 && tokens[tokens.length - 1] === '--role') {
         return ['user', 'assistant'];
       }
+      // --task completion (Phase 2.4.1)
+      if (tokens.length > 0 && tokens[tokens.length - 1] === '--task') {
+        // Could add taskId suggestions from DB here in future
+        return [];
+      }
       // Options completion
       if (tokens.length === 1) {
-        return ['-n', '-s', '--search', '--role', '-h', '--help'];
+        return ['-n', '-s', '--search', '--role', '--task', '-h', '--help'];
       }
       return [];
 
