@@ -1869,21 +1869,21 @@ export async function handleHistory(
     console.log(`
 Usage: history [options]
 
-Show A2A message history for the current session.
+Show A2A message history for the current context.
+At session level: shows messages in current session.
+At connector level: shows messages across all sessions.
 
 Options:
-  -n <count>        Show last N messages (default: 100, max: 10000)
-  --role <role>     Filter by role: 'user' or 'assistant'
-  --search <query>  Search messages (case-insensitive)
-  -h, --help        Show this help
+  -n <count>           Show last N messages (default: 100, max: 10000)
+  --role <role>        Filter by role: 'user' or 'assistant'
+  -s, --search <query> Search messages (case-insensitive)
+  -h, --help           Show this help
 
 Examples:
-  history              Show all messages in current session
+  history              Show all messages
   history -n 20        Show last 20 messages
   history --role user  Show only user messages
-  history --search d20 Search for 'd20' in messages
-
-Note: Must be in an A2A session context (cd <agent>/<session>)
+  history -s d20       Search for 'd20' in messages
 `);
     return;
   }
@@ -1932,7 +1932,7 @@ Note: Must be in an A2A session context (cd <agent>/<session>)
         printError(`Invalid role: ${role}. Use 'user' or 'assistant'`);
         return;
       }
-    } else if (arg === '--search' && i + 1 < args.length) {
+    } else if ((arg === '--search' || arg === '-s') && i + 1 < args.length) {
       searchQuery = args[i + 1];
       i++;
     } else if (arg.startsWith('-')) {
