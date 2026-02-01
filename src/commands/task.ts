@@ -13,6 +13,7 @@ import { createA2AClient } from '../a2a/client.js';
 import { output, outputError, outputSuccess, outputTable } from '../utils/output.js';
 import type { Task, TaskState, ListTasksParams } from '../a2a/types.js';
 import { EventsStore } from '../db/events-store.js';
+import type { A2AMessage } from '../db/types.js';
 
 /**
  * Handle task list logic (shared by ls and list commands)
@@ -180,7 +181,7 @@ function recordTaskCompletion(
     const eventsStore = new EventsStore(configDir);
 
     if (status === 'completed') {
-      eventsStore.recordTaskCompleted(sessionId, taskId, status, messages as any);
+      eventsStore.recordTaskCompleted(sessionId, taskId, status, messages as A2AMessage[] | undefined);
     } else if (status === 'failed') {
       eventsStore.recordTaskFailed(sessionId, taskId, status, error);
     } else if (status === 'canceled') {
@@ -206,6 +207,20 @@ function recordTaskTimeout(configDir: string, agentId: string, taskId: string, e
     const sessionId = getOrCreateSessionForTask(configDir, agentId, taskId);
     const eventsStore = new EventsStore(configDir);
     eventsStore.recordTaskWaitTimeout(sessionId, taskId, error);
+  } catch {
+    // Silently fail to avoid blocking CLI operations
+  }
+}
+
+/**
+ * Record task poll error event (Phase 2.4)
+ * Distinct from timeout - this is for actual poll failures (network, etc.)
+ */
+function recordTaskPollError(configDir: string, agentId: string, taskId: string, error?: string): void {
+  try {
+    const sessionId = getOrCreateSessionForTask(configDir, agentId, taskId);
+    const eventsStore = new EventsStore(configDir);
+    eventsStore.recordTaskPollError(sessionId, taskId, error);
   } catch {
     // Silently fail to avoid blocking CLI operations
   }
@@ -472,16 +487,12 @@ export function createTaskCommand(getConfigPath: () => string): Command {
         // Track last seen message count for --follow
         let lastMessageCount = 0;
 
-        // Track last recorded status to avoid duplicate events
-        let lastRecordedStatus: string | null = null;
-
         // Initial fetch to get baseline
         const initialResult = await client.getTask(taskId);
         if (initialResult.ok && initialResult.task) {
           lastMessageCount = initialResult.task.messages?.length ?? 0;
-          // Record initial status
+          // Record initial status (recordTaskUpdate handles deduplication internally)
           recordTaskUpdate(configDir, agent, taskId, initialResult.task.status);
-          lastRecordedStatus = initialResult.task.status;
         }
 
         // Poll loop
@@ -499,8 +510,8 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           const result = await client.getTask(taskId);
 
           if (!result.ok) {
-            // Record poll error
-            recordTaskTimeout(configDir, agent, taskId, result.error);
+            // Record poll error (distinct from timeout)
+            recordTaskPollError(configDir, agent, taskId, result.error);
             if (result.error?.includes('404') || result.error?.includes('not found')) {
               outputError(`Task not found: ${taskId} (${result.error})`);
             } else {
@@ -516,11 +527,8 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
           const task = result.task;
 
-          // Record status update if changed
-          if (lastRecordedStatus !== task.status) {
-            recordTaskUpdate(configDir, agent, taskId, task.status);
-            lastRecordedStatus = task.status;
-          }
+          // Record status update (recordTaskUpdate handles deduplication internally)
+          recordTaskUpdate(configDir, agent, taskId, task.status);
 
           // --follow: Show new messages since last check
           if (follow && task.messages && task.messages.length > lastMessageCount) {
