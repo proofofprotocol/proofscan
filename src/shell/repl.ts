@@ -41,7 +41,7 @@ import { handleRef } from './ref-commands.js';
 import { handleInscribe } from './inscribe-commands.js';
 import { handlePopl, getPoplEntryIdsSync } from './popl-commands.js';
 import { resolveCommand } from './command-resolver.js';
-import type { PipelineValue, RpcRow, SessionRow } from './pipeline-types.js';
+import type { PipelineValue, RpcRow, SessionRow, A2AMessageRow } from './pipeline-types.js';
 import { parseFindArgs, executeFind } from './find-command.js';
 import { ConfigureMode, processConfigureCommand, createConfigureCompleter, type ConfigureDataProvider } from './configure/index.js';
 
@@ -1080,7 +1080,64 @@ Tips:
       this.renderRpcTable(output.rows as RpcRow[], isTTY);
     } else if (output.rowType === 'session') {
       this.renderSessionTable(output.rows as SessionRow[], isTTY);
+    } else if (output.rowType === 'a2a-message') {
+      this.renderA2AMessageTable(output.rows as A2AMessageRow[], isTTY);
     }
+  }
+
+  /**
+   * Render A2A message rows as table
+   */
+  private renderA2AMessageTable(rows: A2AMessageRow[], isTTY: boolean): void {
+    const dimText = (text: string) => isTTY ? `\x1b[2m${text}\x1b[0m` : text;
+    const roleColor = (role: string) => {
+      if (!isTTY) return role;
+      return role === 'assistant' ? `\x1b[36m${role}\x1b[0m` : role;
+    };
+
+    // Check if rows have session_id (connector level)
+    const hasSession = rows.some(r => r.session_id);
+
+    console.log();
+    if (hasSession) {
+      console.log(
+        dimText('#'.padEnd(4)) + '  ' +
+        dimText('Session'.padEnd(10)) + '  ' +
+        dimText('Time'.padEnd(10)) + '  ' +
+        dimText('Role'.padEnd(12)) + '  ' +
+        dimText('Content')
+      );
+      console.log(dimText('-'.repeat(80)));
+      rows.forEach(row => {
+        const sessionPrefix = row.session_id ? row.session_id.slice(0, 8) : '';
+        const timeStr = row.timestamp ? row.timestamp.slice(11, 19) : '--:--:--';
+        console.log(
+          String(row.id).padEnd(4) + '  ' +
+          sessionPrefix.padEnd(10) + '  ' +
+          timeStr.padEnd(10) + '  ' +
+          roleColor(row.role).padEnd(isTTY ? 21 : 12) + '  ' +
+          row.content
+        );
+      });
+    } else {
+      console.log(
+        dimText('#'.padEnd(4)) + '  ' +
+        dimText('Time'.padEnd(10)) + '  ' +
+        dimText('Role'.padEnd(12)) + '  ' +
+        dimText('Content')
+      );
+      console.log(dimText('-'.repeat(70)));
+      rows.forEach(row => {
+        const timeStr = row.timestamp ? row.timestamp.slice(11, 19) : '--:--:--';
+        console.log(
+          String(row.id).padEnd(4) + '  ' +
+          timeStr.padEnd(10) + '  ' +
+          roleColor(row.role).padEnd(isTTY ? 21 : 12) + '  ' +
+          row.content
+        );
+      });
+    }
+    console.log();
   }
 
   /**

@@ -1405,7 +1405,7 @@ export function getHistoryRows(context: ShellContext, configPath: string): Pipel
     const messages = eventsStore.getA2AMessagesForTarget(context.connector, 100);
     const rows: A2AMessageRow[] = messages.map(m => ({
       id: m.id,
-      sessionId: m.sessionId,
+      session_id: m.sessionId,
       role: m.role,
       content: m.content,
       timestamp: m.timestamp,
