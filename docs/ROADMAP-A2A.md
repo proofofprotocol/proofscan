@@ -14,7 +14,8 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 2.2.1 | glm-dice-agent Task対応 | ✅ 完了 | 2026-01-31 |
 | 2.2.2 | task wait --follow | ✅ 完了 | 2026-01-31 |
 | 2.3 | history コマンド | ✅ 完了 | 2026-02-01 |
-| 2.3.1 | history 横断検索 | 📋 未着手 | - |
+| 2.3.1 | history 横断検索 | ⏳ 進行中 | - |
+| 2.3.2 | history UX改善 | 📋 未着手 | - |
 | 2.4 | Task DB記録 | 📋 未着手 | - |
 | 2.5 | show に capabilities 追加 | 📋 未着手 | - |
 | 3 | ストリーミング | 📋 未着手 | - |
@@ -109,11 +110,20 @@ proofscan:/glm-dice/ctx_abc > ls
 
 **PR:** #90 (merged 2026-02-01)
 
-### 2.3.1 history 横断検索 📋
-- [ ] connector level での全セッション横断検索
-- [ ] `history --all --search <query>` オプション
-- [ ] 検索結果にセッションID表示
-- [ ] エラーメッセージで `--all` オプション案内
+### 2.3.1 history 横断検索 ⏳
+- [x] connector level での全セッション横断検索
+- [x] コンテキスト駆動（`--all` 不要、位置で自動判定）
+- [x] 検索結果にセッションID表示
+- [x] `-s` ショートハンド追加
+- [x] 不正オプション警告
+- [ ] PR #91 マージ待ち
+
+**PR:** #91 (open)
+
+### 2.3.2 history UX改善 📋
+- [ ] 補完/サジェスト対応（completer.ts）
+- [ ] `history | grep` パイプライン対応
+- [ ] `history | less` ページャー対応
 
 ### 2.4 Task DB記録 📋
 - [ ] Task イベントを EventLineDB に記録
