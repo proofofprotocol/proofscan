@@ -5,9 +5,10 @@
  * Phase 4.1: Schema version 4 with user_refs table for named references
  * Phase 6.0: Schema version 5 with popl kind support in user_refs
  * Phase 7.0: Schema version 6 with targets table (unified connector/agent) and agent_cache table
+ * Phase 2.4: Schema version 7 with task_events table for Task lifecycle tracking
  */
 
-export const EVENTS_DB_VERSION = 6;
+export const EVENTS_DB_VERSION = 7;
 export const PROOFS_DB_VERSION = 2;
 
 // events.db schema (version 3)
@@ -128,6 +129,32 @@ CREATE TABLE IF NOT EXISTS agent_cache (
   expires_at TEXT,
   FOREIGN KEY (target_id) REFERENCES targets(id) ON DELETE CASCADE
 );
+
+-- Task events table (Phase 2.4: Task lifecycle tracking)
+CREATE TABLE IF NOT EXISTS task_events (
+  event_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  event_kind TEXT NOT NULL CHECK(
+    event_kind IN (
+      'a2a:task:created',
+      'a2a:task:updated',
+      'a2a:task:completed',
+      'a2a:task:failed',
+      'a2a:task:canceled',
+      'a2a:task:wait_timeout',
+      'a2a:task:poll_error'
+    )
+  ),
+  ts TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_events_session ON task_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_events_kind ON task_events(event_kind);
+CREATE INDEX IF NOT EXISTS idx_task_events_ts ON task_events(ts);
 `;
 
 /**
@@ -289,6 +316,38 @@ export const EVENTS_DB_MIGRATION_5_TO_6_DATA = `
 UPDATE sessions
 SET target_id = connector_id
 WHERE target_id IS NULL;
+`;
+
+/**
+ * Migration from version 6 to version 7
+ * Phase 2.4: Adds task_events table for Task lifecycle tracking
+ */
+export const EVENTS_DB_MIGRATION_6_TO_7 = `
+-- Create task_events table
+CREATE TABLE IF NOT EXISTS task_events (
+  event_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  event_kind TEXT NOT NULL CHECK(
+    event_kind IN (
+      'a2a:task:created',
+      'a2a:task:updated',
+      'a2a:task:completed',
+      'a2a:task:failed',
+      'a2a:task:canceled',
+      'a2a:task:wait_timeout',
+      'a2a:task:poll_error'
+    )
+  ),
+  ts TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_events_session ON task_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_events_kind ON task_events(event_kind);
+CREATE INDEX IF NOT EXISTS idx_task_events_ts ON task_events(ts);
 `;
 
 // proofs.db schema (version 2: added plans and runs tables)

@@ -12,6 +12,57 @@ export type ActorKind = 'human' | 'agent' | 'system';
 export type EventDirection = 'client_to_server' | 'server_to_client';
 export type EventKind = 'request' | 'response' | 'notification' | 'transport_event';
 
+// Task status states (A2A Protocol) - Phase 2.4
+export type TaskStatus = 'pending' | 'working' | 'input_required' | 'completed' | 'failed' | 'canceled' | 'rejected';
+
+// Task event kinds - Phase 2.4
+export type TaskEventKind =
+  | 'a2a:task:created'     // Task作成時
+  | 'a2a:task:updated'     // 状態遷移時のみ (pending→working, working→completed等)
+  | 'a2a:task:completed'   // 完了時（成功）
+  | 'a2a:task:failed'      // タスク自体がfailedを返した時
+  | 'a2a:task:canceled'    // キャンセル成功時
+  | 'a2a:task:wait_timeout' // wait/followがタイムアウト
+  | 'a2a:task:poll_error'; // ポーリング中エラー
+
+// Task event payload - Phase 2.4
+export interface TaskEventPayload {
+  taskId: string;
+  rawStatus: string;            // レスポンスそのまま
+  status: TaskStatus;           // 正規化済み
+  previousStatus?: TaskStatus;   // 遷移前（updated時）
+  messages?: A2AMessage[];      // 完了時のみ
+  artifacts?: TaskArtifact[];    // あれば
+  error?: string;                // エラー時
+}
+
+// A2A message types (re-export for use in TaskEventPayload)
+export interface A2AMessage {
+  role: 'user' | 'assistant';
+  parts: Array<{ text: string } | { data: string; mimeType: string }>;
+  messageId?: string;
+  metadata?: Record<string, unknown>;
+  contextId?: string;
+  referenceTaskIds?: string[];
+}
+
+// Task artifact types
+export interface TaskArtifact {
+  name?: string;
+  description?: string;
+  parts: Array<{ text: string } | { data: string; mimeType: string }>;
+}
+
+// Task event record - Phase 2.4
+export interface TaskEvent {
+  event_id: string;
+  session_id: string;
+  task_id: string;
+  event_kind: TaskEventKind;
+  ts: string;                  // ISO8601
+  payload_json: string;         // JSON string of TaskEventPayload
+}
+
 // Target ID (unified connector/agent identifier)
 export type TargetId = string;
 
