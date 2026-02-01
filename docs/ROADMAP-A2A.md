@@ -16,7 +16,8 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 2.3 | history コマンド | ✅ 完了 | 2026-02-01 |
 | 2.3.1 | history 横断検索 | ✅ 完了 | 2026-02-01 |
 | 2.3.2 | history UX改善 | ✅ 完了 | 2026-02-01 |
-| 2.4 | Task DB記録 | 📋 未着手 | - |
+| 2.4 | Task DB記録 | ✅ 完了 | 2026-02-01 |
+| 2.4.1 | history --task | 📋 未着手 | - |
 | 2.5 | show に capabilities 追加 | 📋 未着手 | - |
 | 3 | ストリーミング | 📋 未着手 | - |
 | 4 | 認証 | 📋 未着手 | - |
@@ -129,9 +130,19 @@ proofscan:/glm-dice/ctx_abc > ls
 
 **PR:** #93 (merged 2026-02-01)
 
-### 2.4 Task DB記録 📋
-- [ ] Task イベントを EventLineDB に記録
-- [ ] `a2a:task:created`, `a2a:task:completed` 等のイベント種別
+### 2.4 Task DB記録 ✅
+- [x] task_events テーブル追加 (スキーマv7)
+- [x] Task イベントを EventLineDB に記録
+- [x] イベント種別: created, updated, completed, failed, canceled, wait_timeout, poll_error
+- [x] CLI統合: task wait/cancel でイベント発火
+- [x] Session解決: 既存イベント再利用 or 新規作成
+
+**PR:** #94, #95 (merged 2026-02-01)
+
+### 2.4.1 history --task 📋
+- [ ] `history --task` でTaskイベント表示
+- [ ] `history --task <id>` で特定Task詳細
+- [ ] テストカバレッジ追加
 
 ### 2.5 show に capabilities 追加 📋
 - [ ] `agent show` で Task 対応状況を表示
