@@ -3,6 +3,8 @@
  *
  * CLI commands for managing A2A tasks.
  * Implements: ls, show, cancel, wait
+ *
+ * Phase 2.4: Task event recording
  */
 
 import { Command } from 'commander';
@@ -10,6 +12,7 @@ import { dirname } from 'node:path';
 import { createA2AClient } from '../a2a/client.js';
 import { output, outputError, outputSuccess, outputTable } from '../utils/output.js';
 import type { Task, TaskState, ListTasksParams } from '../a2a/types.js';
+import { EventsStore } from '../db/events-store.js';
 
 /**
  * Handle task list logic (shared by ls and list commands)
@@ -90,6 +93,121 @@ async function handleTaskList(
   // Show total size if available
   if (totalSize !== undefined && totalSize > tasks.length) {
     console.log(`\nShowing ${tasks.length} of ${totalSize} tasks (first page)`);
+  }
+}
+
+/**
+ * Get or create session for task event recording (Phase 2.4)
+ *
+ * Session resolution strategy:
+ * 1. First, check for existing task events and reuse their session_id
+ * 2. If no existing events, create a new session for the agent
+ *
+ * @param configDir - Configuration directory
+ * @param agentId - Agent ID (connector/target ID)
+ * @param taskId - Task ID (for finding existing events)
+ * @returns Session ID for event recording
+ */
+function getOrCreateSessionForTask(configDir: string, agentId: string, taskId: string): string {
+  const eventsStore = new EventsStore(configDir);
+
+  // 1. Check for existing task events with this taskId
+  const existingEvents = eventsStore.getTaskEventsByTaskId(taskId);
+  if (existingEvents.length > 0) {
+    return existingEvents[0].session_id;
+  }
+
+  // 2. No existing events - try to find a recent session for this agent
+  const latestSession = eventsStore.getLatestSession(agentId);
+  if (latestSession) {
+    return latestSession.session_id;
+  }
+
+  // 3. Create a new session for this agent
+  const session = eventsStore.createSession(agentId, {
+    actorKind: 'system',
+    actorLabel: 'cli-task',
+  });
+
+  return session.session_id;
+}
+
+/**
+ * Record task status update event (Phase 2.4)
+ *
+ * @param configDir - Configuration directory
+ * @param agentId - Agent ID
+ * @param taskId - Task ID
+ * @param status - Current task status
+ * @returns True if event was recorded, false if status unchanged
+ */
+function recordTaskUpdate(
+  configDir: string,
+  agentId: string,
+  taskId: string,
+  status: string
+): boolean {
+  try {
+    const sessionId = getOrCreateSessionForTask(configDir, agentId, taskId);
+    const eventsStore = new EventsStore(configDir);
+    return eventsStore.recordTaskUpdated(sessionId, taskId, status);
+  } catch {
+    // Silently fail to avoid blocking CLI operations
+    return false;
+  }
+}
+
+/**
+ * Record task completion event (Phase 2.4)
+ *
+ * @param configDir - Configuration directory
+ * @param agentId - Agent ID
+ * @param taskId - Task ID
+ * @param status - Final task status (completed/failed/canceled/rejected)
+ * @param messages - Task messages (optional)
+ * @param error - Error message (for failed status)
+ */
+function recordTaskCompletion(
+  configDir: string,
+  agentId: string,
+  taskId: string,
+  status: string,
+  messages?: unknown,
+  error?: string
+): void {
+  try {
+    const sessionId = getOrCreateSessionForTask(configDir, agentId, taskId);
+    const eventsStore = new EventsStore(configDir);
+
+    if (status === 'completed') {
+      eventsStore.recordTaskCompleted(sessionId, taskId, status, messages as any);
+    } else if (status === 'failed') {
+      eventsStore.recordTaskFailed(sessionId, taskId, status, error);
+    } else if (status === 'canceled') {
+      eventsStore.recordTaskCanceled(sessionId, taskId, status);
+    } else if (status === 'rejected') {
+      eventsStore.recordTaskFailed(sessionId, taskId, status, 'Task rejected');
+    }
+  } catch {
+    // Silently fail to avoid blocking CLI operations
+  }
+}
+
+/**
+ * Record task wait timeout event (Phase 2.4)
+ *
+ * @param configDir - Configuration directory
+ * @param agentId - Agent ID
+ * @param taskId - Task ID
+ * @param error - Error message
+ */
+function recordTaskTimeout(configDir: string, agentId: string, taskId: string, error?: string): void {
+  try {
+    const sessionId = getOrCreateSessionForTask(configDir, agentId, taskId);
+    const eventsStore = new EventsStore(configDir);
+    eventsStore.recordTaskWaitTimeout(sessionId, taskId, error);
+  } catch {
+    // Silently fail to avoid blocking CLI operations
   }
 }
 
@@ -280,7 +398,9 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           process.exit(1);
         }
 
+        // Record task cancellation event
         if (result.task) {
+          recordTaskCompletion(configDir, agent, taskId, result.task.status);
           const canceledTask = {
             id: result.task.id,
             status: result.task.status,
@@ -288,6 +408,8 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           };
           outputSuccess(`Task '${taskId}' canceled`, canceledTask);
         } else {
+          // No task returned but cancel succeeded
+          recordTaskCompletion(configDir, agent, taskId, 'canceled');
           outputSuccess(`Task '${taskId}' canceled`);
         }
       } catch (error) {
@@ -349,11 +471,17 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
         // Track last seen message count for --follow
         let lastMessageCount = 0;
-        
+
+        // Track last recorded status to avoid duplicate events
+        let lastRecordedStatus: string | null = null;
+
         // Initial fetch to get baseline
         const initialResult = await client.getTask(taskId);
         if (initialResult.ok && initialResult.task) {
           lastMessageCount = initialResult.task.messages?.length ?? 0;
+          // Record initial status
+          recordTaskUpdate(configDir, agent, taskId, initialResult.task.status);
+          lastRecordedStatus = initialResult.task.status;
         }
 
         // Poll loop
@@ -361,6 +489,8 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           // Check timeout
           const elapsed = Date.now() - startTime;
           if (elapsed > timeoutMs) {
+            // Record timeout event
+            recordTaskTimeout(configDir, agent, taskId, `Timeout after ${timeoutSec}s`);
             outputError(`Timeout after ${timeoutSec}s`);
             process.exit(1);
           }
@@ -369,6 +499,8 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           const result = await client.getTask(taskId);
 
           if (!result.ok) {
+            // Record poll error
+            recordTaskTimeout(configDir, agent, taskId, result.error);
             if (result.error?.includes('404') || result.error?.includes('not found')) {
               outputError(`Task not found: ${taskId} (${result.error})`);
             } else {
@@ -383,6 +515,12 @@ export function createTaskCommand(getConfigPath: () => string): Command {
           }
 
           const task = result.task;
+
+          // Record status update if changed
+          if (lastRecordedStatus !== task.status) {
+            recordTaskUpdate(configDir, agent, taskId, task.status);
+            lastRecordedStatus = task.status;
+          }
 
           // --follow: Show new messages since last check
           if (follow && task.messages && task.messages.length > lastMessageCount) {
@@ -405,6 +543,8 @@ export function createTaskCommand(getConfigPath: () => string): Command {
 
           // Check if final status
           if (finalStatuses.includes(task.status)) {
+            // Record completion event
+            recordTaskCompletion(configDir, agent, taskId, task.status, task.messages);
             output({
               id: task.id,
               status: task.status,
