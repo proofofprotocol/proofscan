@@ -991,11 +991,11 @@ Tips:
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
     const pagerUsed = await pager.run(input);
 
-    // Reset stdin and recreate readline
+    // Reset stdin state (but don't remove listeners - readline needs them)
     if (pagerUsed) {
-      // Pager was used - need full stdin reset
+      // Pager was used - reset stdin state
       process.stdin.pause();
-      process.stdin.removeAllListeners();
+      // Don't call removeAllListeners() - it breaks readline's internal listeners
 
       // Ensure stdin is not in raw mode (built-in pager sets raw mode)
       if (process.stdin.isTTY && process.stdin.setRawMode) {
@@ -1030,9 +1030,6 @@ Tips:
     }
 
     // Ensure stdin is in correct state before creating new readline
-    // Remove any stale data listeners from pager
-    process.stdin.removeAllListeners('data');
-
     if (process.stdin.isPaused()) {
       process.stdin.resume();
     }
