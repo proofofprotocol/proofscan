@@ -788,6 +788,44 @@ Tips:
   }
 
   /**
+   * Check if an expression is a simple text (not a filter expression)
+   * Returns true if expression does not contain filter operators (==, !=, ~=, >, <)
+   */
+  private isSimpleTextSearch(expr: string): boolean {
+    const trimmed = expr.trim();
+    // Check if expression contains any filter operator
+    const operators = ['==', '!=', '~=', '>', '<'];
+    for (const op of operators) {
+      if (trimmed.includes(op)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Convert simple text search to appropriate filter expression based on row type
+   */
+  private textToFilterExpr(text: string, rowType: string): string {
+    const trimmed = text.trim();
+    // Escape quotes in text
+    const escaped = trimmed.replace(/"/g, '\\"');
+
+    switch (rowType) {
+      case 'a2a-message':
+        return `message.content ~= "${escaped}"`;
+      case 'rpc':
+        // For now, search in method name (could be expanded later)
+        return `rpc.method ~= "${escaped}"`;
+      case 'session':
+        return `session.id ~= "${escaped}"`;
+      default:
+        // Default to searching in common text fields
+        return `message.content ~= "${escaped}"`;
+    }
+  }
+
+  /**
    * Handle piped commands
    * Supports:
    *   pwd --json | ref add <name>
@@ -806,8 +844,14 @@ Tips:
     // Extract command name from right side (preserving raw args for where/grep)
     const { cmd: rightCommand, rest: rawArgs } = this.extractCommand(rightCmd);
 
-    // Handle: ls | where <filter-expr> or ls | grep <filter-expr>
-    if (rightCommand === 'where' || rightCommand === 'grep') {
+    // Handle: ls | grep <text> (text search with auto-conversion)
+    if (rightCommand === 'grep') {
+      await this.handlePipeToGrep(leftCmd, rawArgs);
+      return;
+    }
+
+    // Handle: ls | where <filter-expr>
+    if (rightCommand === 'where') {
       await this.handlePipeToWhere(leftCmd, rawArgs);
       return;
     }
@@ -838,6 +882,7 @@ Tips:
     printInfo('  pwd --json | ref add <name>');
     printInfo('  show @rpc:<id> --json | inscribe');
     printInfo('  ls | where <filter-expr>');
+    printInfo('  ls | grep <text>');
     printInfo('  find rpc | where <filter-expr>');
     printInfo('  ls | less');
     printInfo('  find rpc | more');
@@ -903,6 +948,88 @@ Tips:
     // Apply where filter
     const { applyWhere } = await import('./where-command.js');
     const result = applyWhere(input, expr);
+
+    if (!result.ok) {
+      printError(`Filter error: ${result.error}`);
+      if (result.position !== undefined) {
+        printError(`  at position ${result.position + 1}`);
+      }
+      return;
+    }
+
+    // Render output
+    this.renderPipelineOutput(result.result);
+    printInfo(`${statsLabel}: ${result.stats.matched} / ${result.stats.total}`);
+  }
+
+  /**
+   * Handle: ls | grep <text> or history | grep <text>
+   * Auto-converts simple text to appropriate filter expression based on row type
+   */
+  private async handlePipeToGrep(leftCmd: string, expr: string): Promise<void> {
+    const leftTokens = leftCmd.trim().split(/\s+/);
+    const leftCommand = leftTokens[0];
+
+    // Get pipeline input based on left command
+    let input: PipelineValue;
+    let statsLabel: string;
+
+    if (leftCommand === 'ls') {
+      // Get ls rows
+      const { getLsRows } = await import('./router-commands.js');
+      input = getLsRows(this.context, this.configPath);
+
+      // Connector level is not supported for ls
+      if (input.kind === 'rows' && input.rowType === 'connector') {
+        printError('grep is not supported for connectors');
+        printInfo('Navigate to a connector first: cd <connector-id>');
+        return;
+      }
+      statsLabel = 'rows';
+    } else if (leftCommand === 'find') {
+      // Parse find args
+      const findArgs = leftTokens.slice(1);
+      const parseResult = parseFindArgs(findArgs);
+
+      if (!parseResult.ok) {
+        printError(parseResult.error);
+        return;
+      }
+
+      const findResult = executeFind(this.context, this.configPath, parseResult.options);
+
+      if (!findResult.ok) {
+        printError(findResult.error);
+        return;
+      }
+
+      input = findResult.result;
+      statsLabel = `rows (across ${findResult.stats.sessions} sessions)`;
+    } else if (leftCommand === 'history') {
+      // Get history rows
+      const { getHistoryRows } = await import('./router-commands.js');
+      input = getHistoryRows(this.context, this.configPath);
+      statsLabel = 'messages';
+    } else {
+      printError('grep only supports "ls", "find", or "history" as input');
+      printInfo('Examples:');
+      printInfo('  ls | grep "tools/call"');
+      printInfo('  find rpc | grep "read"');
+      printInfo('  history | grep "d20"');
+      return;
+    }
+
+    // Convert simple text to filter expression if needed
+    let filterExpr = expr;
+    if (this.isSimpleTextSearch(expr)) {
+      if (input.kind === 'rows') {
+        filterExpr = this.textToFilterExpr(expr, input.rowType);
+      }
+    }
+
+    // Apply where filter
+    const { applyWhere } = await import('./where-command.js');
+    const result = applyWhere(input, filterExpr);
 
     if (!result.ok) {
       printError(`Filter error: ${result.error}`);
