@@ -991,10 +991,10 @@ Tips:
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
     await pager.run(input);
 
-    // Ensure stdin is in correct state after pager
-    if (process.stdin.isPaused()) {
-      process.stdin.resume();
-    }
+    // Pause stdin and remove all listeners after pager exits
+    process.stdin.pause();
+    process.stdin.removeAllListeners();
+
     // Ensure stdin is not in raw mode (built-in pager sets raw mode)
     if (process.stdin.isTTY && process.stdin.setRawMode) {
       try {
@@ -1003,6 +1003,12 @@ Tips:
         // Ignore errors if already not in raw mode
       }
     }
+
+    // Wait briefly for TTY state to stabilize after external command
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    // Resume stdin
+    process.stdin.resume();
 
     // Recreate readline after pager exits
     this.resetReadline();
