@@ -108,9 +108,8 @@ export class LessPager implements Pager {
       // Show cursor again
       process.stdout.write('\x1B[?25h');
 
-      // Remove all data listeners to prevent duplicate input after pager exits
-      // This ensures no stale listeners remain when readline is recreated
-      process.stdin.removeAllListeners('data');
+      // Note: runLoop's cleanup() removes its own data listener via removeListener()
+      // Do NOT use removeAllListeners('data') as it would also remove readline's listener
 
       // Restore raw mode
       process.stdin.setRawMode(false);

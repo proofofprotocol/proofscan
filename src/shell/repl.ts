@@ -789,18 +789,15 @@ Tips:
 
   /**
    * Check if an expression is a simple text (not a filter expression)
-   * Returns true if expression does not contain filter operators (==, !=, ~=, >, <)
+   * Returns true if expression does not contain filter operators with proper context.
+   * Uses regex to avoid false positives like "<script>" or "a!=b" in text.
    */
   private isSimpleTextSearch(expr: string): boolean {
     const trimmed = expr.trim();
-    // Check if expression contains any filter operator
-    const operators = ['==', '!=', '~=', '>', '<'];
-    for (const op of operators) {
-      if (trimmed.includes(op)) {
-        return false;
-      }
-    }
-    return true;
+    // Pattern matches operators surrounded by whitespace or at string boundaries
+    // This prevents false positives like "<script>" or "5==5" in search text
+    const operatorPattern = /(?:^|\s)(==|!=|~=|>=?|<=?)(?:\s|$)/;
+    return !operatorPattern.test(trimmed);
   }
 
   /**
@@ -808,8 +805,8 @@ Tips:
    */
   private textToFilterExpr(text: string, rowType: string): string {
     const trimmed = text.trim();
-    // Escape quotes in text
-    const escaped = trimmed.replace(/"/g, '\\"');
+    // Escape backslashes first, then quotes (order matters!)
+    const escaped = trimmed.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
     switch (rowType) {
       case 'a2a-message':
