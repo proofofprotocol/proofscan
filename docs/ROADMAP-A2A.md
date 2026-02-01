@@ -18,7 +18,7 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 2.3.2 | history UX改善 | ✅ 完了 | 2026-02-01 |
 | 2.4 | Task DB記録 | ✅ 完了 | 2026-02-01 |
 | 2.4.1 | history --task | ✅ 完了 | 2026-02-01 |
-| 2.5 | show に capabilities 追加 | 📋 未着手 | - |
+| 2.5 | show に capabilities 追加 | ✅ 完了 | 2026-02-01 |
 | 3 | ストリーミング | 📋 未着手 | - |
 | 4 | 認証 | 📋 未着手 | - |
 | 5 | 高度な機能 | 📋 未着手 | - |
@@ -149,9 +149,11 @@ proofscan:/glm-dice/ctx_abc > ls
 
 **PR:** #96 (merged 2026-02-01)
 
-### 2.5 show に capabilities 追加 📋
-- [ ] `agent show` で Task 対応状況を表示
-- [ ] `Capabilities: streaming: yes/no, tasks: yes/no`
+### 2.5 show に capabilities 追加 ✅
+- [x] `agent show` で Task 対応状況を表示
+- [x] `Capabilities: streaming: yes/no, tasks: yes/no`
+
+**PR:** #97 (merged 2026-02-01)
 
 ---
 
