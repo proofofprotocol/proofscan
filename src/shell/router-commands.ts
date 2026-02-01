@@ -1885,13 +1885,17 @@ const ROLE_PAD_TTY = 21;
 const ROLE_PAD_PLAIN = 12;
 
 /**
- * Handle history command - show A2A message history with filtering
+ * Handle history command - show A2A message history or Task events with filtering
  *
- * Usage:
+ * Usage (messages):
  *   history              - Show all messages
  *   history -n 20        - Show last 20 messages
  *   history --role user  - Show only user messages
  *   history --search <query> - Search messages by text
+ *
+ * Usage (tasks - Phase 2.4):
+ *   history --task       - Show recent task events (last 20)
+ *   history --task <id>  - Show events for a specific task
  *
  * @param args - Command arguments
  * @param context - Shell context
@@ -1907,21 +1911,29 @@ export async function handleHistory(
     console.log(`
 Usage: history [options]
 
-Show A2A message history for the current context.
-At session level: shows messages in current session.
-At connector level: shows messages across all sessions.
+Show A2A message history or Task events for the current context.
 
-Options:
-  -n <count>           Show last N messages (default: 100, max: 10000)
-  --role <role>        Filter by role: 'user' or 'assistant'
-  -s, --search <query> Search messages (case-insensitive)
-  -h, --help           Show this help
+Message History (default):
+  At session level: shows messages in current session.
+  At connector level: shows messages across all sessions.
+
+Task History (Phase 2.4):
+  history --task         Show recent task events (last 20)
+  history --task <id>    Show events for a specific task
+
+Options (messages):
+  -n <count>             Show last N messages (default: 100, max: 10000)
+  --role <role>          Filter by role: 'user' or 'assistant'
+  -s, --search <query>   Search messages (case-insensitive)
+  -h, --help             Show this help
 
 Examples:
-  history              Show all messages
-  history -n 20        Show last 20 messages
-  history --role user  Show only user messages
-  history -s d20       Search for 'd20' in messages
+  history                Show all messages
+  history -n 20          Show last 20 messages
+  history --role user    Show only user messages
+  history -s d20         Search for 'd20' in messages
+  history --task         Show recent task events
+  history --task abc123   Show events for task abc123
 `);
     return;
   }
@@ -1947,6 +1959,7 @@ Examples:
   let limit = DEFAULT_LIMIT;
   let roleFilter: 'user' | 'assistant' | null = null;
   let searchQuery: string | null = null;
+  let taskId: string | null = null; // Phase 2.4: --task <id>
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -1973,6 +1986,12 @@ Examples:
     } else if ((arg === '--search' || arg === '-s') && i + 1 < args.length) {
       searchQuery = args[i + 1];
       i++;
+    } else if (arg === '--task') {
+      // Phase 2.4: --task option for task event history
+      if (i + 1 < args.length && !args[i + 1].startsWith('-')) {
+        taskId = args[i + 1];
+        i++;
+      }
     } else if (arg.startsWith('-')) {
       // Unknown option - warn user
       printError(`Unknown option: ${arg}`);
@@ -1989,6 +2008,141 @@ Examples:
 
   const configDir = configPath.replace(/\/[^/]+$/, '');
   const eventsStore = new EventsStore(configDir);
+
+  // ==================== Phase 2.4: Task Event History ====================
+  if (taskId !== null) {
+    // history --task <id>: Show events for a specific task
+    const taskEvents = eventsStore.getTaskEventsByTaskId(taskId);
+
+    if (taskEvents.length === 0) {
+      printInfo(`No task events found for: ${taskId}`);
+      return;
+    }
+
+    const isTTY = process.stdout.isTTY;
+    console.log();
+
+    // Header
+    console.log(
+      dimText('#', isTTY).padEnd(4) + '  ' +
+      dimText('Time', isTTY).padEnd(10) + '  ' +
+      dimText('Event', isTTY).padEnd(25) + '  ' +
+      dimText('Status', isTTY).padEnd(15) + '  ' +
+      dimText('Details', isTTY)
+    );
+    console.log(dimText('-'.repeat(80), isTTY));
+
+    // Rows
+    taskEvents.forEach((event, idx) => {
+      const payload = JSON.parse(event.payload_json) as { status: string; error?: string; messages?: unknown };
+      const timeStr = event.ts ? event.ts.slice(11, 19) : '--:--:--';
+
+      // Color-code event kind
+      let eventKind = event.event_kind;
+      if (isTTY) {
+        switch (event.event_kind) {
+          case 'a2a:task:completed':
+            eventKind = '\x1b[32m' + eventKind + '\x1b[0m'; // green
+            break;
+          case 'a2a:task:failed':
+          case 'a2a:task:wait_timeout':
+            eventKind = '\x1b[31m' + eventKind + '\x1b[0m'; // red
+            break;
+          case 'a2a:task:canceled':
+            eventKind = '\x1b[33m' + eventKind + '\x1b[0m'; // yellow
+            break;
+          default:
+            break;
+        }
+      }
+
+      // Build details string
+      let details = '';
+      if (payload.status) {
+        details += `status: ${payload.status}`;
+      }
+      if (payload.error) {
+        details += details ? ` | error: ${payload.error}` : `error: ${payload.error}`;
+      }
+      if (payload.messages && Array.isArray(payload.messages) && payload.messages.length > 0) {
+        details += details ? ` | ${payload.messages.length} messages` : `${payload.messages.length} messages`;
+      }
+
+      console.log(
+        String(idx + 1).padEnd(4) + '  ' +
+        timeStr.padEnd(10) + '  ' +
+        eventKind.padEnd(25) + '  ' +
+        (payload.status || '').padEnd(15) + '  ' +
+        details
+      );
+    });
+
+    console.log();
+    printInfo(`Showing ${taskEvents.length} event${taskEvents.length !== 1 ? 's' : ''} for task: ${taskId}`);
+    return;
+  }
+
+  // Check for --task flag without taskId (show recent task events)
+  if (args.includes('--task')) {
+    const taskEvents = eventsStore.getRecentTaskEvents(limit);
+
+    if (taskEvents.length === 0) {
+      printInfo('No task events found');
+      return;
+    }
+
+    const isTTY = process.stdout.isTTY;
+    console.log();
+
+    // Header
+    console.log(
+      dimText('#', isTTY).padEnd(4) + '  ' +
+      dimText('Time', isTTY).padEnd(10) + '  ' +
+      dimText('Task ID', isTTY).padEnd(12) + '  ' +
+      dimText('Event', isTTY).padEnd(25) + '  ' +
+      dimText('Status', isTTY)
+    );
+    console.log(dimText('-'.repeat(80), isTTY));
+
+    // Rows
+    taskEvents.forEach((event, idx) => {
+      const payload = JSON.parse(event.payload_json) as { status: string };
+      const timeStr = event.ts ? event.ts.slice(11, 19) : '--:--:--';
+      const taskIdShort = event.task_id.slice(0, 12);
+
+      // Color-code event kind
+      let eventKind = event.event_kind;
+      if (isTTY) {
+        switch (event.event_kind) {
+          case 'a2a:task:completed':
+            eventKind = '\x1b[32m' + eventKind + '\x1b[0m'; // green
+            break;
+          case 'a2a:task:failed':
+          case 'a2a:task:wait_timeout':
+            eventKind = '\x1b[31m' + eventKind + '\x1b[0m'; // red
+            break;
+          case 'a2a:task:canceled':
+            eventKind = '\x1b[33m' + eventKind + '\x1b[0m'; // yellow
+            break;
+          default:
+            break;
+        }
+      }
+
+      console.log(
+        String(idx + 1).padEnd(4) + '  ' +
+        timeStr.padEnd(10) + '  ' +
+        taskIdShort.padEnd(12) + '  ' +
+        eventKind.padEnd(25) + '  ' +
+        (payload.status || '')
+      );
+    });
+
+    console.log();
+    printInfo(`Showing ${taskEvents.length} recent task event${taskEvents.length !== 1 ? 's' : ''}`);
+    return;
+  }
+  // ====================================================================
 
   // Connector level: search across all sessions for this target
   if (level === 'connector') {
