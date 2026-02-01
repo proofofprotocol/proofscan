@@ -1971,6 +1971,9 @@ Note: Must be in an A2A session context (cd <agent>/<session>)
       filteredMessages = filteredMessages.slice(0, limit);
     }
 
+    // Reverse to display in chronological order (oldest first)
+    filteredMessages = filteredMessages.reverse();
+
     if (filteredMessages.length === 0) {
       printInfo('No messages match the criteria');
       return;
