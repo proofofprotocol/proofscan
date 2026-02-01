@@ -762,7 +762,7 @@ describe('A2AClient', () => {
         ok: true,
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
-        text: async () => JSON.stringify({
+        json: async () => ({
           jsonrpc: '2.0',
           id: 'probe-tasks',
           result: {
@@ -826,7 +826,7 @@ describe('A2AClient', () => {
         ok: true,
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
-        text: async () => JSON.stringify({
+        json: async () => ({
           jsonrpc: '2.0',
           id: 'probe-tasks',
           result: {
@@ -857,7 +857,7 @@ describe('A2AClient', () => {
         ok: true,
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
-        text: async () => JSON.stringify({
+        json: async () => ({
           jsonrpc: '2.0',
           id: 'probe-tasks',
           result: {
@@ -905,7 +905,7 @@ describe('A2AClient', () => {
         ok: true,
         status: 200,
         headers: new Headers({ 'content-type': 'application/json' }),
-        text: async () => JSON.stringify({
+        json: async () => ({
           jsonrpc: '2.0',
           id: 'probe-tasks',
           result: {

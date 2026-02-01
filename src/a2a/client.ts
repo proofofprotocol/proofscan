@@ -1003,16 +1003,18 @@ export async function createA2AClient(
  *
  * Detects agent capabilities by:
  * 1. Checking Agent Card capabilities field (if present)
- * 2. Probing tasks/list endpoint
- * 3. Probing message/stream endpoint
+ * 2. Probing tasks/list endpoint to detect task support
+ *
+ * Note: Streaming capability is only detected from Agent Card, not probed,
+ * because SSE probing is more complex and unreliable.
  *
  * @param agentCard - The agent's Agent Card
- * @param allowLocal - Whether to allow private/local URLs
+ * @param _allowLocal - Reserved for future use (URL validation)
  * @returns Promise<AgentCapabilities> with detected capabilities
  */
 export async function probeCapabilities(
   agentCard: AgentCard,
-  allowLocal: boolean = false
+  _allowLocal: boolean = false
 ): Promise<AgentCapabilities> {
   // Default capabilities (all false)
   const capabilities: AgentCapabilities = {
@@ -1044,13 +1046,21 @@ export async function probeCapabilities(
       signal: AbortSignal.timeout(5000), // 5 second timeout for probe
     });
 
-    // If we get a 200 response (even with error), the endpoint exists
-    // Agents that support tasks will have this endpoint
+    // Check for successful JSON-RPC response
+    // A 200 with { "error": { "code": -32601, ... } } means method not found
     if (response.ok) {
-      capabilities.tasks = true;
+      try {
+        const data = await response.json() as { result?: unknown; error?: unknown };
+        // Only set tasks=true if we get a result (not a JSON-RPC error)
+        if (data.result !== undefined && !data.error) {
+          capabilities.tasks = true;
+        }
+      } catch {
+        // If we can't parse JSON, assume tasks not supported
+      }
     }
   } catch {
-    // On error, assume tasks not supported (keep false)
+    // On network error or timeout, assume tasks not supported (keep false)
   }
 
   // Note: We don't probe message/stream here because:
