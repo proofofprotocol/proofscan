@@ -22,6 +22,7 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 3 | ストリーミング | 📋 未着手 | - |
 | 4 | 認証 | 📋 未着手 | - |
 | 5 | 高度な機能 | 📋 未着手 | - |
+| 6 | MCP Apps 対応 | 🚀 優先 | - |
 
 ---
 
@@ -227,12 +228,45 @@ Phase 2.2 Task CLI の検証用に、glm-dice-agent に Task 管理機能を追�
 
 ---
 
+## Phase 6: MCP Apps 対応 🚀
+
+MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロトコル解析体験を向上。
+
+**参考:** [MCP Apps Extension Proposal](https://github.com/modelcontextprotocol/ext-apps)
+
+### 6.1 UI Resource 基盤
+- [ ] `ui://` スキーム対応
+- [ ] HTMLリソース配信
+- [ ] iframe sandbox レンダリング
+- [ ] postMessage over MCP JSON-RPC
+
+### 6.2 プロトコルトレース可視化
+- [ ] イベントタイムラインUI
+- [ ] メッセージ詳細パネル
+- [ ] フィルタ＆検索UI
+- [ ] リアルタイム更新
+
+### 6.3 統計ダッシュボード
+- [ ] RPC呼び出し統計
+- [ ] レイテンシグラフ
+- [ ] エラー率表示
+- [ ] セッション比較
+
+### 6.4 インタラクティブデバッグ
+- [ ] ブレークポイント設定
+- [ ] リクエスト/レスポンス編集＆再送
+- [ ] スキーマバリデーション結果表示
+
+---
+
 ## 参考リンク
 
 - [A2A Protocol Spec](https://google.github.io/A2A/)
 - [A2A SDK (Python)](https://pypi.org/project/a2a-sdk/)
 - [proofscan repo](https://github.com/proofofprotocol/proofscan)
+- [MCP Apps Extension (SEP-1865)](https://github.com/modelcontextprotocol/ext-apps)
+- [MCP Apps Blog Post](https://blog.modelcontextprotocol.io/posts/2025-11-21-mcp-apps/)
 
 ---
 
-*Last updated: 2026-02-01*
+*Last updated: 2026-02-02*

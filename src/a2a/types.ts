@@ -221,6 +221,21 @@ export interface ListTasksResponse {
   totalSize?: number;
 }
 
+// ===== Agent Capabilities (Phase 2.5) =====
+
+/**
+ * Agent capabilities for CLI display
+ *
+ * Simplified view of agent capabilities for user-facing output.
+ * Detected via Agent Card capabilities field or probing.
+ */
+export interface AgentCapabilities {
+  /** Agent supports tasks/list endpoint */
+  tasks: boolean;
+  /** Agent supports streaming (message/stream endpoint) */
+  streaming: boolean;
+}
+
 // ===== Discriminated Union for Type-Safe Config Parsing =====
 
 /**
