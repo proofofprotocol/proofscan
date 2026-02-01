@@ -2054,6 +2054,7 @@ Note: Must be in an A2A session context (cd <agent>/<session>)
   }
 
   const isTTY = process.stdout.isTTY;
+  console.log();
 
   // Header
   console.log(
