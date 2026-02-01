@@ -970,6 +970,12 @@ Tips:
       return;
     }
 
+    // Empty rows - print message and return without pager
+    if (input.rows.length === 0) {
+      printInfo('No results');
+      return;
+    }
+
     // Close readline before pager to avoid stdin conflicts
     // External pager uses stdio: ['pipe', inherit, inherit] so no stdin conflict,
     // but built-in fallback uses raw mode which conflicts with readline
@@ -1015,6 +1021,9 @@ Tips:
     }
 
     // Ensure stdin is in correct state before creating new readline
+    // Remove any stale data listeners from pager
+    process.stdin.removeAllListeners('data');
+
     if (process.stdin.isPaused()) {
       process.stdin.resume();
     }
