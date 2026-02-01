@@ -1869,21 +1869,21 @@ export async function handleHistory(
     console.log(`
 Usage: history [options]
 
-Show A2A message history for the current session.
+Show A2A message history for the current context.
+At session level: shows messages in current session.
+At connector level: shows messages across all sessions.
 
 Options:
-  -n <count>        Show last N messages (default: 100, max: 10000)
-  --role <role>     Filter by role: 'user' or 'assistant'
-  --search <query>  Search messages (case-insensitive)
-  -h, --help        Show this help
+  -n <count>           Show last N messages (default: 100, max: 10000)
+  --role <role>        Filter by role: 'user' or 'assistant'
+  -s, --search <query> Search messages (case-insensitive)
+  -h, --help           Show this help
 
 Examples:
-  history              Show all messages in current session
+  history              Show all messages
   history -n 20        Show last 20 messages
   history --role user  Show only user messages
-  history --search d20 Search for 'd20' in messages
-
-Note: Must be in an A2A session context (cd <agent>/<session>)
+  history -s d20       Search for 'd20' in messages
 `);
     return;
   }
@@ -1896,20 +1896,8 @@ Note: Must be in an A2A session context (cd <agent>/<session>)
     return;
   }
 
-  if (level === 'connector') {
-    printError('Not in a session. Use: cd <session-id> to enter a session');
-    printInfo('Tip: history -h for usage');
-    return;
-  }
-
-  if (!context.session) {
-    printError('No session in context');
-    return;
-  }
-
-  if (context.proto !== 'a2a') {
-    printError('history is only available for A2A sessions');
-    printInfo('Use: ls or rpc to view this session');
+  if (!context.connector) {
+    printError('No target in context');
     return;
   }
 
@@ -1944,9 +1932,14 @@ Note: Must be in an A2A session context (cd <agent>/<session>)
         printError(`Invalid role: ${role}. Use 'user' or 'assistant'`);
         return;
       }
-    } else if (arg === '--search' && i + 1 < args.length) {
+    } else if ((arg === '--search' || arg === '-s') && i + 1 < args.length) {
       searchQuery = args[i + 1];
       i++;
+    } else if (arg.startsWith('-')) {
+      // Unknown option - warn user
+      printError(`Unknown option: ${arg}`);
+      printInfo('Use: history -h for usage');
+      return;
     }
   }
 
@@ -1958,6 +1951,85 @@ Note: Must be in an A2A session context (cd <agent>/<session>)
 
   const configDir = configPath.replace(/\/[^/]+$/, '');
   const eventsStore = new EventsStore(configDir);
+
+  // Connector level: search across all sessions for this target
+  if (level === 'connector') {
+    // Get messages across all sessions for this target
+    const messages = eventsStore.getA2AMessagesForTarget(context.connector, limit * 2);
+
+    // Apply filters
+    let filteredMessages = messages;
+
+    if (roleFilter) {
+      filteredMessages = filteredMessages.filter(m => m.role === roleFilter);
+    }
+
+    if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      filteredMessages = filteredMessages.filter(m =>
+        m.content.toLowerCase().includes(lowerQuery)
+      );
+    }
+
+    // Apply limit after filtering (get newest N)
+    if (filteredMessages.length > limit) {
+      filteredMessages = filteredMessages.slice(0, limit);
+    }
+
+    // Reverse to display in chronological order (oldest first)
+    filteredMessages = filteredMessages.reverse();
+
+    if (filteredMessages.length === 0) {
+      printInfo('No messages match the criteria');
+      return;
+    }
+
+    const isTTY = process.stdout.isTTY;
+    console.log();
+
+    // Header (with Session column for connector level)
+    console.log(
+      dimText('#', isTTY).padEnd(4) + '  ' +
+      dimText('Session', isTTY).padEnd(isTTY ? 16 : 10) + '  ' +
+      dimText('Time', isTTY).padEnd(10) + '  ' +
+      dimText('Role', isTTY).padEnd(12) + '  ' +
+      dimText('Content', isTTY)
+    );
+    console.log(dimText('-'.repeat(HISTORY_LINE_WIDTH + 10), isTTY));
+
+    // Rows
+    filteredMessages.forEach(m => {
+      const sessionPrefix = shortenSessionId(m.sessionId);
+      const timeStr = m.timestamp ? m.timestamp.slice(11, 19) : '--:--:--';
+      const roleColor = isTTY && m.role === 'assistant' ? '\x1b[36m' : '';
+      const roleReset = isTTY && m.role === 'assistant' ? '\x1b[0m' : '';
+      const roleDisplay = `${roleColor}${m.role}${roleReset}`;
+      console.log(
+        String(m.id).padEnd(4) + '  ' +
+        sessionPrefix.padEnd(isTTY ? 16 : 10) + '  ' +
+        timeStr.padEnd(10) + '  ' +
+        roleDisplay.padEnd(isTTY ? ROLE_PAD_TTY : ROLE_PAD_PLAIN) + '  ' +
+        m.content
+      );
+    });
+
+    console.log();
+    printInfo(`Showing ${filteredMessages.length} message${filteredMessages.length !== 1 ? 's' : ''} across ${new Set(filteredMessages.map(m => m.sessionId)).size} session${new Set(filteredMessages.map(m => m.sessionId)).size !== 1 ? 's' : ''}`);
+    return;
+  }
+
+  // Session level
+  if (!context.session) {
+    printError('Not in a session. Use: cd <session-id> to enter a session');
+    printInfo('Tip: history -h for usage');
+    return;
+  }
+
+  if (context.proto !== 'a2a') {
+    printError('history is only available for A2A sessions');
+    printInfo('Use: ls or rpc to view this session');
+    return;
+  }
 
   // Get messages with higher limit for filtering
   const messages = eventsStore.getA2AMessages(context.session, limit * 2);
