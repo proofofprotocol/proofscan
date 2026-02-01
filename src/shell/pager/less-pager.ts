@@ -23,12 +23,12 @@ export class LessPager implements Pager {
     this.options = options ?? {};
   }
 
-  async run(input: PipelineValue): Promise<void> {
+  async run(input: PipelineValue): Promise<boolean> {
     // TTY check - non-TTY outputs all lines without paging
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       const lines = renderRowsToLines(input, { useColor: false });
       lines.forEach(line => console.log(line));
-      return;
+      return false; // No pager used
     }
 
     const lines = renderRowsToLines(input, { useColor: true });
@@ -39,7 +39,7 @@ export class LessPager implements Pager {
 
     if (lines.length <= pageSize) {
       lines.forEach(line => console.log(line));
-      return;
+      return false; // No pager used
     }
 
     // Try external pager (PAGER env -> less -> built-in)
@@ -48,6 +48,7 @@ export class LessPager implements Pager {
       // All external pagers failed, use built-in
       await this.runBuiltIn(lines, pageSize);
     }
+    return true; // Pager was used
   }
 
   /**
@@ -106,6 +107,9 @@ export class LessPager implements Pager {
     } finally {
       // Show cursor again
       process.stdout.write('\x1B[?25h');
+
+      // Note: runLoop's cleanup() removes its own data listener via removeListener()
+      // Do NOT use removeAllListeners('data') as it would also remove readline's listener
 
       // Restore raw mode
       process.stdin.setRawMode(false);

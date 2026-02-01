@@ -23,12 +23,12 @@ export class MorePager implements Pager {
     this.options = options ?? {};
   }
 
-  async run(input: PipelineValue): Promise<void> {
+  async run(input: PipelineValue): Promise<boolean> {
     // TTY check - non-TTY outputs all lines without paging
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       const lines = renderRowsToLines(input, { useColor: false });
       lines.forEach(line => console.log(line));
-      return;
+      return false; // No pager used
     }
 
     const lines = renderRowsToLines(input, { useColor: true });
@@ -39,7 +39,7 @@ export class MorePager implements Pager {
 
     if (lines.length <= pageSize) {
       lines.forEach(line => console.log(line));
-      return;
+      return false; // No pager used
     }
 
     // Try external pager (less -E -> built-in)
@@ -48,6 +48,7 @@ export class MorePager implements Pager {
       // External pager failed, use built-in
       await this.runBuiltIn(lines, pageSize);
     }
+    return true; // Pager was used
   }
 
   /**

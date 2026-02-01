@@ -59,6 +59,28 @@ export const FILTER_FIELDS: FieldDefinition[] = [
     description: 'Called tool name',
     type: 'string',
   },
+  // A2A message fields
+  {
+    name: 'message.id',
+    description: 'A2A message ID',
+    type: 'string',
+  },
+  {
+    name: 'message.role',
+    description: 'Message role (user/assistant)',
+    type: 'string',
+    examples: ['user', 'assistant'],
+  },
+  {
+    name: 'message.content',
+    description: 'Message content text',
+    type: 'string',
+  },
+  {
+    name: 'message.timestamp',
+    description: 'Message timestamp (ISO)',
+    type: 'string',
+  },
   {
     name: 'event.kind',
     description: 'Event kind',

@@ -6,7 +6,7 @@
  */
 
 /** Row type identifier for type-safe filtering */
-export type RowType = 'rpc' | 'session' | 'connector';
+export type RowType = 'rpc' | 'session' | 'connector' | 'a2a-message';
 
 /** Pipeline value - either structured rows or plain text */
 export type PipelineValue =
@@ -47,5 +47,14 @@ export interface ConnectorRow {
   created_at: string;
 }
 
+/** A2A message row (from history command) */
+export interface A2AMessageRow {
+  id: number;
+  session_id?: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+}
+
 /** Union of all row types */
-export type PipelineRow = RpcRow | SessionRow | ConnectorRow;
+export type PipelineRow = RpcRow | SessionRow | ConnectorRow | A2AMessageRow;

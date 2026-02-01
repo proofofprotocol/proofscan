@@ -1352,6 +1352,7 @@ import type {
   RpcRow,
   SessionRow,
   ConnectorRow,
+  A2AMessageRow,
 } from './pipeline-types.js';
 
 /**
@@ -1376,6 +1377,43 @@ export function getLsRows(context: ShellContext, configPath: string): PipelineVa
   // Root level - return connector rows
   const connectors = getConnectorRowsInternal(store, configPath);
   return { kind: 'rows', rows: connectors, rowType: 'connector' };
+}
+
+/**
+ * Get history result as pipeline rows for filtering
+ *
+ * Used by: history | where <filter-expr>
+ */
+export function getHistoryRows(context: ShellContext, configPath: string): PipelineValue {
+  const level = getContextLevel(context);
+  const configDir = configPath.replace(/\/[^/]+$/, '');
+  const eventsStore = new EventsStore(configDir);
+
+  if (level === 'session' && context.session) {
+    const messages = eventsStore.getA2AMessages(context.session, 100);
+    // Convert to rows format
+    const rows: A2AMessageRow[] = messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    }));
+    return { kind: 'rows', rows, rowType: 'a2a-message' };
+  }
+
+  if (level === 'connector' && context.connector) {
+    const messages = eventsStore.getA2AMessagesForTarget(context.connector, 100);
+    const rows: A2AMessageRow[] = messages.map(m => ({
+      id: m.id,
+      session_id: m.sessionId,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    }));
+    return { kind: 'rows', rows, rowType: 'a2a-message' };
+  }
+
+  return { kind: 'rows', rows: [], rowType: 'a2a-message' };
 }
 
 /**

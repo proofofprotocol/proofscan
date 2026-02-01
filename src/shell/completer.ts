@@ -178,6 +178,18 @@ function getRouterCompletions(
       // No completions for ..
       return [];
 
+    case 'history':
+      // history command completions
+      // --role value completion
+      if (tokens.length > 0 && tokens[tokens.length - 1] === '--role') {
+        return ['user', 'assistant'];
+      }
+      // Options completion
+      if (tokens.length === 1) {
+        return ['-n', '-s', '--search', '--role', '-h', '--help'];
+      }
+      return [];
+
     default:
       return [];
   }

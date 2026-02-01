@@ -41,7 +41,7 @@ import { handleRef } from './ref-commands.js';
 import { handleInscribe } from './inscribe-commands.js';
 import { handlePopl, getPoplEntryIdsSync } from './popl-commands.js';
 import { resolveCommand } from './command-resolver.js';
-import type { PipelineValue, RpcRow, SessionRow } from './pipeline-types.js';
+import type { PipelineValue, RpcRow, SessionRow, A2AMessageRow } from './pipeline-types.js';
 import { parseFindArgs, executeFind } from './find-command.js';
 import { ConfigureMode, processConfigureCommand, createConfigureCompleter, type ConfigureDataProvider } from './configure/index.js';
 
@@ -478,6 +478,9 @@ export class ShellRepl {
       case 'find':
         await this.handleFind(args);
         break;
+      case 'history':
+        await handleHistory(args, this.context, this.configPath);
+        break;
     }
   }
 
@@ -785,6 +788,41 @@ Tips:
   }
 
   /**
+   * Check if an expression is a simple text (not a filter expression)
+   * Returns true if expression does not contain filter operators with proper context.
+   * Uses regex to avoid false positives like "<script>" or "a!=b" in text.
+   */
+  private isSimpleTextSearch(expr: string): boolean {
+    const trimmed = expr.trim();
+    // Pattern matches operators surrounded by whitespace or at string boundaries
+    // This prevents false positives like "<script>" or "5==5" in search text
+    const operatorPattern = /(?:^|\s)(==|!=|~=|>=?|<=?)(?:\s|$)/;
+    return !operatorPattern.test(trimmed);
+  }
+
+  /**
+   * Convert simple text search to appropriate filter expression based on row type
+   */
+  private textToFilterExpr(text: string, rowType: string): string {
+    const trimmed = text.trim();
+    // Escape backslashes first, then quotes (order matters!)
+    const escaped = trimmed.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
+    switch (rowType) {
+      case 'a2a-message':
+        return `message.content ~= "${escaped}"`;
+      case 'rpc':
+        // For now, search in method name (could be expanded later)
+        return `rpc.method ~= "${escaped}"`;
+      case 'session':
+        return `session.id ~= "${escaped}"`;
+      default:
+        // Default to searching in common text fields
+        return `message.content ~= "${escaped}"`;
+    }
+  }
+
+  /**
    * Handle piped commands
    * Supports:
    *   pwd --json | ref add <name>
@@ -803,8 +841,14 @@ Tips:
     // Extract command name from right side (preserving raw args for where/grep)
     const { cmd: rightCommand, rest: rawArgs } = this.extractCommand(rightCmd);
 
-    // Handle: ls | where <filter-expr> or ls | grep <filter-expr>
-    if (rightCommand === 'where' || rightCommand === 'grep') {
+    // Handle: ls | grep <text> (text search with auto-conversion)
+    if (rightCommand === 'grep') {
+      await this.handlePipeToGrep(leftCmd, rawArgs);
+      return;
+    }
+
+    // Handle: ls | where <filter-expr>
+    if (rightCommand === 'where') {
       await this.handlePipeToWhere(leftCmd, rawArgs);
       return;
     }
@@ -835,6 +879,7 @@ Tips:
     printInfo('  pwd --json | ref add <name>');
     printInfo('  show @rpc:<id> --json | inscribe');
     printInfo('  ls | where <filter-expr>');
+    printInfo('  ls | grep <text>');
     printInfo('  find rpc | where <filter-expr>');
     printInfo('  ls | less');
     printInfo('  find rpc | more');
@@ -883,17 +928,105 @@ Tips:
 
       input = findResult.result;
       statsLabel = `rows (across ${findResult.stats.sessions} sessions)`;
+    } else if (leftCommand === 'history') {
+      // Get history rows
+      const { getHistoryRows } = await import('./router-commands.js');
+      input = getHistoryRows(this.context, this.configPath);
+      statsLabel = 'messages';
     } else {
-      printError('where/grep only supports "ls" or "find" as input');
+      printError('where/grep only supports "ls", "find", or "history" as input');
       printInfo('Examples:');
       printInfo('  ls | where rpc.method == "tools/call"');
       printInfo('  find rpc | where tools.name ~= "read"');
+      printInfo('  history | where role == "user"');
       return;
     }
 
     // Apply where filter
     const { applyWhere } = await import('./where-command.js');
     const result = applyWhere(input, expr);
+
+    if (!result.ok) {
+      printError(`Filter error: ${result.error}`);
+      if (result.position !== undefined) {
+        printError(`  at position ${result.position + 1}`);
+      }
+      return;
+    }
+
+    // Render output
+    this.renderPipelineOutput(result.result);
+    printInfo(`${statsLabel}: ${result.stats.matched} / ${result.stats.total}`);
+  }
+
+  /**
+   * Handle: ls | grep <text> or history | grep <text>
+   * Auto-converts simple text to appropriate filter expression based on row type
+   */
+  private async handlePipeToGrep(leftCmd: string, expr: string): Promise<void> {
+    const leftTokens = leftCmd.trim().split(/\s+/);
+    const leftCommand = leftTokens[0];
+
+    // Get pipeline input based on left command
+    let input: PipelineValue;
+    let statsLabel: string;
+
+    if (leftCommand === 'ls') {
+      // Get ls rows
+      const { getLsRows } = await import('./router-commands.js');
+      input = getLsRows(this.context, this.configPath);
+
+      // Connector level is not supported for ls
+      if (input.kind === 'rows' && input.rowType === 'connector') {
+        printError('grep is not supported for connectors');
+        printInfo('Navigate to a connector first: cd <connector-id>');
+        return;
+      }
+      statsLabel = 'rows';
+    } else if (leftCommand === 'find') {
+      // Parse find args
+      const findArgs = leftTokens.slice(1);
+      const parseResult = parseFindArgs(findArgs);
+
+      if (!parseResult.ok) {
+        printError(parseResult.error);
+        return;
+      }
+
+      const findResult = executeFind(this.context, this.configPath, parseResult.options);
+
+      if (!findResult.ok) {
+        printError(findResult.error);
+        return;
+      }
+
+      input = findResult.result;
+      statsLabel = `rows (across ${findResult.stats.sessions} sessions)`;
+    } else if (leftCommand === 'history') {
+      // Get history rows
+      const { getHistoryRows } = await import('./router-commands.js');
+      input = getHistoryRows(this.context, this.configPath);
+      statsLabel = 'messages';
+    } else {
+      printError('grep only supports "ls", "find", or "history" as input');
+      printInfo('Examples:');
+      printInfo('  ls | grep "tools/call"');
+      printInfo('  find rpc | grep "read"');
+      printInfo('  history | grep "d20"');
+      return;
+    }
+
+    // Convert simple text to filter expression if needed
+    let filterExpr = expr;
+    if (this.isSimpleTextSearch(expr)) {
+      if (input.kind === 'rows') {
+        filterExpr = this.textToFilterExpr(expr, input.rowType);
+      }
+    }
+
+    // Apply where filter
+    const { applyWhere } = await import('./where-command.js');
+    const result = applyWhere(input, filterExpr);
 
     if (!result.ok) {
       printError(`Filter error: ${result.error}`);
@@ -943,11 +1076,15 @@ Tips:
       }
 
       input = findResult.result;
+    } else if (leftCommand === 'history') {
+      const { getHistoryRows } = await import('./router-commands.js');
+      input = getHistoryRows(this.context, this.configPath);
     } else {
-      printError(`${pagerCmd} only supports "ls" or "find" as input`);
+      printError(`${pagerCmd} only supports "ls", "find", or "history" as input`);
       printInfo('Examples:');
       printInfo('  ls | less');
       printInfo('  find rpc | less');
+      printInfo('  history | less');
       return;
     }
 
@@ -957,19 +1094,28 @@ Tips:
       return;
     }
 
-    // Close readline before pager to avoid stdin conflicts
-    // External pager uses stdio: ['pipe', inherit, inherit] so no stdin conflict,
-    // but built-in fallback uses raw mode which conflicts with readline
-    this.rl?.close();
-    this.rl = null;
+    // Empty rows - print message and return without pager
+    if (input.rows.length === 0) {
+      printInfo('No results');
+      return;
+    }
+
+    // Pause readline instead of closing it to avoid listener conflicts
+    // This prevents the race condition between old and new readline listeners
+    if (this.rl) {
+      this.rl.pause();
+    }
 
     // Run pager
     const { LessPager, MorePager } = await import('./pager/index.js');
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
     await pager.run(input);
 
-    // Recreate readline after pager exits
-    this.resetReadline();
+    // Resume readline after pager completes
+    if (this.rl) {
+      this.rl.resume();
+      this.rl.prompt();
+    }
   }
 
   /**
@@ -978,8 +1124,23 @@ Tips:
   private resetReadline(): void {
     // Close existing readline interface to prevent duplicate input
     if (this.rl) {
+      // Remove close listener to prevent "Goodbye!" message when closing for reset
+      this.rl.removeAllListeners('close');
       this.rl.removeAllListeners();
       this.rl.close();
+    }
+
+    // Ensure stdin is in correct state before creating new readline
+    if (process.stdin.isPaused()) {
+      process.stdin.resume();
+    }
+    // Ensure stdin is not in raw mode
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      try {
+        process.stdin.setRawMode(false);
+      } catch {
+        // Ignore errors if already not in raw mode
+      }
     }
 
     // Choose completer based on mode
@@ -1067,7 +1228,64 @@ Tips:
       this.renderRpcTable(output.rows as RpcRow[], isTTY);
     } else if (output.rowType === 'session') {
       this.renderSessionTable(output.rows as SessionRow[], isTTY);
+    } else if (output.rowType === 'a2a-message') {
+      this.renderA2AMessageTable(output.rows as A2AMessageRow[], isTTY);
     }
+  }
+
+  /**
+   * Render A2A message rows as table
+   */
+  private renderA2AMessageTable(rows: A2AMessageRow[], isTTY: boolean): void {
+    const dimText = (text: string) => isTTY ? `\x1b[2m${text}\x1b[0m` : text;
+    const roleColor = (role: string) => {
+      if (!isTTY) return role;
+      return role === 'assistant' ? `\x1b[36m${role}\x1b[0m` : role;
+    };
+
+    // Check if rows have session_id (connector level)
+    const hasSession = rows.some(r => r.session_id);
+
+    console.log();
+    if (hasSession) {
+      console.log(
+        dimText('#'.padEnd(4)) + '  ' +
+        dimText('Session'.padEnd(10)) + '  ' +
+        dimText('Time'.padEnd(10)) + '  ' +
+        dimText('Role'.padEnd(12)) + '  ' +
+        dimText('Content')
+      );
+      console.log(dimText('-'.repeat(80)));
+      rows.forEach(row => {
+        const sessionPrefix = row.session_id ? row.session_id.slice(0, 8) : '';
+        const timeStr = row.timestamp ? row.timestamp.slice(11, 19) : '--:--:--';
+        console.log(
+          String(row.id).padEnd(4) + '  ' +
+          sessionPrefix.padEnd(10) + '  ' +
+          timeStr.padEnd(10) + '  ' +
+          roleColor(row.role).padEnd(isTTY ? 21 : 12) + '  ' +
+          row.content
+        );
+      });
+    } else {
+      console.log(
+        dimText('#'.padEnd(4)) + '  ' +
+        dimText('Time'.padEnd(10)) + '  ' +
+        dimText('Role'.padEnd(12)) + '  ' +
+        dimText('Content')
+      );
+      console.log(dimText('-'.repeat(70)));
+      rows.forEach(row => {
+        const timeStr = row.timestamp ? row.timestamp.slice(11, 19) : '--:--:--';
+        console.log(
+          String(row.id).padEnd(4) + '  ' +
+          timeStr.padEnd(10) + '  ' +
+          roleColor(row.role).padEnd(isTTY ? 21 : 12) + '  ' +
+          row.content
+        );
+      });
+    }
+    console.log();
   }
 
   /**
