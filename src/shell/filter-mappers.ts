@@ -6,7 +6,7 @@
  */
 
 import type { FilterContext } from '../filter/types.js';
-import type { RpcRow, SessionRow } from './pipeline-types.js';
+import type { RpcRow, SessionRow, A2AMessageRow } from './pipeline-types.js';
 
 /**
  * Convert RPC row to FilterContext
@@ -36,5 +36,18 @@ export function sessionRowToFilterContext(row: SessionRow): FilterContext {
   return {
     'session.id': row.session_id,
     'session.latency': row.total_latency_ms ?? null,
+  };
+}
+
+/**
+ * Convert A2A message row to FilterContext
+ */
+export function a2aMessageRowToFilterContext(row: A2AMessageRow): FilterContext {
+  return {
+    'message.id': row.id,
+    'message.role': row.role,
+    'message.content': row.content,
+    'message.timestamp': row.timestamp,
+    'session.id': row.session_id ?? null,
   };
 }

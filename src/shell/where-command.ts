@@ -8,14 +8,17 @@
 import { parseFilter } from '../filter/parser.js';
 import { evaluateFilter } from '../filter/evaluator.js';
 import type { FilterAst } from '../filter/types.js';
-import type { PipelineValue, RpcRow, SessionRow, RowType } from './pipeline-types.js';
-import { rpcRowToFilterContext, sessionRowToFilterContext } from './filter-mappers.js';
+import type { PipelineValue, RpcRow, SessionRow, A2AMessageRow, RowType } from './pipeline-types.js';
+import { rpcRowToFilterContext, sessionRowToFilterContext, a2aMessageRowToFilterContext } from './filter-mappers.js';
 
 /** Fields that only apply to RPC rows */
 const RPC_ONLY_FIELDS = ['rpc.id', 'rpc.method', 'rpc.status', 'rpc.latency', 'tools.name', 'tools.method'];
 
 /** Fields that only apply to Session rows */
 const SESSION_ONLY_FIELDS = ['session.latency'];
+
+/** Fields that only apply to A2A message rows */
+const A2A_MESSAGE_ONLY_FIELDS = ['message.id', 'message.role', 'message.content', 'message.timestamp'];
 
 /**
  * Check if filter uses fields incompatible with the row type
@@ -35,6 +38,17 @@ function checkFieldCompatibility(ast: FilterAst, rowType: RowType): string | nul
     const sessionFields = usedFields.filter(f => SESSION_ONLY_FIELDS.includes(f));
     if (sessionFields.length > 0) {
       return `Field '${sessionFields[0]}' is only available at connector level`;
+    }
+  }
+
+  if (rowType === 'a2a-message') {
+    const rpcFields = usedFields.filter(f => RPC_ONLY_FIELDS.includes(f));
+    const sessionFields = usedFields.filter(f => SESSION_ONLY_FIELDS.includes(f));
+    if (rpcFields.length > 0) {
+      return `Field '${rpcFields[0]}' is not available for A2A messages. Use message.* fields.`;
+    }
+    if (sessionFields.length > 0) {
+      return `Field '${sessionFields[0]}' is not available for A2A messages. Use message.* fields.`;
     }
   }
 
@@ -100,7 +114,9 @@ export function applyWhere(input: PipelineValue, expr: string): WhereResult {
       ? rpcRowToFilterContext
       : rowType === 'session'
         ? sessionRowToFilterContext
-        : null;
+        : rowType === 'a2a-message'
+          ? a2aMessageRowToFilterContext
+          : null;
 
   if (!mapper) {
     return { ok: false, error: `Unsupported row type: ${rowType}` };
@@ -111,7 +127,9 @@ export function applyWhere(input: PipelineValue, expr: string): WhereResult {
     // Use conditional mapper call instead of intersection type cast
     const ctx = rowType === 'rpc'
       ? rpcRowToFilterContext(row as RpcRow)
-      : sessionRowToFilterContext(row as SessionRow);
+      : rowType === 'session'
+        ? sessionRowToFilterContext(row as SessionRow)
+        : a2aMessageRowToFilterContext(row as A2AMessageRow);
     return evaluateFilter(parseResult.ast, ctx);
   });
 

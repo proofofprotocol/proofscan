@@ -20,7 +20,11 @@ export type FilterField =
   | 'tools.name'
   | 'event.kind'
   | 'event.type'
-  | 'direction';
+  | 'direction'
+  | 'message.id'
+  | 'message.role'
+  | 'message.content'
+  | 'message.timestamp';
 
 /** Single condition in the filter expression */
 export interface FilterCondition {

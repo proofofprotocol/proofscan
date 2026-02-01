@@ -5,7 +5,7 @@
  * Extracts and reuses table rendering logic from repl.ts.
  */
 
-import type { PipelineValue, RpcRow, SessionRow } from '../pipeline-types.js';
+import type { PipelineValue, RpcRow, SessionRow, A2AMessageRow } from '../pipeline-types.js';
 import { shortenSessionId } from '../prompt.js';
 
 /** Render options */
@@ -35,6 +35,8 @@ export function renderRowsToLines(
     return renderRpcLines(input.rows as RpcRow[], useColor);
   } else if (input.rowType === 'session') {
     return renderSessionLines(input.rows as SessionRow[], useColor);
+  } else if (input.rowType === 'a2a-message') {
+    return renderA2AMessageLines(input.rows as A2AMessageRow[], useColor);
   } else if (input.rowType === 'connector') {
     return ['Connector rows not supported in pager'];
   }
@@ -152,6 +154,66 @@ function renderSessionLines(rows: SessionRow[], useColor: boolean): string[] {
       const started = row.started_at ? row.started_at.slice(0, 19).replace('T', ' ') : '-';
 
       lines.push(`${sessionShort}  ${rpcs}  ${events}  ${started}`);
+    });
+  }
+
+  return lines;
+}
+
+/**
+ * Render A2A message rows to lines
+ */
+function renderA2AMessageLines(rows: A2AMessageRow[], useColor: boolean): string[] {
+  const lines: string[] = [];
+  const dimText = (text: string) => useColor ? `\x1b[2m${text}\x1b[0m` : text;
+  const roleColor = (role: string) => {
+    if (!useColor) return role;
+    return role === 'assistant' ? `\x1b[36m${role}\x1b[0m` : role;
+  };
+
+  // Check if rows have session_id (connector level)
+  const hasSession = rows.some(r => r.session_id);
+
+  if (hasSession) {
+    // Extended format with session column
+    lines.push(
+      dimText('#'.padEnd(4)) + '  ' +
+      dimText('Session'.padEnd(10)) + '  ' +
+      dimText('Time'.padEnd(10)) + '  ' +
+      dimText('Role'.padEnd(useColor ? 21 : 12)) + '  ' +
+      dimText('Content')
+    );
+    lines.push(dimText('-'.repeat(80)));
+
+    rows.forEach(row => {
+      const sessionPrefix = row.session_id ? shortenSessionId(row.session_id) : '';
+      const timeStr = row.timestamp ? row.timestamp.slice(11, 19) : '--:--:--';
+      lines.push(
+        String(row.id).padEnd(4) + '  ' +
+        sessionPrefix.padEnd(10) + '  ' +
+        timeStr.padEnd(10) + '  ' +
+        roleColor(row.role).padEnd(useColor ? 21 : 12) + '  ' +
+        row.content
+      );
+    });
+  } else {
+    // Simple format (session level)
+    lines.push(
+      dimText('#'.padEnd(4)) + '  ' +
+      dimText('Time'.padEnd(10)) + '  ' +
+      dimText('Role'.padEnd(useColor ? 21 : 12)) + '  ' +
+      dimText('Content')
+    );
+    lines.push(dimText('-'.repeat(70)));
+
+    rows.forEach(row => {
+      const timeStr = row.timestamp ? row.timestamp.slice(11, 19) : '--:--:--';
+      lines.push(
+        String(row.id).padEnd(4) + '  ' +
+        timeStr.padEnd(10) + '  ' +
+        roleColor(row.role).padEnd(useColor ? 21 : 12) + '  ' +
+        row.content
+      );
     });
   }
 

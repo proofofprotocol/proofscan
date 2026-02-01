@@ -973,13 +973,30 @@ Tips:
     // Close readline before pager to avoid stdin conflicts
     // External pager uses stdio: ['pipe', inherit, inherit] so no stdin conflict,
     // but built-in fallback uses raw mode which conflicts with readline
-    this.rl?.close();
+    // Remove close listener temporarily to prevent "Goodbye!" message
+    if (this.rl) {
+      this.rl.removeAllListeners('close');
+      this.rl.close();
+    }
     this.rl = null;
 
     // Run pager
     const { LessPager, MorePager } = await import('./pager/index.js');
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
     await pager.run(input);
+
+    // Ensure stdin is in correct state after pager
+    if (process.stdin.isPaused()) {
+      process.stdin.resume();
+    }
+    // Ensure stdin is not in raw mode (built-in pager sets raw mode)
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      try {
+        process.stdin.setRawMode(false);
+      } catch {
+        // Ignore errors if already not in raw mode
+      }
+    }
 
     // Recreate readline after pager exits
     this.resetReadline();
@@ -991,8 +1008,23 @@ Tips:
   private resetReadline(): void {
     // Close existing readline interface to prevent duplicate input
     if (this.rl) {
+      // Remove close listener to prevent "Goodbye!" message when closing for reset
+      this.rl.removeAllListeners('close');
       this.rl.removeAllListeners();
       this.rl.close();
+    }
+
+    // Ensure stdin is in correct state before creating new readline
+    if (process.stdin.isPaused()) {
+      process.stdin.resume();
+    }
+    // Ensure stdin is not in raw mode
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      try {
+        process.stdin.setRawMode(false);
+      } catch {
+        // Ignore errors if already not in raw mode
+      }
     }
 
     // Choose completer based on mode
