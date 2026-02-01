@@ -11,7 +11,8 @@ import { TargetsStore } from '../db/targets-store.js';
 import { AgentCacheStore } from '../db/agent-cache-store.js';
 import { output, outputError, outputSuccess, outputTable } from '../utils/output.js';
 import { fetchAgentCard, isPrivateUrl } from '../a2a/agent-card.js';
-import type { AgentConfigV1 } from '../a2a/types.js';
+import { probeCapabilities } from '../a2a/client.js';
+import type { AgentConfigV1, AgentCard } from '../a2a/types.js';
 
 /**
  * Create the agent command group
@@ -156,6 +157,14 @@ export function createAgentCommand(getConfigPath: () => string): Command {
         }
 
         const cache = cacheStore.get(agent.id);
+        const config = agent.config as AgentConfigV1;
+
+        // Probe capabilities if Agent Card is available
+        let capabilities = null;
+        if (cache?.agentCard) {
+          const allowLocal = config.allow_local ?? false;
+          capabilities = await probeCapabilities(cache.agentCard as AgentCard, allowLocal);
+        }
 
         const result = {
           id: agent.id,
@@ -170,9 +179,24 @@ export function createAgentCommand(getConfigPath: () => string): Command {
             expiresAt: cache.expiresAt,
             hash: cache.agentCardHash,
           } : null,
+          capabilities,
         };
 
         output(result);
+
+        // Also display capabilities in human-readable format for TTY
+        if (capabilities && process.stdout.isTTY) {
+          const green = '\x1b[32m';
+          const dim = '\x1b[90m';
+          const reset = '\x1b[0m';
+          const yes = `${green}yes${reset}`;
+          const no = `${dim}no${reset}`;
+
+          console.log();
+          console.log('Capabilities:');
+          console.log(`  tasks:        ${capabilities.tasks ? yes : no}`);
+          console.log(`  streaming:    ${capabilities.streaming ? yes : no}`);
+        }
       } catch (error) {
         outputError('Failed to show agent', error instanceof Error ? error : undefined);
         process.exit(1);

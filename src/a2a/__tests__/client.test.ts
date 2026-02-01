@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { A2AClient, createA2AClient } from '../client.js';
+import { A2AClient, createA2AClient, probeCapabilities } from '../client.js';
 import type { AgentCard } from '../types.js';
 
 // Mock fetch
@@ -745,6 +745,181 @@ describe('A2AClient', () => {
 
       expect(result.ok).toBe(false);
       expect(result.error).toContain('Invalid request');
+    });
+  });
+
+  // ===== probeCapabilities Tests (Phase 2.5) =====
+
+  describe('probeCapabilities', () => {
+    it('should detect tasks capability via tasks/list endpoint', async () => {
+      const mockAgentCard: AgentCard = {
+        name: 'Tasks Agent',
+        url: 'https://tasks.example.com',
+        version: '1.0.0',
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          jsonrpc: '2.0',
+          id: 'probe-tasks',
+          result: {
+            tasks: [],
+            nextPageToken: '',
+            pageSize: 50,
+          },
+        }),
+      } as Response);
+
+      const capabilities = await probeCapabilities(mockAgentCard, false);
+
+      expect(capabilities.tasks).toBe(true);
+      expect(capabilities.streaming).toBe(false); // Default since no capabilities in card
+
+      const fetchCall = vi.mocked(fetch).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body as string);
+      expect(requestBody.method).toBe('tasks/list');
+    });
+
+    it('should return false for tasks when endpoint returns error', async () => {
+      const mockAgentCard: AgentCard = {
+        name: 'No Tasks Agent',
+        url: 'https://no-tasks.example.com',
+        version: '1.0.0',
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: async () => JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'probe-tasks',
+          error: {
+            code: -32601,
+            message: 'Method not found',
+          },
+        }),
+      } as Response);
+
+      const capabilities = await probeCapabilities(mockAgentCard, false);
+
+      expect(capabilities.tasks).toBe(false);
+      expect(capabilities.streaming).toBe(false);
+    });
+
+    it('should detect streaming capability from Agent Card', async () => {
+      const mockAgentCard: AgentCard = {
+        name: 'Streaming Agent',
+        url: 'https://streaming.example.com',
+        version: '1.0.0',
+        capabilities: {
+          streaming: true,
+          pushNotifications: false,
+          stateTransitionHistory: true,
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          jsonrpc: '2.0',
+          id: 'probe-tasks',
+          result: {
+            tasks: [],
+            nextPageToken: '',
+            pageSize: 50,
+          },
+        }),
+      } as Response);
+
+      const capabilities = await probeCapabilities(mockAgentCard, false);
+
+      expect(capabilities.tasks).toBe(true);
+      expect(capabilities.streaming).toBe(true);
+    });
+
+    it('should use Agent Card streaming=false', async () => {
+      const mockAgentCard: AgentCard = {
+        name: 'Non-Streaming Agent',
+        url: 'https://non-streaming.example.com',
+        version: '1.0.0',
+        capabilities: {
+          streaming: false,
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          jsonrpc: '2.0',
+          id: 'probe-tasks',
+          result: {
+            tasks: [],
+            nextPageToken: '',
+            pageSize: 50,
+          },
+        }),
+      } as Response);
+
+      const capabilities = await probeCapabilities(mockAgentCard, false);
+
+      expect(capabilities.tasks).toBe(true);
+      expect(capabilities.streaming).toBe(false);
+    });
+
+    it('should handle network error during probe', async () => {
+      const mockAgentCard: AgentCard = {
+        name: 'Error Agent',
+        url: 'https://error.example.com',
+        version: '1.0.0',
+      };
+
+      vi.mocked(fetch).mockRejectedValueOnce(new Error('Connection refused'));
+
+      const capabilities = await probeCapabilities(mockAgentCard, false);
+
+      // On error, capabilities should be false (default)
+      expect(capabilities.tasks).toBe(false);
+      expect(capabilities.streaming).toBe(false);
+    });
+
+    it('should handle Agent Card with partial capabilities', async () => {
+      const mockAgentCard: AgentCard = {
+        name: 'Partial Capabilities Agent',
+        url: 'https://partial.example.com',
+        version: '1.0.0',
+        capabilities: {
+          // streaming is undefined, should default to false
+          pushNotifications: true,
+        },
+      };
+
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          jsonrpc: '2.0',
+          id: 'probe-tasks',
+          result: {
+            tasks: [],
+            nextPageToken: '',
+            pageSize: 50,
+          },
+        }),
+      } as Response);
+
+      const capabilities = await probeCapabilities(mockAgentCard, false);
+
+      expect(capabilities.tasks).toBe(true);
+      expect(capabilities.streaming).toBe(false);
     });
   });
 });

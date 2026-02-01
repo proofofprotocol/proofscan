@@ -10,7 +10,7 @@
  */
 
 import { randomUUID } from 'crypto';
-import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult, A2AMessage, A2ATask, Task, ListTasksParams, ListTasksResponse } from './types.js';
+import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult, A2AMessage, A2ATask, Task, ListTasksParams, ListTasksResponse, AgentCapabilities } from './types.js';
 import { isPrivateUrl } from './agent-card.js';
 import type { EventsStore } from '../db/events-store.js';
 
@@ -996,4 +996,77 @@ export async function createA2AClient(
   // Create client with allowLocal from config
   const client = new A2AClient(agentCard, { allowLocal: config.allow_local ?? false });
   return { ok: true, client, agentCard };
+}
+
+/**
+ * Probe agent capabilities (Phase 2.5)
+ *
+ * Detects agent capabilities by:
+ * 1. Checking Agent Card capabilities field (if present)
+ * 2. Probing tasks/list endpoint to detect task support
+ *
+ * Note: Streaming capability is only detected from Agent Card, not probed,
+ * because SSE probing is more complex and unreliable.
+ *
+ * @param agentCard - The agent's Agent Card
+ * @param _allowLocal - Reserved for future use (URL validation)
+ * @returns Promise<AgentCapabilities> with detected capabilities
+ */
+export async function probeCapabilities(
+  agentCard: AgentCard,
+  _allowLocal: boolean = false
+): Promise<AgentCapabilities> {
+  // Default capabilities (all false)
+  const capabilities: AgentCapabilities = {
+    tasks: false,
+    streaming: false,
+  };
+
+  // First, check Agent Card capabilities field (if present)
+  // This is the authoritative source if provided by the agent
+  if (agentCard.capabilities) {
+    if (agentCard.capabilities.streaming !== undefined) {
+      capabilities.streaming = agentCard.capabilities.streaming;
+    }
+  }
+
+  // Probe tasks/list endpoint
+  try {
+    const response = await fetch(agentCard.url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'probe-tasks',
+        method: 'tasks/list',
+        params: {},
+      }),
+      signal: AbortSignal.timeout(5000), // 5 second timeout for probe
+    });
+
+    // Check for successful JSON-RPC response
+    // A 200 with { "error": { "code": -32601, ... } } means method not found
+    if (response.ok) {
+      try {
+        const data = await response.json() as { result?: unknown; error?: unknown };
+        // Only set tasks=true if we get a result (not a JSON-RPC error)
+        if (data.result !== undefined && !data.error) {
+          capabilities.tasks = true;
+        }
+      } catch {
+        // If we can't parse JSON, assume tasks not supported
+      }
+    }
+  } catch {
+    // On network error or timeout, assume tasks not supported (keep false)
+  }
+
+  // Note: We don't probe message/stream here because:
+  // 1. It's more complex (SSE)
+  // 2. The Agent Card capabilities field is the preferred source
+  // 3. Most A2A agents that support tasks also support streaming
+
+  return capabilities;
 }

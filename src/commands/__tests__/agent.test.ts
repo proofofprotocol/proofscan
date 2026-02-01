@@ -10,6 +10,17 @@ import { AgentCacheStore } from '../../db/agent-cache-store.js';
 import { fetchAgentCard } from '../../a2a/agent-card.js';
 import type { AgentConfigV1 } from '../../a2a/types.js';
 
+// Mock probeCapabilities
+vi.mock('../../a2a/client.js', async () => {
+  const actual = await vi.importActual('../../a2a/client.js') as Record<string, unknown>;
+  return {
+    ...actual,
+    probeCapabilities: vi.fn(),
+  };
+});
+
+const { probeCapabilities } = await import('../../a2a/client.js');
+
 // Mock dependencies
 vi.mock('../../db/targets-store.js');
 vi.mock('../../db/agent-cache-store.js');
@@ -18,6 +29,12 @@ vi.mock('../../a2a/agent-card.js');
 describe('agent command', () => {
   let program: Command;
   let mockConfigPath: string;
+
+  // Mock probeCapabilities
+  vi.mocked(probeCapabilities).mockResolvedValue({
+    tasks: true,
+    streaming: false,
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
