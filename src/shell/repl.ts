@@ -1103,38 +1103,22 @@ Tips:
       return;
     }
 
-    // Close readline before pager to avoid stdin conflicts
-    // External pager uses stdio: ['pipe', inherit, inherit] so no stdin conflict,
-    // but built-in fallback uses raw mode which conflicts with readline
-    // Remove close listener temporarily to prevent "Goodbye!" message
+    // Pause readline instead of closing it to avoid listener conflicts
+    // This prevents the race condition between old and new readline listeners
     if (this.rl) {
-      this.rl.removeAllListeners('close');
-      this.rl.close();
+      this.rl.pause();
     }
-    this.rl = null;
 
     // Run pager
     const { LessPager, MorePager } = await import('./pager/index.js');
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
-    const pagerUsed = await pager.run(input);
+    await pager.run(input);
 
-    // Reset stdin state before recreating readline
-    // Always do this since we closed readline before pager.run()
-    if (process.stdin.isTTY && process.stdin.setRawMode) {
-      try {
-        process.stdin.setRawMode(false);
-      } catch {
-        // Ignore errors if already not in raw mode
-      }
+    // Resume readline after pager completes
+    if (this.rl) {
+      this.rl.resume();
+      this.rl.prompt();
     }
-
-    if (pagerUsed) {
-      // Pager was used - need to wait for TTY state to stabilize
-      await new Promise(resolve => setTimeout(resolve, 10));
-    }
-
-    // Recreate readline since we closed it before pager.run()
-    this.resetReadline();
   }
 
   /**

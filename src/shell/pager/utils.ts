@@ -32,27 +32,24 @@ export function parsePagerCommand(pagerString: string): { cmd: string; args: str
 }
 
 /**
- * Run a pager command with content
+ * Run a pager command with content (synchronous)
+ * Using spawnSync to ensure pager completes before returning,
+ * preventing readline listener conflicts.
+ *
  * @param cmd - Command to run
  * @param args - Command arguments
  * @param content - Content to pipe to pager
  */
-export function runPager(cmd: string, args: string[], content: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const pager = spawn(cmd, args, {
-      stdio: ['pipe', 'inherit', 'inherit'],
-    });
-
-    pager.on('error', reject);
-    pager.on('close', (code) => {
-      if (code === 0 || code === null) {
-        resolve();
-      } else {
-        reject(new Error(`Pager exited with code ${code}`));
-      }
-    });
-
-    pager.stdin?.write(content);
-    pager.stdin?.end();
+export function runPager(cmd: string, args: string[], content: string): void {
+  const result = spawnSync(cmd, args, {
+    input: content,
+    stdio: ['pipe', 'inherit', 'inherit'],
   });
+
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0 && result.status !== null) {
+    throw new Error(`Pager exited with code ${result.status}`);
+  }
 }
