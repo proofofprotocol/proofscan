@@ -6,11 +6,13 @@
  *
  * Phase 4 - Client Implementation
  * Phase 2 - Task Management (getTask, listTasks, cancelTask)
+ * Phase 2.4 - Task DB event recording
  */
 
 import { randomUUID } from 'crypto';
 import type { AgentCard, StreamEvent, TaskStatusUpdateEvent, TaskArtifactUpdateEvent, StreamMessageResult, A2AMessage, A2ATask, Task, ListTasksParams, ListTasksResponse } from './types.js';
 import { isPrivateUrl } from './agent-card.js';
+import type { EventsStore } from '../db/events-store.js';
 
 // Maximum response size (1MB) to prevent DoS
 const MAX_RESPONSE_SIZE = 1024 * 1024;
@@ -105,11 +107,20 @@ export class A2AClient {
   private agentCard: AgentCard;
 
   private allowLocal: boolean;
+  private eventsStore?: EventsStore; // Phase 2.4: Optional events store for task event recording
 
-  constructor(agentCard: AgentCard, options?: { headers?: Record<string, string>; allowLocal?: boolean }) {
+  constructor(
+    agentCard: AgentCard,
+    options?: {
+      headers?: Record<string, string>;
+      allowLocal?: boolean;
+      eventsStore?: EventsStore; // Phase 2.4
+    }
+  ) {
     this.agentCard = agentCard;
     this.baseUrl = agentCard.url.replace(/\/$/, '');
     this.allowLocal = options?.allowLocal ?? false;
+    this.eventsStore = options?.eventsStore; // Phase 2.4
 
     // SSRF protection: Block private URLs in constructor
     if (isPrivateUrl(this.baseUrl) && !this.allowLocal) {
@@ -121,6 +132,14 @@ export class A2AClient {
       'Accept': 'application/json',
       ...options?.headers,
     };
+  }
+
+  /**
+   * Get EventsStore instance (Phase 2.4)
+   * @private
+   */
+  private getEventsStore(): EventsStore | undefined {
+    return this.eventsStore;
   }
 
   /**

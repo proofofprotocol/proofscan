@@ -15,6 +15,12 @@ import type {
   PruneCandidate,
   UserRef,
   RefKind,
+  TaskStatus,
+  TaskEventKind,
+  TaskEventPayload,
+  TaskEvent,
+  A2AMessage,
+  TaskArtifact,
 } from './types.js';
 import { normalizeMcpEvent, normalizeA2aEvent } from '../a2a/normalizer.js';
 
@@ -1013,5 +1019,286 @@ export class EventsStore {
 
     // Return in descending order (newest first)
     return messages;
+  }
+
+  // ==================== Task Events (Phase 2.4) ====================
+
+  /**
+   * Normalize task status string to TaskStatus
+   * @private
+   */
+  private normalizeTaskStatus(status: unknown): TaskStatus {
+    if (typeof status !== 'string') return 'pending';
+
+    const validStatuses: TaskStatus[] = [
+      'pending',
+      'working',
+      'input_required',
+      'completed',
+      'failed',
+      'canceled',
+      'rejected',
+    ];
+
+    if (validStatuses.includes(status as TaskStatus)) {
+      return status as TaskStatus;
+    }
+
+    return 'pending';
+  }
+
+  /**
+   * Save a task event
+   *
+   * @param sessionId - Session ID
+   * @param taskEventKind - Task event kind
+   * @param payload - Task event payload
+   * @returns Task event record
+   */
+  saveTaskEvent(
+    sessionId: string,
+    taskEventKind: TaskEventKind,
+    payload: TaskEventPayload
+  ): TaskEvent {
+    const event: TaskEvent = {
+      event_id: randomUUID(),
+      session_id: sessionId,
+      task_id: payload.taskId,
+      event_kind: taskEventKind,
+      ts: new Date().toISOString(),
+      payload_json: JSON.stringify(payload),
+    };
+
+    const stmt = this.db.prepare(`
+      INSERT INTO task_events (event_id, session_id, task_id, event_kind, ts, payload_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      event.event_id,
+      event.session_id,
+      event.task_id,
+      event.event_kind,
+      event.ts,
+      event.payload_json
+    );
+
+    return event;
+  }
+
+  /**
+   * Get task events for a session
+   *
+   * @param sessionId - Session ID
+   * @param limit - Maximum number of events to return
+   * @returns Task events in chronological order
+   */
+  getTaskEventsBySession(sessionId: string, limit?: number): TaskEvent[] {
+    let sql = `SELECT * FROM task_events WHERE session_id = ? ORDER BY ts ASC`;
+    if (limit) {
+      sql += ` LIMIT ${limit}`;
+    }
+    const stmt = this.db.prepare(sql);
+    return stmt.all(sessionId) as TaskEvent[];
+  }
+
+  /**
+   * Get task events for a specific task
+   *
+   * @param taskId - Task ID
+   * @returns Task events for the task in chronological order
+   */
+  getTaskEventsByTaskId(taskId: string): TaskEvent[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM task_events WHERE task_id = ? ORDER BY ts ASC
+    `);
+    return stmt.all(taskId) as TaskEvent[];
+  }
+
+  /**
+   * Get recent task events across all sessions
+   *
+   * @param limit - Maximum number of events to return
+   * @returns Task events in descending order (newest first)
+   */
+  getRecentTaskEvents(limit: number = 20): TaskEvent[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM task_events ORDER BY ts DESC LIMIT ?
+    `);
+    const events = stmt.all(limit) as TaskEvent[];
+    return events.reverse(); // Return in chronological order (oldest first)
+  }
+
+  /**
+   * Get all task events for a target (agent)
+   *
+   * @param targetId - Target ID (agent ID)
+   * @param limit - Maximum number of events to return
+   * @returns Task events in chronological order
+   */
+  getTaskEventsByTarget(targetId: string, limit: number = 100): TaskEvent[] {
+    const stmt = this.db.prepare(`
+      SELECT te.* FROM task_events te
+      JOIN sessions s ON te.session_id = s.session_id
+      WHERE s.target_id = ?
+      ORDER BY te.ts ASC
+      LIMIT ?
+    `);
+    return stmt.all(targetId, limit) as TaskEvent[];
+  }
+
+  /**
+   * Get the last recorded status for a task
+   *
+   * @param taskId - Task ID
+   * @returns Last task event or null if not found
+   */
+  getLastTaskEvent(taskId: string): TaskEvent | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM task_events
+      WHERE task_id = ?
+      ORDER BY ts DESC
+      LIMIT 1
+    `);
+    return stmt.get(taskId) as TaskEvent | null;
+  }
+
+  /**
+   * Record task creation event
+   *
+   * @param sessionId - Session ID
+   * @param taskId - Task ID
+   * @param rawStatus - Raw status string from response
+   */
+  recordTaskCreated(sessionId: string, taskId: string, rawStatus: string): void {
+    const status = this.normalizeTaskStatus(rawStatus);
+    this.saveTaskEvent(sessionId, 'a2a:task:created', {
+      taskId,
+      rawStatus,
+      status,
+    });
+  }
+
+  /**
+   * Record task status update event
+   *
+   * Only records if status actually changed (no duplicate status events)
+   *
+   * @param sessionId - Session ID
+   * @param taskId - Task ID
+   * @param rawStatus - New raw status string
+   * @returns True if event was recorded, false if status unchanged
+   */
+  recordTaskUpdated(sessionId: string, taskId: string, rawStatus: string): boolean {
+    const status = this.normalizeTaskStatus(rawStatus);
+
+    // Check last recorded status to avoid duplicate events
+    const lastEvent = this.getLastTaskEvent(taskId);
+    if (lastEvent) {
+      const lastPayload = JSON.parse(lastEvent.payload_json) as TaskEventPayload;
+      if (lastPayload.status === status) {
+        // Status unchanged, don't record
+        return false;
+      }
+    }
+
+    this.saveTaskEvent(sessionId, 'a2a:task:updated', {
+      taskId,
+      rawStatus,
+      status,
+      previousStatus: lastEvent
+        ? (JSON.parse(lastEvent.payload_json) as TaskEventPayload).status
+        : undefined,
+    });
+    return true;
+  }
+
+  /**
+   * Record task completion event
+   *
+   * @param sessionId - Session ID
+   * @param taskId - Task ID
+   * @param rawStatus - Raw status string
+   * @param messages - Messages (optional)
+   * @param artifacts - Artifacts (optional)
+   */
+  recordTaskCompleted(
+    sessionId: string,
+    taskId: string,
+    rawStatus: string,
+    messages?: A2AMessage[],
+    artifacts?: TaskArtifact[]
+  ): void {
+    this.saveTaskEvent(sessionId, 'a2a:task:completed', {
+      taskId,
+      rawStatus,
+      status: 'completed',
+      messages,
+      artifacts,
+    });
+  }
+
+  /**
+   * Record task failure event
+   *
+   * @param sessionId - Session ID
+   * @param taskId - Task ID
+   * @param rawStatus - Raw status string
+   * @param error - Error message
+   */
+  recordTaskFailed(sessionId: string, taskId: string, rawStatus: string, error?: string): void {
+    this.saveTaskEvent(sessionId, 'a2a:task:failed', {
+      taskId,
+      rawStatus,
+      status: 'failed',
+      error,
+    });
+  }
+
+  /**
+   * Record task cancellation event
+   *
+   * @param sessionId - Session ID
+   * @param taskId - Task ID
+   * @param rawStatus - Raw status string
+   */
+  recordTaskCanceled(sessionId: string, taskId: string, rawStatus: string): void {
+    this.saveTaskEvent(sessionId, 'a2a:task:canceled', {
+      taskId,
+      rawStatus,
+      status: 'canceled',
+    });
+  }
+
+  /**
+   * Record task wait timeout event
+   *
+   * @param sessionId - Session ID
+   * @param taskId - Task ID
+   * @param error - Error message
+   */
+  recordTaskWaitTimeout(sessionId: string, taskId: string, error?: string): void {
+    this.saveTaskEvent(sessionId, 'a2a:task:wait_timeout', {
+      taskId,
+      rawStatus: 'timeout',
+      status: 'failed',
+      error: error || 'Task wait timeout',
+    });
+  }
+
+  /**
+   * Record task poll error event
+   *
+   * @param sessionId - Session ID
+   * @param taskId - Task ID
+   * @param error - Error message
+   */
+  recordTaskPollError(sessionId: string, taskId: string, error?: string): void {
+    this.saveTaskEvent(sessionId, 'a2a:task:poll_error', {
+      taskId,
+      rawStatus: 'poll_error',
+      status: 'failed',
+      error: error || 'Task poll error',
+    });
   }
 }
