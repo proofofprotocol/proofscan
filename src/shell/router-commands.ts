@@ -2009,14 +2009,35 @@ Examples:
   const configDir = configPath.replace(/\/[^/]+$/, '');
   const eventsStore = new EventsStore(configDir);
 
-  // ==================== Phase 2.4: Task Event History ====================
+  // ==================== Phase 2.4.1: Task Event History ====================
   if (taskId !== null) {
-    // history --task <id>: Show events for a specific task
+    // history --task <id>: Show timeline for a specific task
     const taskEvents = eventsStore.getTaskEventsByTaskId(taskId);
 
     if (taskEvents.length === 0) {
       printInfo(`No task events found for: ${taskId}`);
       return;
+    }
+
+    // Filter: remove duplicate status updates (only show transitions)
+    const filteredEvents: typeof taskEvents = [];
+    let lastStatus: string | null = null;
+
+    for (const event of taskEvents) {
+      const payload = JSON.parse(event.payload_json) as { status: string };
+      
+      // Always show non-updated events (created, completed, failed, canceled, client errors)
+      if (event.event_kind !== 'a2a:task:updated') {
+        filteredEvents.push(event);
+        lastStatus = payload.status;
+        continue;
+      }
+
+      // For updated events, only show if status changed
+      if (payload.status !== lastStatus) {
+        filteredEvents.push(event);
+        lastStatus = payload.status;
+      }
     }
 
     const isTTY = process.stdout.isTTY;
@@ -2026,30 +2047,46 @@ Examples:
     console.log(
       dimText('#', isTTY).padEnd(4) + '  ' +
       dimText('Time', isTTY).padEnd(10) + '  ' +
-      dimText('Event', isTTY).padEnd(25) + '  ' +
-      dimText('Status', isTTY).padEnd(15) + '  ' +
+      dimText('Category', isTTY).padEnd(14) + '  ' +
+      dimText('Status', isTTY).padEnd(12) + '  ' +
       dimText('Details', isTTY)
     );
-    console.log(dimText('-'.repeat(80), isTTY));
+    console.log(dimText('-'.repeat(70), isTTY));
+
+    // Normalize event kind to category
+    const getCategory = (kind: string): string => {
+      if (kind === 'a2a:task:created') return 'created';
+      if (kind === 'a2a:task:updated') return 'status';
+      if (kind === 'a2a:task:completed' || kind === 'a2a:task:failed' || kind === 'a2a:task:canceled') return 'terminal';
+      if (kind.includes('timeout') || kind.includes('error')) return 'client_error';
+      return kind.replace('a2a:task:', '');
+    };
 
     // Rows
-    taskEvents.forEach((event, idx) => {
+    filteredEvents.forEach((event, idx) => {
       const payload = JSON.parse(event.payload_json) as { status: string; error?: string; messages?: unknown };
       const timeStr = event.ts ? event.ts.slice(11, 19) : '--:--:--';
+      const category = getCategory(event.event_kind);
 
-      // Color-code event kind
-      let eventKind = event.event_kind;
+      // Color-code category
+      let categoryStr = category;
+      let statusStr = payload.status || '';
       if (isTTY) {
-        switch (event.event_kind) {
-          case 'a2a:task:completed':
-            eventKind = '\x1b[32m' + eventKind + '\x1b[0m'; // green
+        switch (category) {
+          case 'terminal':
+            if (payload.status === 'completed') {
+              categoryStr = '\x1b[32m' + category + '\x1b[0m'; // green
+              statusStr = '\x1b[32m' + statusStr + '\x1b[0m';
+            } else {
+              categoryStr = '\x1b[31m' + category + '\x1b[0m'; // red
+              statusStr = '\x1b[31m' + statusStr + '\x1b[0m';
+            }
             break;
-          case 'a2a:task:failed':
-          case 'a2a:task:wait_timeout':
-            eventKind = '\x1b[31m' + eventKind + '\x1b[0m'; // red
+          case 'client_error':
+            categoryStr = '\x1b[31m' + category + '\x1b[0m'; // red
             break;
-          case 'a2a:task:canceled':
-            eventKind = '\x1b[33m' + eventKind + '\x1b[0m'; // yellow
+          case 'status':
+            categoryStr = '\x1b[33m' + category + '\x1b[0m'; // yellow
             break;
           default:
             break;
@@ -2058,88 +2095,134 @@ Examples:
 
       // Build details string
       let details = '';
-      if (payload.status) {
-        details += `status: ${payload.status}`;
-      }
       if (payload.error) {
-        details += details ? ` | error: ${payload.error}` : `error: ${payload.error}`;
+        details = payload.error;
       }
       if (payload.messages && Array.isArray(payload.messages) && payload.messages.length > 0) {
-        details += details ? ` | ${payload.messages.length} messages` : `${payload.messages.length} messages`;
+        details = details ? `${details} | ${payload.messages.length} msgs` : `${payload.messages.length} msgs`;
       }
 
       console.log(
         String(idx + 1).padEnd(4) + '  ' +
         timeStr.padEnd(10) + '  ' +
-        eventKind.padEnd(25) + '  ' +
-        (payload.status || '').padEnd(15) + '  ' +
+        categoryStr.padEnd(isTTY ? 23 : 14) + '  ' +
+        statusStr.padEnd(isTTY ? 21 : 12) + '  ' +
         details
       );
     });
 
     console.log();
-    printInfo(`Showing ${taskEvents.length} event${taskEvents.length !== 1 ? 's' : ''} for task: ${taskId}`);
+    const skipped = taskEvents.length - filteredEvents.length;
+    if (skipped > 0) {
+      printInfo(`Showing ${filteredEvents.length} event${filteredEvents.length !== 1 ? 's' : ''} (${skipped} duplicate status updates hidden)`);
+    } else {
+      printInfo(`Showing ${filteredEvents.length} event${filteredEvents.length !== 1 ? 's' : ''}`);
+    }
     return;
   }
 
-  // Check for --task flag without taskId (show recent task events)
+  // Check for --task flag without taskId (show task summary list)
   if (args.includes('--task')) {
-    const taskEvents = eventsStore.getRecentTaskEvents(limit);
+    const taskEvents = eventsStore.getRecentTaskEvents(500); // Get more events to aggregate
 
     if (taskEvents.length === 0) {
       printInfo('No task events found');
       return;
     }
 
+    // Aggregate events by taskId
+    const taskSummary = new Map<string, {
+      taskId: string;
+      status: string;
+      eventCount: number;
+      lastTs: string;
+      hasError: boolean;
+    }>();
+
+    for (const event of taskEvents) {
+      const payload = JSON.parse(event.payload_json) as { status: string; error?: string };
+      const existing = taskSummary.get(event.task_id);
+
+      if (!existing) {
+        taskSummary.set(event.task_id, {
+          taskId: event.task_id,
+          status: payload.status || 'unknown',
+          eventCount: 1,
+          lastTs: event.ts,
+          hasError: event.event_kind.includes('failed') || event.event_kind.includes('timeout') || event.event_kind.includes('error'),
+        });
+      } else {
+        existing.eventCount++;
+        existing.status = payload.status || existing.status;
+        if (event.ts > existing.lastTs) {
+          existing.lastTs = event.ts;
+        }
+        if (event.event_kind.includes('failed') || event.event_kind.includes('timeout') || event.event_kind.includes('error')) {
+          existing.hasError = true;
+        }
+      }
+    }
+
+    // Sort by lastTs descending and limit
+    const sortedTasks = Array.from(taskSummary.values())
+      .sort((a, b) => b.lastTs.localeCompare(a.lastTs))
+      .slice(0, limit);
+
     const isTTY = process.stdout.isTTY;
     console.log();
 
     // Header
     console.log(
-      dimText('#', isTTY).padEnd(4) + '  ' +
-      dimText('Time', isTTY).padEnd(10) + '  ' +
-      dimText('Task ID', isTTY).padEnd(12) + '  ' +
-      dimText('Event', isTTY).padEnd(25) + '  ' +
-      dimText('Status', isTTY)
+      dimText('Task ID', isTTY).padEnd(14) + '  ' +
+      dimText('Status', isTTY).padEnd(12) + '  ' +
+      dimText('Events', isTTY).padEnd(8) + '  ' +
+      dimText('Last Activity', isTTY)
     );
-    console.log(dimText('-'.repeat(80), isTTY));
+    console.log(dimText('-'.repeat(60), isTTY));
 
     // Rows
-    taskEvents.forEach((event, idx) => {
-      const payload = JSON.parse(event.payload_json) as { status: string };
-      const timeStr = event.ts ? event.ts.slice(11, 19) : '--:--:--';
-      const taskIdShort = event.task_id.slice(0, 12);
+    for (const task of sortedTasks) {
+      const taskIdShort = task.taskId.slice(0, 12) + '...';
 
-      // Color-code event kind
-      let eventKind = event.event_kind;
+      // Color-code status
+      let statusStr = task.status;
       if (isTTY) {
-        switch (event.event_kind) {
-          case 'a2a:task:completed':
-            eventKind = '\x1b[32m' + eventKind + '\x1b[0m'; // green
-            break;
-          case 'a2a:task:failed':
-          case 'a2a:task:wait_timeout':
-            eventKind = '\x1b[31m' + eventKind + '\x1b[0m'; // red
-            break;
-          case 'a2a:task:canceled':
-            eventKind = '\x1b[33m' + eventKind + '\x1b[0m'; // yellow
-            break;
-          default:
-            break;
+        if (task.status === 'completed') {
+          statusStr = '\x1b[32m' + task.status + '\x1b[0m'; // green
+        } else if (task.hasError || task.status === 'failed' || task.status === 'canceled') {
+          statusStr = '\x1b[31m' + task.status + '\x1b[0m'; // red
+        } else if (task.status === 'working') {
+          statusStr = '\x1b[33m' + task.status + '\x1b[0m'; // yellow
         }
       }
 
+      // Format time as relative
+      const lastDate = new Date(task.lastTs);
+      const now = new Date();
+      const diffMs = now.getTime() - lastDate.getTime();
+      const diffMin = Math.floor(diffMs / 60000);
+      let timeAgo: string;
+      if (diffMin < 1) {
+        timeAgo = 'just now';
+      } else if (diffMin < 60) {
+        timeAgo = `${diffMin}m ago`;
+      } else if (diffMin < 1440) {
+        timeAgo = `${Math.floor(diffMin / 60)}h ago`;
+      } else {
+        timeAgo = `${Math.floor(diffMin / 1440)}d ago`;
+      }
+
       console.log(
-        String(idx + 1).padEnd(4) + '  ' +
-        timeStr.padEnd(10) + '  ' +
-        taskIdShort.padEnd(12) + '  ' +
-        eventKind.padEnd(25) + '  ' +
-        (payload.status || '')
+        taskIdShort.padEnd(14) + '  ' +
+        statusStr.padEnd(isTTY ? 21 : 12) + '  ' + // Extra padding for ANSI codes
+        String(task.eventCount).padEnd(8) + '  ' +
+        timeAgo
       );
-    });
+    }
 
     console.log();
-    printInfo(`Showing ${taskEvents.length} recent task event${taskEvents.length !== 1 ? 's' : ''}`);
+    printInfo(`Showing ${sortedTasks.length} task${sortedTasks.length !== 1 ? 's' : ''}`);
+    printInfo('Use: history --task <id> for task timeline');
     return;
   }
   // ====================================================================
