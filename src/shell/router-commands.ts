@@ -1935,6 +1935,11 @@ Note: Must be in an A2A session context (cd <agent>/<session>)
     } else if (arg === '--search' && i + 1 < args.length) {
       searchQuery = args[i + 1];
       i++;
+    } else if (arg.startsWith('-')) {
+      // Unknown option - warn user
+      printError(`Unknown option: ${arg}`);
+      printInfo('Use: history -h for usage');
+      return;
     }
   }
 
