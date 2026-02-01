@@ -989,28 +989,31 @@ Tips:
     // Run pager
     const { LessPager, MorePager } = await import('./pager/index.js');
     const pager = pagerCmd === 'less' ? new LessPager() : new MorePager();
-    await pager.run(input);
+    const pagerUsed = await pager.run(input);
 
-    // Pause stdin and remove all listeners after pager exits
-    process.stdin.pause();
-    process.stdin.removeAllListeners();
+    // Reset stdin and recreate readline
+    if (pagerUsed) {
+      // Pager was used - need full stdin reset
+      process.stdin.pause();
+      process.stdin.removeAllListeners();
 
-    // Ensure stdin is not in raw mode (built-in pager sets raw mode)
-    if (process.stdin.isTTY && process.stdin.setRawMode) {
-      try {
-        process.stdin.setRawMode(false);
-      } catch {
-        // Ignore errors if already not in raw mode
+      // Ensure stdin is not in raw mode (built-in pager sets raw mode)
+      if (process.stdin.isTTY && process.stdin.setRawMode) {
+        try {
+          process.stdin.setRawMode(false);
+        } catch {
+          // Ignore errors if already not in raw mode
+        }
       }
+
+      // Wait briefly for TTY state to stabilize after external command
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Resume stdin
+      process.stdin.resume();
     }
 
-    // Wait briefly for TTY state to stabilize after external command
-    await new Promise(resolve => setTimeout(resolve, 10));
-
-    // Resume stdin
-    process.stdin.resume();
-
-    // Recreate readline after pager exits
+    // Always recreate readline since we closed it before pager.run()
     this.resetReadline();
   }
 
