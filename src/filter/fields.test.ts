@@ -7,7 +7,7 @@ import { FILTER_FIELDS, VALID_FIELDS, suggestFields, isValidField } from './fiel
 
 describe('FILTER_FIELDS', () => {
   it('has expected number of fields', () => {
-    expect(FILTER_FIELDS.length).toBe(11);
+    expect(FILTER_FIELDS.length).toBe(15);
   });
 
   it('includes all expected fields', () => {
@@ -87,7 +87,7 @@ describe('suggestFields', () => {
   it('returns all fields for empty prefix', () => {
     const suggestions = suggestFields('');
     // Empty prefix matches all fields (all start with empty string)
-    expect(suggestions.length).toBe(11);
+    expect(suggestions.length).toBe(15);
   });
 
   it('returns matching fields for prefix', () => {
