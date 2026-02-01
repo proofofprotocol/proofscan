@@ -478,6 +478,9 @@ export class ShellRepl {
       case 'find':
         await this.handleFind(args);
         break;
+      case 'history':
+        await handleHistory(args, this.context, this.configPath);
+        break;
     }
   }
 
