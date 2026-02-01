@@ -883,11 +883,17 @@ Tips:
 
       input = findResult.result;
       statsLabel = `rows (across ${findResult.stats.sessions} sessions)`;
+    } else if (leftCommand === 'history') {
+      // Get history rows
+      const { getHistoryRows } = await import('./router-commands.js');
+      input = getHistoryRows(this.context, this.configPath);
+      statsLabel = 'messages';
     } else {
-      printError('where/grep only supports "ls" or "find" as input');
+      printError('where/grep only supports "ls", "find", or "history" as input');
       printInfo('Examples:');
       printInfo('  ls | where rpc.method == "tools/call"');
       printInfo('  find rpc | where tools.name ~= "read"');
+      printInfo('  history | where role == "user"');
       return;
     }
 
@@ -943,11 +949,15 @@ Tips:
       }
 
       input = findResult.result;
+    } else if (leftCommand === 'history') {
+      const { getHistoryRows } = await import('./router-commands.js');
+      input = getHistoryRows(this.context, this.configPath);
     } else {
-      printError(`${pagerCmd} only supports "ls" or "find" as input`);
+      printError(`${pagerCmd} only supports "ls", "find", or "history" as input`);
       printInfo('Examples:');
       printInfo('  ls | less');
       printInfo('  find rpc | less');
+      printInfo('  history | less');
       return;
     }
 

@@ -175,7 +175,7 @@ export const SHELL_BUILTINS = ['reset', 'pwd', 'help', 'exit', 'quit', 'clear'];
 /**
  * Router-style navigation commands
  */
-export const ROUTER_COMMANDS = ['cd', 'ls', 'show', '..', 'find'];
+export const ROUTER_COMMANDS = ['cd', 'ls', 'show', '..', 'find', 'history'];
 
 /**
  * Shell-native tool commands (Phase 4.0)
