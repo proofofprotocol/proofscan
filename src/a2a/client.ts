@@ -120,6 +120,7 @@ export class A2AClient {
     this.agentCard = agentCard;
     this.baseUrl = agentCard.url.replace(/\/$/, '');
     this.allowLocal = options?.allowLocal ?? false;
+    this.eventsStore = options?.eventsStore; // Phase 2.4
 
     // SSRF protection: Block private URLs in constructor
     if (isPrivateUrl(this.baseUrl) && !this.allowLocal) {
