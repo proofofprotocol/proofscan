@@ -20,7 +20,7 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 2.4.1 | history --task | ✅ 完了 | 2026-02-01 |
 | 2.5 | show に capabilities 追加 | ✅ 完了 | 2026-02-01 |
 | 3.1 | SSE クライアント | ✅ 完了 | 2026-02-03 |
-| 3.2 | UI対応 | 📋 未着手 | - |
+| 3.2 | UI対応 | ✅ 完了 | 2026-02-03 |
 | 4 | 認証 | 📋 未着手 | - |
 | 5 | 高度な機能 | 📋 未着手 | - |
 | 6 | MCP Apps 対応 | 🚀 優先 | - |
@@ -194,9 +194,13 @@ Phase 2.2 Task CLI の検証用に、glm-dice-agent に Task 管理機能を追�
 
 **PR:** #98 (merged 2026-02-03)
 
-### 3.2 UI対応
-- [ ] ストリーミング中のプログレス表示
-- [ ] Ctrl+C でストリーム中断
+### 3.2 UI対応 ✅
+- [x] ストリーミング中のプログレス表示 (ora spinner)
+- [x] Ctrl+C でストリーム中断 (graceful abort)
+- [x] 非TTY環境対応 (CI互換)
+- [x] exit code 130 (SIGINT標準)
+
+**PR:** #99 (merged 2026-02-03)
 
 ---
 
@@ -275,4 +279,4 @@ MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロ
 
 ---
 
-*Last updated: 2026-02-02*
+*Last updated: 2026-02-03*
