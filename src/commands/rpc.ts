@@ -28,6 +28,7 @@ import {
 import { redactDeep } from '../secrets/redaction.js';
 import { t } from '../i18n/index.js';
 import { createA2AClient } from '../a2a/client.js';
+import ora from 'ora';
 import {
   DEFAULT_EMBED_MAX_BYTES,
   toRpcStatus,
@@ -623,33 +624,99 @@ export function createRpcCommand(getConfigPath: () => string): Command {
         if (options.stream) {
           console.log(`Streaming to ${agentId}...`);
 
-          const result = await client.streamMessage(message, {
-            timeout,
-            onStatus: (event) => {
-              console.log(`[${event.status}] ${event.taskId}`);
-              if (event.message) {
-                const text = extractTextFromMessage(event.message);
-                if (text) process.stdout.write(text);
-              }
-            },
-            onArtifact: (event) => {
-              console.log(`\n[Artifact] ${event.artifact.name || 'unnamed'}`);
-            },
-            onMessage: (msg) => {
-              const text = extractTextFromMessage(msg);
-              if (text) process.stdout.write(text);
-            },
-            onError: (err) => {
-              console.error(`\n[Error] ${err}`);
-            },
-          });
+          // AbortController for graceful shutdown
+          const controller = new AbortController();
+          let aborted = false;
 
-          console.log(); // newline
-          if (!result.ok) {
-            console.error(`Stream error: ${result.error}`);
-            process.exit(1);
+          // SIGINT handler for Ctrl+C
+          const sigintHandler = () => {
+            aborted = true;
+            controller.abort();
+          };
+
+          process.once('SIGINT', sigintHandler);
+
+          // Spinner for progress indication (disabled in CI/non-TTY)
+          const isTty = process.stdout.isTTY;
+          const spinner = isTty ? ora({ text: 'Waiting for response...', spinner: 'dots' }).start() : null;
+
+          try {
+            const result = await client.streamMessage(message, {
+              signal: controller.signal,
+              timeout,
+              onStatus: (event) => {
+                if (aborted) return;
+
+                // Pause spinner, output status, resume spinner
+                if (spinner) spinner.stopAndPersist();
+
+                const statusText = `[${event.status}] ${event.taskId}`;
+                console.log(statusText);
+
+                if (event.message) {
+                  const text = extractTextFromMessage(event.message);
+                  if (text) process.stdout.write(text);
+                }
+
+                if (spinner) spinner.start();
+              },
+              onArtifact: (event) => {
+                if (aborted) return;
+
+                if (spinner) spinner.stopAndPersist();
+
+                console.log(`\n[Artifact] ${event.artifact.name || 'unnamed'}`);
+
+                if (spinner) spinner.start();
+              },
+              onMessage: (msg) => {
+                if (aborted) return;
+
+                if (spinner) spinner.stopAndPersist();
+
+                const text = extractTextFromMessage(msg);
+                if (text) process.stdout.write(text);
+
+                if (spinner) spinner.start();
+              },
+              onError: (err) => {
+                if (aborted) return;
+
+                if (spinner) spinner.stopAndPersist();
+
+                console.error(`\n[Error] ${err}`);
+
+                if (spinner) spinner.start();
+              },
+            });
+
+            // Clean up
+            process.off('SIGINT', sigintHandler);
+            if (spinner) spinner.stop();
+
+            console.log(); // newline
+
+            if (aborted) {
+              console.log('⚠️  Stream interrupted by user');
+              process.exit(130); // Standard exit code for SIGINT
+            }
+
+            if (!result.ok) {
+              console.error(`Stream error: ${result.error}`);
+              process.exit(1);
+            }
+            return;
+          } catch (err) {
+            process.off('SIGINT', sigintHandler);
+            if (spinner) spinner.stop();
+
+            if (aborted || (err instanceof Error && err.name === 'AbortError')) {
+              console.log('\n⚠️  Stream interrupted by user');
+              process.exit(130);
+            }
+
+            throw err;
           }
-          return;
         }
 
         // Non-streaming mode
