@@ -66,10 +66,10 @@ describe('A2AClient - streamMessage', () => {
     vi.clearAllMocks();
   });
 
-  // ===== 正常系テスト =====
+  // ===== Normal Cases =====
 
-  describe('正常系', () => {
-    it('1. ステータスイベント受信: onStatus コールバックが呼ばれる', async () => {
+  describe('Normal cases', () => {
+    it('1. Status events: onStatus callback is called', async () => {
       const statusEvents: Array<unknown> = [];
 
       vi.mocked(fetch).mockResolvedValueOnce(
@@ -110,7 +110,7 @@ describe('A2AClient - streamMessage', () => {
       });
     });
 
-    it('2. メッセージイベント受信: onMessage コールバックが呼ばれる', async () => {
+    it('2. Message events: onMessage callback is called', async () => {
       const messages: Array<unknown> = [];
 
       vi.mocked(fetch).mockResolvedValueOnce(
@@ -145,7 +145,7 @@ describe('A2AClient - streamMessage', () => {
       });
     });
 
-    it('3. final=true で終了: ストリームが正常終了し ok=true を返す', async () => {
+    it('3. Final flag: stream terminates normally with ok=true', async () => {
       vi.mocked(fetch).mockResolvedValueOnce(
         createSSEResponse([
           sseEvent({
@@ -172,7 +172,7 @@ describe('A2AClient - streamMessage', () => {
       expect(result.error).toBeUndefined();
     });
 
-    it('4. [DONE] マーカーを受信してもエラーにならない', async () => {
+    it('4. [DONE] marker: no error when received', async () => {
       const statusEvents: Array<unknown> = [];
 
       vi.mocked(fetch).mockResolvedValueOnce(
@@ -201,11 +201,11 @@ describe('A2AClient - streamMessage', () => {
 
       expect(result.ok).toBe(true);
       expect(result.taskId).toBe('task-done');
-      // [DONE] はスキップされるので2つのイベントのみ
+      // [DONE] is skipped, so only 2 events
       expect(statusEvents).toHaveLength(2);
     });
 
-    it('複数のイベントタイプが混在しても正しく処理される', async () => {
+    it('handles multiple event types correctly', async () => {
       const statusEvents: Array<unknown> = [];
       const messages: Array<unknown> = [];
       const artifacts: Array<unknown> = [];
@@ -256,7 +256,7 @@ describe('A2AClient - streamMessage', () => {
       expect(artifacts).toHaveLength(1);
     });
 
-    it('文字列メッセージと A2AMessage オブジェクト両方で動作する', async () => {
+    it('works with both string and A2AMessage object', async () => {
       const client = new A2AClient(validAgentCard);
 
       // String message
@@ -296,7 +296,7 @@ describe('A2AClient - streamMessage', () => {
       expect(result2.ok).toBe(true);
     });
 
-    it('A2ATask イベントも受信できる', async () => {
+    it('receives A2ATask events via onTask callback', async () => {
       const tasks: Array<unknown> = [];
 
       vi.mocked(fetch).mockResolvedValueOnce(
@@ -331,10 +331,10 @@ describe('A2AClient - streamMessage', () => {
     });
   });
 
-  // ===== 異常系テスト =====
+  // ===== Error Cases =====
 
-  describe('異常系', () => {
-    it('5. 非SSEレスポンス: Content-Type が text/event-stream でない場合エラーを返す', async () => {
+  describe('Error cases', () => {
+    it('5. Non-SSE response: returns error when Content-Type is not text/event-stream', async () => {
       vi.mocked(fetch).mockResolvedValueOnce(
         createSSEResponse(['data: {}\n\n'], 'application/json')
       );
@@ -347,9 +347,9 @@ describe('A2AClient - streamMessage', () => {
       expect(result.error).toContain('application/json');
     });
 
-    it('6. タイムアウト: AbortSignal が渡される', async () => {
-      // タイムアウト時にAbortControllerが作成されることを確認
-      // Note: fetch モックが AbortSignal を尊重しないため、実際のタイムアウト動作は統合テストで検証
+    it('6. Timeout: AbortSignal is passed to fetch', async () => {
+      // Verify AbortController is created for timeout
+      // Note: fetch mock doesn't respect AbortSignal, so actual timeout behavior is deferred to integration tests
       vi.mocked(fetch).mockResolvedValueOnce(
         createSSEResponse([
           sseEvent({
@@ -365,14 +365,14 @@ describe('A2AClient - streamMessage', () => {
       const client = new A2AClient(validAgentCard);
       const result = await client.streamMessage('Timeout test', { timeout: 1000 });
 
-      // fetch が呼ばれ、signal が渡されていることを確認
+      // Verify fetch was called with signal
       expect(fetch).toHaveBeenCalled();
       const fetchCall = vi.mocked(fetch).mock.calls[0];
       expect(fetchCall[1]?.signal).toBeDefined();
       expect(result.ok).toBe(true);
     });
 
-    it('7. パースエラー: 不正なJSONの場合 onError コールバックが呼ばれる', async () => {
+    it('7. Parse error: onError callback is called for invalid JSON', async () => {
       const errors: string[] = [];
 
       vi.mocked(fetch).mockResolvedValueOnce(
@@ -383,7 +383,7 @@ describe('A2AClient - streamMessage', () => {
               status: 'working',
             },
           }),
-          'data: {invalid json}\n\n', // 不正なJSON
+          'data: {invalid json}\n\n', // Invalid JSON
           sseEvent({
             result: {
               taskId: 'task-parse',
@@ -399,13 +399,13 @@ describe('A2AClient - streamMessage', () => {
         onError: (error) => errors.push(error),
       });
 
-      // エラーがあってもストリームは続く
+      // Stream continues even with errors
       expect(result.ok).toBe(true);
       expect(errors.length).toBeGreaterThan(0);
       expect(errors[0]).toContain('Parse error');
     });
 
-    it('HTTP エラー応答を処理できる', async () => {
+    it('handles HTTP error responses', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         status: 500,
@@ -422,7 +422,7 @@ describe('A2AClient - streamMessage', () => {
       expect(result.error).toContain('Internal Server Error');
     });
 
-    it('ネットワークエラーを処理できる', async () => {
+    it('handles network errors', async () => {
       vi.mocked(fetch).mockRejectedValueOnce(new Error('Network error'));
 
       const client = new A2AClient(validAgentCard);
@@ -432,7 +432,7 @@ describe('A2AClient - streamMessage', () => {
       expect(result.error).toBe('Error: Network error');
     });
 
-    it('レスポンスボディがない場合エラーを返す', async () => {
+    it('returns error when response body is missing', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -448,11 +448,11 @@ describe('A2AClient - streamMessage', () => {
       expect(result.error).toBe('No response body');
     });
 
-    it('外部 AbortSignal を受け入れられる', async () => {
+    it('accepts external AbortSignal', async () => {
       const controller = new AbortController();
 
       vi.mocked(fetch).mockImplementationOnce(() => {
-        // シグナルで中止されるまで待つ
+        // Wait until aborted by signal
         return new Promise<Response>((_, reject) => {
           controller.signal.addEventListener('abort', () => {
             reject(new DOMException('Aborted', 'AbortError'));
@@ -463,10 +463,10 @@ describe('A2AClient - streamMessage', () => {
       const client = new A2AClient(validAgentCard);
       const resultPromise = client.streamMessage('Abort test', {
         signal: controller.signal,
-        timeout: 60000, // デフォルトのタイムアウト
+        timeout: 60000, // Default timeout
       });
 
-      // 外部から中止
+      // Abort from external signal
       controller.abort();
 
       const result = await resultPromise;
@@ -475,7 +475,7 @@ describe('A2AClient - streamMessage', () => {
       expect(result.error).toBe('Timeout after 60000ms');
     });
 
-    it('カスタムヘッダーを送信できる', async () => {
+    it('sends custom headers', async () => {
       vi.mocked(fetch).mockResolvedValueOnce(
         createSSEResponse([
           sseEvent({
@@ -504,10 +504,10 @@ describe('A2AClient - streamMessage', () => {
     });
   });
 
-  // ===== プライベートURL保護 =====
+  // ===== SSRF Protection =====
 
   describe('SSRF Protection', () => {
-    it('プライベートURLをブロックする', async () => {
+    it('blocks localhost URLs', async () => {
       const privateAgent: AgentCard = {
         ...validAgentCard,
         url: 'http://localhost:8080',
@@ -515,13 +515,13 @@ describe('A2AClient - streamMessage', () => {
 
       vi.mocked(fetch).mockResolvedValueOnce(createSSEResponse([]));
 
-      // コンストラクタでエラーになるはず
+      // Should throw error in constructor
       expect(() => new A2AClient(privateAgent)).toThrow(
         'Private or local URLs are not allowed'
       );
     });
 
-    it('127.0.0.1 URLをブロックする', async () => {
+    it('blocks 127.0.0.1 URLs', async () => {
       const privateAgent: AgentCard = {
         ...validAgentCard,
         url: 'http://127.0.0.1:8080',
@@ -533,10 +533,10 @@ describe('A2AClient - streamMessage', () => {
     });
   });
 
-  // ===== エッジケース =====
+  // ===== Edge Cases =====
 
-  describe('エッジケース', () => {
-    it('空のストリームも正常終了する', async () => {
+  describe('Edge cases', () => {
+    it('empty stream terminates normally', async () => {
       vi.mocked(fetch).mockResolvedValueOnce(createSSEResponse([]));
 
       const client = new A2AClient(validAgentCard);
@@ -546,7 +546,7 @@ describe('A2AClient - streamMessage', () => {
       expect(result.taskId).toBeUndefined();
     });
 
-    // Note: チャンク分割処理、複数行バッファ、unknown eventスキップは統合テストで検証
-    // モックのReadableStream実装の制限により、ユニットテストでは安定しない
+    // Note: Chunk splitting, multi-line buffer, and unknown event skip are deferred to integration tests
+    // Due to limitations in mocking ReadableStream behavior in unit tests
   });
 });
