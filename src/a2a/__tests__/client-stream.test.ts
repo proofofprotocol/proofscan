@@ -329,6 +329,191 @@ describe('A2AClient - streamMessage', () => {
         messages: [{ role: 'user', parts: [{ text: 'Task message' }] }],
       });
     });
+
+    it('handles message with contextId and metadata', async () => {
+      const messages: Array<unknown> = [];
+
+      vi.mocked(fetch).mockResolvedValueOnce(
+        createSSEResponse([
+          sseEvent({
+            result: {
+              role: 'assistant',
+              parts: [{ text: 'Hello' }],
+              contextId: 'ctx-123',
+              metadata: { source: 'test', version: 1 },
+            },
+          }),
+          sseEvent({
+            result: {
+              taskId: 'task-meta',
+              status: 'completed',
+              final: true,
+            },
+          }),
+        ])
+      );
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.streamMessage('Metadata test', {
+        onMessage: (m) => messages.push(m),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        role: 'assistant',
+        parts: [{ text: 'Hello' }],
+        contextId: 'ctx-123',
+        metadata: { source: 'test', version: 1 },
+      });
+    });
+
+    it('handles message with referenceTaskIds', async () => {
+      const messages: Array<unknown> = [];
+
+      vi.mocked(fetch).mockResolvedValueOnce(
+        createSSEResponse([
+          sseEvent({
+            result: {
+              role: 'assistant',
+              parts: [{ text: 'Reference message' }],
+              referenceTaskIds: ['task-1', 'task-2'],
+            },
+          }),
+          sseEvent({
+            result: {
+              taskId: 'task-ref',
+              status: 'completed',
+              final: true,
+            },
+          }),
+        ])
+      );
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.streamMessage('Reference test', {
+        onMessage: (m) => messages.push(m),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(messages).toHaveLength(1);
+      expect(messages[0]).toMatchObject({
+        role: 'assistant',
+        parts: [{ text: 'Reference message' }],
+        referenceTaskIds: ['task-1', 'task-2'],
+      });
+    });
+
+    it('handles artifact with chunking fields (index, append, lastChunk)', async () => {
+      const artifacts: Array<unknown> = [];
+
+      vi.mocked(fetch).mockResolvedValueOnce(
+        createSSEResponse([
+          sseEvent({
+            result: {
+              taskId: 'task-chunk',
+              artifact: {
+                name: 'large-file.txt',
+                parts: [{ text: 'First chunk' }],
+                index: 0,
+                append: false,
+                lastChunk: false,
+              },
+            },
+          }),
+          sseEvent({
+            result: {
+              taskId: 'task-chunk',
+              artifact: {
+                name: 'large-file.txt',
+                parts: [{ text: 'Second chunk' }],
+                index: 0,
+                append: true,
+                lastChunk: true,
+              },
+            },
+          }),
+          sseEvent({
+            result: {
+              taskId: 'task-chunk',
+              status: 'completed',
+              final: true,
+            },
+          }),
+        ])
+      );
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.streamMessage('Chunked artifact test', {
+        onArtifact: (a) => artifacts.push(a),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(artifacts).toHaveLength(2);
+      expect(artifacts[0]).toMatchObject({
+        taskId: 'task-chunk',
+        artifact: {
+          name: 'large-file.txt',
+          parts: [{ text: 'First chunk' }],
+          index: 0,
+          append: false,
+          lastChunk: false,
+        },
+      });
+      expect(artifacts[1]).toMatchObject({
+        taskId: 'task-chunk',
+        artifact: {
+          name: 'large-file.txt',
+          parts: [{ text: 'Second chunk' }],
+          index: 0,
+          append: true,
+          lastChunk: true,
+        },
+      });
+    });
+
+    it('handles status event with contextId', async () => {
+      const statusEvents: Array<unknown> = [];
+
+      vi.mocked(fetch).mockResolvedValueOnce(
+        createSSEResponse([
+          sseEvent({
+            result: {
+              taskId: 'task-ctx',
+              contextId: 'session-456',
+              status: 'working',
+            },
+          }),
+          sseEvent({
+            result: {
+              taskId: 'task-ctx',
+              contextId: 'session-456',
+              status: 'completed',
+              final: true,
+            },
+          }),
+        ])
+      );
+
+      const client = new A2AClient(validAgentCard);
+      const result = await client.streamMessage('Context test', {
+        onStatus: (e) => statusEvents.push(e),
+      });
+
+      expect(result.ok).toBe(true);
+      expect(statusEvents).toHaveLength(2);
+      expect(statusEvents[0]).toMatchObject({
+        taskId: 'task-ctx',
+        contextId: 'session-456',
+        status: 'working',
+      });
+      expect(statusEvents[1]).toMatchObject({
+        taskId: 'task-ctx',
+        contextId: 'session-456',
+        status: 'completed',
+        final: true,
+      });
+    });
   });
 
   // ===== Error Cases =====
@@ -497,7 +682,9 @@ describe('A2AClient - streamMessage', () => {
       });
 
       const fetchCall = vi.mocked(fetch).mock.calls[0];
-      expect(fetchCall[1].headers).toMatchObject({
+      expect(fetchCall[1].headers).toEqual({
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'X-Default-Header': 'default-value',
         'X-Custom-Header': 'custom-value',
       });
