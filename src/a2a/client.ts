@@ -627,7 +627,7 @@ export class A2AClient {
 
     try {
       // SSRF protection (defense-in-depth)
-      if (isPrivateUrl(this.baseUrl)) {
+      if (isPrivateUrl(this.baseUrl) && !this.allowLocal) {
         return {
           ok: false,
           error: 'Private or local URLs are not allowed',
