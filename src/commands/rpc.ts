@@ -655,7 +655,7 @@ export function createRpcCommand(getConfigPath: () => string): Command {
 
                 if (event.message) {
                   const text = extractTextFromMessage(event.message);
-                  if (text) process.stdout.write(text);
+                  if (text) console.log(`  ${text}`);
                 }
 
                 if (spinner) spinner.start();
