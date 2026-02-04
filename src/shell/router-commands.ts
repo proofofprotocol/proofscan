@@ -11,6 +11,7 @@ import { AgentCacheStore } from '../db/agent-cache-store.js';
 import { A2AClient } from '../a2a/client.js';
 import type { AgentCard } from '../a2a/types.js';
 import { printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
+import ora from 'ora';
 import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
 import { EventsStore } from '../db/events-store.js';
@@ -1616,6 +1617,78 @@ export async function handleA2ASend(
   // Send message via A2A client
   try {
     const client = new A2AClient(agentCard, { allowLocal });
+
+    // Check if agent supports streaming
+    const supportsStreaming = agentCard.capabilities?.streaming === true;
+
+    const isTTY = process.stdout.isTTY;
+    const botPrefix = isTTY ? '\x1b[36m🤖\x1b[0m' : '🤖';
+
+    // Streaming mode: use streamMessage for agents with streaming capability
+    if (supportsStreaming) {
+      const spinner = isTTY ? ora({ text: 'Waiting for response...', spinner: 'dots' }).start() : null;
+
+      const streamResult = await client.streamMessage(message, {
+        onStatus: (event) => {
+          if (spinner) spinner.stopAndPersist();
+          const statusText = `[${event.status}] ${event.taskId}`;
+          console.log(statusText);
+          if (event.message) {
+            const parts = event.message.parts || [];
+            for (const part of parts) {
+              if ('text' in part && part.text) {
+                console.log(`  ${botPrefix} ${part.text}`);
+              }
+            }
+          }
+          if (spinner) spinner.start();
+        },
+        onArtifact: (event) => {
+          if (spinner) spinner.stopAndPersist();
+          console.log(`\n[Artifact] ${event.artifact?.name || 'unnamed'}`);
+          if (spinner) spinner.start();
+        },
+        onMessage: (msg) => {
+          if (spinner) spinner.stopAndPersist();
+          const parts = msg.parts || [];
+          for (const part of parts) {
+            if ('text' in part && part.text) {
+              console.log(`${botPrefix} ${part.text}`);
+            }
+          }
+          if (spinner) spinner.start();
+        },
+        onError: (err) => {
+          if (spinner) spinner.stopAndPersist();
+          printError(`Stream error: ${err}`);
+          if (spinner) spinner.start();
+        },
+      });
+
+      if (spinner) spinner.stop();
+
+      if (!streamResult.ok) {
+        // Record error
+        if (sessionManager) {
+          sessionManager.recordError(undefined, rpcId, streamResult.error || 'Unknown error');
+        }
+        printError(`Stream error: ${streamResult.error}`);
+        return;
+      }
+
+      // Record the streaming session (request + final result)
+      if (sessionManager) {
+        sessionManager.recordMessage(undefined, requestMessage, true, rpcId);
+        // Record as completed RPC
+        const eventsStore = sessionManager.getEventsStore();
+        const sessionId = sessionManager.getOrCreateSession(undefined);
+        eventsStore.completeRpcCall(sessionId, rpcId, streamResult.ok);
+      }
+
+      return;
+    }
+
+    // Non-streaming mode (existing code unchanged)
     const result = await client.sendMessage(message);
 
     if (!result.ok) {
@@ -1626,9 +1699,6 @@ export async function handleA2ASend(
       printError(`A2A error: ${result.error}`);
       return;
     }
-
-    const isTTY = process.stdout.isTTY;
-    const botPrefix = isTTY ? '\x1b[36m🤖\x1b[0m' : '🤖';
 
     // Determine contextId from response (or undefined if no response)
     const contextId = result.message?.contextId ?? result.task?.contextId;
