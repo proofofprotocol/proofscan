@@ -16,6 +16,10 @@ vi.mock('../../a2a/client.js', () => ({
   A2AClient: vi.fn(),
 }));
 
+vi.mock('../../a2a/session-manager.js', () => ({
+  createA2ASessionManager: vi.fn(),
+}));
+
 import { handleA2ASend } from '../router-commands.js';
 import { TargetsStore } from '../../db/targets-store.js';
 import { AgentCacheStore } from '../../db/agent-cache-store.js';
@@ -40,7 +44,7 @@ describe('handleA2ASend', () => {
   it('should error when not in connector context', async () => {
     const context: ShellContext = {};
     await handleA2ASend(['hello'], context, '/tmp/config.json');
-    
+
     expect(mockConsoleError).toHaveBeenCalledWith(
       expect.stringContaining('Not in a target context')
     );
@@ -49,7 +53,7 @@ describe('handleA2ASend', () => {
   it('should error when no message provided', async () => {
     const context: ShellContext = { connector: 'test-agent' };
     await handleA2ASend([], context, '/tmp/config.json');
-    
+
     expect(mockConsoleError).toHaveBeenCalledWith(
       expect.stringContaining('Usage: send <message>')
     );
@@ -63,7 +67,7 @@ describe('handleA2ASend', () => {
 
     const context: ShellContext = { connector: 'mcp-connector' };
     await handleA2ASend(['hello'], context, '/tmp/config.json');
-    
+
     expect(mockConsoleError).toHaveBeenCalledWith(
       expect.stringContaining('is not an A2A agent')
     );
@@ -84,7 +88,7 @@ describe('handleA2ASend', () => {
 
     const context: ShellContext = { connector: 'test-agent' };
     await handleA2ASend(['hello'], context, '/tmp/config.json');
-    
+
     expect(mockConsoleError).toHaveBeenCalledWith(
       expect.stringContaining('No Agent Card cached')
     );
@@ -118,7 +122,7 @@ describe('handleA2ASend', () => {
 
     const context: ShellContext = { connector: 'test-agent' };
     await handleA2ASend(['hello'], context, '/tmp/config.json');
-    
+
     expect(mockClient.sendMessage).toHaveBeenCalledWith('hello');
     expect(mockConsoleLog).toHaveBeenCalledWith(
       expect.stringContaining('Hello World')
@@ -147,7 +151,7 @@ describe('handleA2ASend', () => {
 
     const context: ShellContext = { connector: 'test-agent' };
     await handleA2ASend(['hello'], context, '/tmp/config.json');
-    
+
     // Verify A2AClient was constructed with allowLocal: true
     expect(A2AClient).toHaveBeenCalledWith(
       expect.any(Object),
@@ -177,7 +181,7 @@ describe('handleA2ASend', () => {
 
     const context: ShellContext = { connector: 'test-agent' };
     await handleA2ASend(['hello'], context, '/tmp/config.json');
-    
+
     // Verify A2AClient was constructed with allowLocal: false
     expect(A2AClient).toHaveBeenCalledWith(
       expect.any(Object),
@@ -210,9 +214,189 @@ describe('handleA2ASend', () => {
 
     const context: ShellContext = { connector: 'test-agent' };
     await handleA2ASend(['hello'], context, '/tmp/config.json');
-    
+
     expect(mockConsoleError).toHaveBeenCalledWith(
       expect.stringContaining('A2A error: Connection refused')
     );
+  });
+
+  describe('streaming', () => {
+    it('should use streamMessage when agent advertises streaming capability', async () => {
+      const mockTargetsStore = {
+        list: vi.fn().mockReturnValue([
+          { id: 'test-agent', type: 'agent', config: {} },
+        ]),
+      };
+      vi.mocked(TargetsStore).mockImplementation(() => mockTargetsStore as unknown as TargetsStore);
+
+      const mockCacheStore = {
+        get: vi.fn().mockReturnValue({
+          agentCard: {
+            url: 'https://example.com',
+            name: 'Test Agent',
+            capabilities: { streaming: true },
+          },
+        }),
+      };
+      vi.mocked(AgentCacheStore).mockImplementation(() => mockCacheStore as unknown as AgentCacheStore);
+
+      const mockClient = {
+        streamMessage: vi.fn().mockResolvedValue({
+          ok: true,
+        }),
+        sendMessage: vi.fn(),
+      };
+      vi.mocked(A2AClient).mockImplementation(() => mockClient as unknown as A2AClient);
+
+      const context: ShellContext = { connector: 'test-agent' };
+      await handleA2ASend(['hello'], context, '/tmp/config.json');
+
+      expect(mockClient.streamMessage).toHaveBeenCalledWith('hello', expect.any(Object));
+      expect(mockClient.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to sendMessage when streaming capability is false or not set', async () => {
+      const mockTargetsStore = {
+        list: vi.fn().mockReturnValue([
+          { id: 'test-agent', type: 'agent', config: {} },
+        ]),
+      };
+      vi.mocked(TargetsStore).mockImplementation(() => mockTargetsStore as unknown as TargetsStore);
+
+      const mockCacheStore = {
+        get: vi.fn().mockReturnValue({
+          agentCard: {
+            url: 'https://example.com',
+            name: 'Test Agent',
+            capabilities: { streaming: false },
+          },
+        }),
+      };
+      vi.mocked(AgentCacheStore).mockImplementation(() => mockCacheStore as unknown as AgentCacheStore);
+
+      const mockClient = {
+        sendMessage: vi.fn().mockResolvedValue({
+          ok: true,
+          message: {
+            role: 'assistant',
+            parts: [{ text: 'Hello' }],
+          },
+        }),
+        streamMessage: vi.fn(),
+      };
+      vi.mocked(A2AClient).mockImplementation(() => mockClient as unknown as A2AClient);
+
+      const context: ShellContext = { connector: 'test-agent' };
+      await handleA2ASend(['hello'], context, '/tmp/config.json');
+
+      expect(mockClient.sendMessage).toHaveBeenCalledWith('hello');
+      expect(mockClient.streamMessage).not.toHaveBeenCalled();
+    });
+
+    it('should handle streaming error response', async () => {
+      const mockTargetsStore = {
+        list: vi.fn().mockReturnValue([
+          { id: 'test-agent', type: 'agent', config: {} },
+        ]),
+      };
+      vi.mocked(TargetsStore).mockImplementation(() => mockTargetsStore as unknown as TargetsStore);
+
+      const mockCacheStore = {
+        get: vi.fn().mockReturnValue({
+          agentCard: {
+            url: 'https://example.com',
+            name: 'Test Agent',
+            capabilities: { streaming: true },
+          },
+        }),
+      };
+      vi.mocked(AgentCacheStore).mockImplementation(() => mockCacheStore as unknown as AgentCacheStore);
+
+      const mockClient = {
+        streamMessage: vi.fn().mockResolvedValue({
+          ok: false,
+          error: 'Stream connection failed',
+        }),
+      };
+      vi.mocked(A2AClient).mockImplementation(() => mockClient as unknown as A2AClient);
+
+      const context: ShellContext = { connector: 'test-agent' };
+      await handleA2ASend(['hello'], context, '/tmp/config.json');
+
+      expect(mockConsoleError).toHaveBeenCalledWith(
+        expect.stringContaining('Stream error: Stream connection failed')
+      );
+    });
+
+    it('should record streamed messages in session manager', async () => {
+      const mockTargetsStore = {
+        list: vi.fn().mockReturnValue([
+          { id: 'test-agent', type: 'agent', config: {} },
+        ]),
+      };
+      vi.mocked(TargetsStore).mockImplementation(() => mockTargetsStore as unknown as TargetsStore);
+
+      const mockCacheStore = {
+        get: vi.fn().mockReturnValue({
+          agentCard: {
+            url: 'https://example.com',
+            name: 'Test Agent',
+            capabilities: { streaming: true },
+          },
+        }),
+      };
+      vi.mocked(AgentCacheStore).mockImplementation(() => mockCacheStore as unknown as AgentCacheStore);
+
+      const recordedMessages: Array<{ contextId?: string; message: any; isRequest: boolean; rpcId: string }> = [];
+      const mockSessionManager = {
+        getEventsStore: vi.fn().mockReturnValue({
+          completeRpcCall: vi.fn(),
+        }),
+        getOrCreateSession: vi.fn().mockReturnValue('test-session-id'),
+        recordMessage: vi.fn().mockImplementation((ctxId, msg, isReq, rpcId) => {
+          recordedMessages.push({ contextId: ctxId, message: msg, isRequest: isReq, rpcId });
+        }),
+        recordError: vi.fn(),
+      };
+
+      const mockClient = {
+        streamMessage: vi.fn().mockImplementation(async (_msg, opts) => {
+          // Simulate onStatus callback with contextId
+          if (opts.onStatus) {
+            opts.onStatus({
+              status: 'running',
+              taskId: 'task-123',
+              contextId: 'ctx-456',
+              message: {
+                role: 'assistant',
+                parts: [{ text: 'Hello from stream' }],
+              },
+            });
+          }
+          // Simulate onMessage callback
+          if (opts.onMessage) {
+            opts.onMessage({
+              role: 'assistant',
+              parts: [{ text: 'Another message' }],
+            });
+          }
+          return { ok: true };
+        }),
+      };
+      vi.mocked(A2AClient).mockImplementation(() => mockClient as unknown as A2AClient);
+
+      // Mock createA2ASessionManager to return our mock
+      const { createA2ASessionManager } = await import('../../a2a/session-manager.js');
+      vi.mocked(createA2ASessionManager).mockReturnValue(mockSessionManager as any);
+
+      const context: ShellContext = { connector: 'test-agent' };
+      await handleA2ASend(['hello'], context, '/tmp/config.json');
+
+      expect(mockSessionManager.recordMessage).toHaveBeenCalledTimes(3); // request + 2 streamed messages
+      expect(recordedMessages[0].isRequest).toBe(true); // First is request
+      expect(recordedMessages[0].contextId).toBe('ctx-456'); // contextId should be captured
+      expect(recordedMessages[1].isRequest).toBe(false); // Second is streamed message
+      expect(recordedMessages[2].isRequest).toBe(false); // Third is streamed message
+    });
   });
 });

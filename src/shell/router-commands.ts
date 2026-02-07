@@ -11,6 +11,7 @@ import { AgentCacheStore } from '../db/agent-cache-store.js';
 import { A2AClient } from '../a2a/client.js';
 import type { AgentCard } from '../a2a/types.js';
 import { printSuccess, printError, printInfo, shortenSessionId } from './prompt.js';
+import ora from 'ora';
 import { selectSession, canInteract } from './selector.js';
 import { EventLineStore } from '../eventline/store.js';
 import { EventsStore } from '../db/events-store.js';
@@ -1616,6 +1617,117 @@ export async function handleA2ASend(
   // Send message via A2A client
   try {
     const client = new A2AClient(agentCard, { allowLocal });
+
+    // Check if agent supports streaming
+    const supportsStreaming = agentCard.capabilities?.streaming === true;
+
+    // Hoisted: used in both streaming and non-streaming paths
+    const isTTY = process.stdout.isTTY;
+    const botPrefix = isTTY ? '\x1b[36m🤖\x1b[0m' : '🤖';
+
+    // SSE Streaming mode: When agent advertises streaming capability,
+    // use streamMessage() for real-time message display instead of
+    // blocking sendMessage(). Messages are accumulated for session
+    // recording to maintain history parity with non-streaming path.
+    if (supportsStreaming) {
+      const spinner = isTTY ? ora({ text: 'Waiting for response...', spinner: 'dots' }).start() : null;
+
+      // Accumulate streamed messages for session recording
+      const streamedMessages: Array<{ role: 'user' | 'assistant'; parts: Array<{ text: string } | { data: string; mimeType: string }> }> = [];
+      let streamContextId: string | undefined;
+
+      // Spinner helper to avoid repetition (with error safety)
+      const withSpinner = (fn: () => void) => {
+        if (spinner) spinner.stopAndPersist();
+        try {
+          fn();
+        } finally {
+          if (spinner) spinner.start();
+        }
+      };
+
+      const streamResult = await client.streamMessage(message, {
+        onStatus: (event) => {
+          withSpinner(() => {
+            const statusText = `[${event.status}] ${event.taskId}`;
+            console.log(statusText);
+            if (event.contextId) streamContextId = event.contextId;
+            if (event.message) {
+              streamedMessages.push(event.message);
+              const parts = event.message.parts || [];
+              for (const part of parts) {
+                if ('text' in part && part.text) {
+                  console.log(`  ${botPrefix} ${part.text}`);
+                }
+              }
+            }
+          });
+        },
+        onArtifact: (event) => {
+          withSpinner(() => {
+            console.log(`\n[Artifact] ${event.artifact?.name || 'unnamed'}`);
+          });
+        },
+        onMessage: (msg) => {
+          withSpinner(() => {
+            // Fallback: extract contextId from message if not yet set
+            if ((msg as any).contextId && !streamContextId) {
+              streamContextId = (msg as any).contextId;
+            }
+            streamedMessages.push(msg);
+            const parts = msg.parts || [];
+            for (const part of parts) {
+              if ('text' in part && part.text) {
+                console.log(`${botPrefix} ${part.text}`);
+              }
+            }
+          });
+        },
+        onError: (err) => {
+          withSpinner(() => {
+            printError(`Stream error: ${err}`);
+          });
+        },
+      });
+
+      if (spinner) spinner.stop();
+
+      if (!streamResult.ok) {
+        // Record partial messages before error (if any were received)
+        if (sessionManager && streamedMessages.length > 0) {
+          const ctxId = streamContextId;
+          sessionManager.recordMessage(ctxId, requestMessage, true, rpcId);
+          for (const msg of streamedMessages) {
+            sessionManager.recordMessage(ctxId, msg, false, rpcId);
+          }
+        }
+        // Record error - match success pattern with completeRpcCall
+        if (sessionManager) {
+          const eventsStore = sessionManager.getEventsStore();
+          const sessionId = sessionManager.getOrCreateSession(streamContextId);
+          eventsStore.completeRpcCall(sessionId, rpcId, false);
+          sessionManager.recordError(streamContextId, rpcId, streamResult.error || 'Unknown error');
+        }
+        printError(`Stream error: ${streamResult.error}`);
+        return;
+      }
+
+      // Record the streaming session (request + accumulated streamed messages)
+      if (sessionManager) {
+        const ctxId = streamContextId;
+        sessionManager.recordMessage(ctxId, requestMessage, true, rpcId);
+        for (const msg of streamedMessages) {
+          sessionManager.recordMessage(ctxId, msg, false, rpcId);
+        }
+        const eventsStore = sessionManager.getEventsStore();
+        const sessionId = sessionManager.getOrCreateSession(ctxId);
+        eventsStore.completeRpcCall(sessionId, rpcId, streamResult.ok);
+      }
+
+      return;
+    }
+
+    // Non-streaming mode (existing code unchanged)
     const result = await client.sendMessage(message);
 
     if (!result.ok) {
@@ -1626,9 +1738,6 @@ export async function handleA2ASend(
       printError(`A2A error: ${result.error}`);
       return;
     }
-
-    const isTTY = process.stdout.isTTY;
-    const botPrefix = isTTY ? '\x1b[36m🤖\x1b[0m' : '🤖';
 
     // Determine contextId from response (or undefined if no response)
     const contextId = result.message?.contextId ?? result.task?.contextId;

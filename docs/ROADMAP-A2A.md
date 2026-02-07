@@ -23,7 +23,10 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 3.2 | UI対応 | ✅ 完了 | 2026-02-03 |
 | 4 | 認証 | 📋 未着手 | - |
 | 5 | 高度な機能 | 📋 未着手 | - |
-| 6 | MCP Apps 対応 | 🚀 優先 | - |
+| 6.PR1 | MCP Apps基盤 | 🚀 次 | - |
+| 6.PR2 | BridgeEnvelope + 監査ログ | 📋 | - |
+| 6.PR3 | proofscan_getEvents | 📋 | - |
+| 6.PR4 | trace-viewer MVP | 📋 | - |
 
 ---
 
@@ -242,30 +245,59 @@ Phase 2.2 Task CLI の検証用に、glm-dice-agent に Task 管理機能を追�
 
 MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロトコル解析体験を向上。
 
-**参考:** [MCP Apps Extension Proposal](https://github.com/modelcontextprotocol/ext-apps)
+**設計書:** `/home/shin/vault/03_Projects/proofscan/3032 - proofscan Phase 6 - MCP Apps 設計書.md`
+**PRプロンプト:** `docs/PR-PROMPTS-PHASE6.md`
 
-### 6.1 UI Resource 基盤
-- [ ] `ui://` スキーム対応
-- [ ] HTMLリソース配信
-- [ ] iframe sandbox レンダリング
-- [ ] postMessage over MCP JSON-RPC
+### 設計方針
+- `_meta.ui.resourceUri` を基準形（SEP-1865準拠）
+- Tool結果は3層: `content` / `structuredContent` / `_meta`
+- sessionToken認証 + BridgeEnvelope（token隔離）
+- 相関ID4種で完全追跡（Proof of Protocol）
+- Host Profile で実装差を吸収
 
-### 6.2 プロトコルトレース可視化
-- [ ] イベントタイムラインUI
-- [ ] メッセージ詳細パネル
-- [ ] フィルタ＆検索UI
-- [ ] リアルタイム更新
+### PR分割
 
-### 6.3 統計ダッシュボード
+| PR | 内容 | 状態 |
+|----|------|------|
+| PR1 | Apps基盤: resources, tools/list, ui/initialize, token検証 | 📋 |
+| PR2 | BridgeEnvelope + 相関ID + 監査ログ | 📋 |
+| PR3 | proofscan_getEvents (paging, 3層結果) | 📋 |
+| PR4 | trace-viewer MVP (windowed, 仮想スクロール) | 📋 |
+
+### PR1: Apps基盤
+- [ ] `resources/list` に `ui://proofscan/trace-viewer` 追加
+- [ ] `mimeType: "text/html;profile=mcp-app"` 必須
+- [ ] `resources/read` で単一HTML（JS/CSS同梱）配信
+- [ ] `tools/list` に `proofscan_getEvents`（outputSchema + _meta.ui）
+- [ ] UI側 `ui/initialize` + sessionToken取得・検証
+
+### PR2: BridgeEnvelope + 監査ログ
+- [ ] `_bridge.sessionToken` 方式（UI→Host）
+- [ ] `sanitizeToolCall()` でServer転送前にstrip
+- [ ] 相関ID生成: ui_session_id, ui_rpc_id, correlation_id, tool_call_fingerprint
+- [ ] ui_* イベント種別でEventLineDB記録
+
+### PR3: proofscan_getEvents
+- [ ] EventLineDB → paging handler
+- [ ] 3層結果: content(テキスト), structuredContent(outputSchema準拠), _meta(UI専用)
+- [ ] _meta.fullEvents 制限: 200件, 10KB truncate, secret redact
+- [ ] cursor境界: `before` は指定event含まない
+
+### PR4: trace-viewer MVP
+- [ ] windowed render（初回50件、上スクロールで追加）
+- [ ] 仮想スクロール
+- [ ] notify両対応: `ui/notify` + `ui/notifications/*`
+- [ ] basic-host or Claude で表示確認
+
+### 6.5 統計ダッシュボード（任意・後続）
 - [ ] RPC呼び出し統計
 - [ ] レイテンシグラフ
 - [ ] エラー率表示
-- [ ] セッション比較
 
-### 6.4 インタラクティブデバッグ
+### 6.6 インタラクティブデバッグ（任意・後続）
 - [ ] ブレークポイント設定
-- [ ] リクエスト/レスポンス編集＆再送
-- [ ] スキーマバリデーション結果表示
+- [ ] リクエスト編集＆再送
+- [ ] スキーマバリデーション表示
 
 ---
 
@@ -279,4 +311,4 @@ MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロ
 
 ---
 
-*Last updated: 2026-02-03*
+*Last updated: 2026-02-07*
