@@ -794,6 +794,17 @@ export class McpProxyServer extends EventEmitter {
         }
       );
 
+      // Record ui_tool_delivered event (error case)
+      this.eventsStore.saveUiToolDeliveredEvent(
+        uiSessionId,
+        correlationIds.ui_rpc_id,
+        correlationIds.correlation_id,
+        correlationIds.tool_call_fingerprint,
+        {
+          result: errorResult,
+        }
+      );
+
       this.sendError(id, MCP_ERROR.INTERNAL_ERROR, result.error || 'Unknown error');
       return;
     }
