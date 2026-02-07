@@ -246,6 +246,50 @@ export class EventsStore {
     return stmt.all(sessionId) as Event[];
   }
 
+  /**
+   * Get events with pagination support (Phase 6.2)
+   *
+   * @param sessionId - Session ID
+   * @param options - Pagination options
+   * @param options.limit - Maximum number of events to return (default: 50, max: 200)
+   * @param options.before - Event ID for pagination cursor (exclusive)
+   * @returns Events in descending order (newest first)
+   */
+  getEvents(sessionId: string, options: {
+    limit?: number;
+    before?: string;
+  } = {}): Event[] {
+    // Enforce max limit of 200
+    let limit = options.limit ?? 50;
+    if (limit > 200) {
+      limit = 200;
+    }
+
+    let sql = `SELECT * FROM events WHERE session_id = ?`;
+    const params: unknown[] = [sessionId];
+
+    // Exclusive cursor: get events older than the specified event_id
+    // Use composite cursor (ts, event_id) for stable pagination with same-timestamp events
+    if (options.before) {
+      const cursorStmt = this.db.prepare(
+        `SELECT ts, event_id FROM events WHERE event_id = ?`
+      );
+      const cursorEvent = cursorStmt.get(options.before) as { ts: number; event_id: string } | undefined;
+      if (cursorEvent) {
+        // Events with earlier timestamp, OR same timestamp but earlier event_id
+        sql += ` AND (ts < ? OR (ts = ? AND event_id < ?))`;
+        params.push(cursorEvent.ts, cursorEvent.ts, cursorEvent.event_id);
+      }
+    }
+
+    // Order by ts DESC, event_id DESC for deterministic ordering with same-timestamp events
+    sql += ` ORDER BY ts DESC, event_id DESC LIMIT ?`;
+    params.push(limit);
+
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...params) as Event[];
+  }
+
   getRecentEventsByTarget(targetId: string, limit: number = 20): Event[] {
     const stmt = this.db.prepare(`
       SELECT e.* FROM events e
