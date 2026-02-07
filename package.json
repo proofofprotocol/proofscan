@@ -17,7 +17,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-html.cjs",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
     "test": "vitest run",
