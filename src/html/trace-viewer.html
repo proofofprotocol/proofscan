@@ -1,4 +1,13 @@
 <!DOCTYPE html>
+<!--
+  ProofScan Trace Viewer MVP
+  
+  TODO (follow-up):
+  - Add automated UI tests (Playwright/Puppeteer)
+  - Make sessionId configurable via URL parameter
+  - Add debouncing for scroll handler
+  - Implement LRU eviction for long sessions (>1000 events)
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -260,12 +269,11 @@
       const pendingRequests = new Map();
       const events = [];
       const eventIds = new Set();
+      // TODO: Make sessionId configurable via URL parameter or initialization
       const sessionId = 'test-session';
-      let currentPage = 0;
       const pageSize = 50;
       let isLoading = false;
       let hasMore = true;
-      let visibleRange = { start: -50, end: 100 };
 
       // DOM elements
       const statusDot = document.getElementById('statusDot');
@@ -462,18 +470,22 @@
 
                 loadingDiv.style.display = 'none';
 
-                if (events.length === 0) {
+                // Only show empty state on initial load, not on pagination
+                if (events.length === 0 && !prepend) {
                   eventsList.innerHTML = '<div class="empty-state">No events found</div>';
                 }
               }
             } catch (e) {
               console.error('[UI] Failed to parse events:', e);
               eventsList.innerHTML = '<div class="empty-state">Failed to load events</div>';
+              isLoading = false;
+              loadMoreDiv.classList.remove('visible');
+              return;
             }
           }
         } else if (msg.error) {
           console.error('[UI] Error loading events:', msg.error);
-          eventsList.innerHTML = '<div class="empty-state">Error: ' + msg.error.message + '</div>';
+          eventsList.innerHTML = '<div class="empty-state">Error: ' + escapeHtml(msg.error.message || 'Unknown error') + '</div>';
         }
 
         isLoading = false;
