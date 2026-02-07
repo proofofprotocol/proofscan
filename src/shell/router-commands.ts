@@ -1635,11 +1635,14 @@ export async function handleA2ASend(
       const streamedMessages: Array<{ role: 'user' | 'assistant'; parts: Array<{ text: string } | { data: string; mimeType: string }> }> = [];
       let streamContextId: string | undefined;
 
-      // Spinner helper to avoid repetition
+      // Spinner helper to avoid repetition (with error safety)
       const withSpinner = (fn: () => void) => {
         if (spinner) spinner.stopAndPersist();
-        fn();
-        if (spinner) spinner.start();
+        try {
+          fn();
+        } finally {
+          if (spinner) spinner.start();
+        }
       };
 
       const streamResult = await client.streamMessage(message, {
@@ -1666,6 +1669,10 @@ export async function handleA2ASend(
         },
         onMessage: (msg) => {
           withSpinner(() => {
+            // Fallback: extract contextId from message if not yet set
+            if ((msg as any).contextId && !streamContextId) {
+              streamContextId = (msg as any).contextId;
+            }
             streamedMessages.push(msg);
             const parts = msg.parts || [];
             for (const part of parts) {
@@ -1685,9 +1692,17 @@ export async function handleA2ASend(
       if (spinner) spinner.stop();
 
       if (!streamResult.ok) {
+        // Record partial messages before error (if any were received)
+        if (sessionManager && streamedMessages.length > 0) {
+          const ctxId = streamContextId;
+          sessionManager.recordMessage(ctxId, requestMessage, true, rpcId);
+          for (const msg of streamedMessages) {
+            sessionManager.recordMessage(ctxId, msg, false, rpcId);
+          }
+        }
         // Record error
         if (sessionManager) {
-          sessionManager.recordError(undefined, rpcId, streamResult.error || 'Unknown error');
+          sessionManager.recordError(streamContextId, rpcId, streamResult.error || 'Unknown error');
         }
         printError(`Stream error: ${streamResult.error}`);
         return;
