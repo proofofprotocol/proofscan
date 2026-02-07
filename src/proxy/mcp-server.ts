@@ -116,16 +116,7 @@ function redactSecrets(obj: unknown): unknown {
   }
 
   if (typeof obj === 'string') {
-    // Check if string looks like a token/secret
-    if (
-      obj.toLowerCase().includes('token') ||
-      obj.toLowerCase().includes('secret') ||
-      obj.toLowerCase().includes('password') ||
-      obj.toLowerCase().includes('api_key') ||
-      obj.toLowerCase().includes('apikey')
-    ) {
-      return '***';
-    }
+    // Don't redact string values - only redact based on object keys
     return obj;
   }
 
@@ -716,7 +707,7 @@ export class McpProxyServer extends EventEmitter {
                   properties: {
                     id: { type: 'string' },
                     type: { type: 'string' },
-                    method: { type: 'string' },
+                    rpcId: { type: 'string' },
                     timestamp: { type: 'number' },
                     duration_ms: { type: 'number' },
                   },
@@ -822,15 +813,20 @@ export class McpProxyServer extends EventEmitter {
       // Get events from EventsStore with pagination
       const events = this.eventsStore.getEvents(sessionId, { limit, before });
 
+      // Build response map for O(n) duration calculation (instead of O(n²))
+      const responseMap = new Map(
+        events
+          .filter((e) => e.kind === 'response' && e.rpc_id)
+          .map((e) => [e.rpc_id, e])
+      );
+
       // Calculate duration for events with rpc_id
       const eventsWithDuration = events.map((e) => {
         let duration_ms: number | null = null;
 
-        // For request events, try to find matching response to calculate duration
+        // For request events, look up matching response from map
         if (e.kind === 'request' && e.rpc_id) {
-          const response = events.find(
-            (r) => r.kind === 'response' && r.rpc_id === e.rpc_id
-          );
+          const response = responseMap.get(e.rpc_id);
           if (response) {
             const requestTime = new Date(e.ts).getTime();
             const responseTime = new Date(response.ts).getTime();
@@ -854,7 +850,7 @@ export class McpProxyServer extends EventEmitter {
       const structuredEvents = eventsWithDuration.map((e) => ({
         id: e.event_id,
         type: e.kind,
-        method: e.rpc_id ? e.rpc_id : null,
+        rpcId: e.rpc_id ?? null,
         timestamp: new Date(e.ts).getTime(),
         duration_ms: e.duration_ms ?? 0,
       }));

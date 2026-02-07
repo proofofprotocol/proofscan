@@ -480,8 +480,8 @@ describe('proofscan_getEvents', () => {
         expect(typeof event.id).toBe('string');
         expect(event).toHaveProperty('type');
         expect(typeof event.type).toBe('string');
-        expect(event).toHaveProperty('method');
-        expect(event.method === null || typeof event.method === 'string').toBe(true);
+        expect(event).toHaveProperty('rpcId');
+        expect(event.rpcId === null || typeof event.rpcId === 'string').toBe(true);
         expect(event).toHaveProperty('timestamp');
         expect(typeof event.timestamp).toBe('number');
         expect(event).toHaveProperty('duration_ms');
