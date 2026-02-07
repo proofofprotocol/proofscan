@@ -63,6 +63,27 @@ export interface TaskEvent {
   payload_json: string;         // JSON string of TaskEventPayload
 }
 
+// ==================== UI Events (Phase 6.2) ====================
+
+/** UI event types for audit logging */
+export type UiEventType =
+  | 'ui_tool_request'
+  | 'ui_tool_result'
+  | 'ui_tool_delivered';
+
+/** UI event record */
+export interface UiEvent {
+  event_id: string;
+  ui_session_id: string;       // Derived from sessionToken
+  ui_rpc_id: string;           // Individual RPC call ID
+  correlation_id: string;       // Request → response tracking
+  tool_call_fingerprint: string; // Tool call fingerprint
+  event_type: UiEventType;
+  tool_name: string | null;    // Tool name
+  ts: number;                  // Unix timestamp (ms)
+  payload_json: string | null;  // JSON string of event payload
+}
+
 // Target ID (unified connector/agent identifier)
 export type TargetId = string;
 

@@ -176,3 +176,73 @@ export interface UiInitializeResult {
   protocolVersion: string;
   sessionToken: string;
 }
+
+// ==================== BridgeEnvelope (Phase 6.2) ====================
+
+/** Bridge envelope for UI tool calls (token is stripped before forwarding to server) */
+export interface BridgeEnvelope {
+  sessionToken: string;
+}
+
+/** Extended tool call params with bridge envelope */
+export interface ToolsCallParamsWithBridge extends ToolsCallParams {
+  _bridge?: BridgeEnvelope;
+}
+
+/** Clean tool call params (without _bridge) */
+export type CleanToolCallParams = Omit<ToolsCallParamsWithBridge, '_bridge'>;
+
+/** Result of sanitizing tool call params */
+export interface SanitizeToolCallResult {
+  /** Clean params without _bridge (safe to forward to server) */
+  clean: CleanToolCallParams;
+  /** Extracted bridge token for audit logging only */
+  bridgeToken?: string;
+}
+
+/** Correlation IDs for UI tool request tracking */
+export interface CorrelationIds {
+  /** UI session identifier (derived from sessionToken) */
+  ui_session_id: string;
+  /** Individual RPC call identifier */
+  ui_rpc_id: string;
+  /** Request → response tracking ID */
+  correlation_id: string;
+  /** Tool call fingerprint (name + args hash) */
+  tool_call_fingerprint: string;
+}
+
+/** UI event types for audit logging */
+export type UiEventType =
+  | 'ui_tool_request'
+  | 'ui_tool_result'
+  | 'ui_tool_delivered';
+
+/** Base UI event for audit logging */
+export interface UiEventBase {
+  type: UiEventType;
+  correlationIds: CorrelationIds;
+  timestamp: number;
+}
+
+/** UI tool request event */
+export interface UiToolRequestEvent extends UiEventBase {
+  type: 'ui_tool_request';
+  toolName: string;
+  arguments: Record<string, unknown>;
+  /** Token is recorded here for audit, but never forwarded to server */
+  sessionToken?: string;
+}
+
+/** UI tool result event */
+export interface UiToolResultEvent extends UiEventBase {
+  type: 'ui_tool_result';
+  result: unknown;
+  duration_ms: number;
+}
+
+/** UI tool delivered event (sent to UI) */
+export interface UiToolDeliveredEvent extends UiEventBase {
+  type: 'ui_tool_delivered';
+  result: unknown;
+}

@@ -48,6 +48,12 @@ import { IpcServer } from './ipc-server.js';
 import { getSocketPath, type ReloadResult } from './ipc-types.js';
 import { ConfigManager } from '../config/manager.js';
 import type { Connector } from '../types/config.js';
+import { EventsStore } from '../db/events-store.js';
+import { sanitizeToolCall, generateCorrelationIds, uiSessionIdFromToken } from './bridge-utils.js';
+import type {
+  ToolsCallParamsWithBridge,
+  CorrelationIds,
+} from './types.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
 const UI_PROTOCOL_VERSION = '2025-11-21';
@@ -105,6 +111,9 @@ export class McpProxyServer extends EventEmitter {
   /** Session tokens for UI validation */
   private sessionTokens: Set<string> = new Set();
 
+  /** Events store for UI audit logging (Phase 6.2) */
+  private readonly eventsStore: EventsStore;
+
   constructor(options: ProxyOptions, configPath?: string) {
     super();
     this.options = options;
@@ -112,6 +121,7 @@ export class McpProxyServer extends EventEmitter {
     this.aggregator = new ToolAggregator(options);
     this.router = new RequestRouter(options, this.aggregator);
     this.stateManager = new RuntimeStateManager(options.configDir);
+    this.eventsStore = new EventsStore(options.configDir);
   }
 
   /**
@@ -661,6 +671,9 @@ export class McpProxyServer extends EventEmitter {
 
   /**
    * Handle tools/call request
+   *
+   * Phase 6.2: Handles BridgeEnvelope (_bridge.sessionToken) stripping,
+   * correlation ID generation, and UI audit logging.
    */
   private async handleToolsCall(
     id: string | number | null,
@@ -676,13 +689,43 @@ export class McpProxyServer extends EventEmitter {
       return;
     }
 
-    const { name, arguments: args = {} } = params;
+    const rpcId = typeof id === 'number' ? id : parseInt(String(id) || '0', 10);
+
+    // Sanitize params: extract bridge token, strip _bridge envelope
+    const { clean, bridgeToken } = sanitizeToolCall(
+      params as ToolsCallParamsWithBridge
+    );
+
+    const { name, arguments: args = {} } = clean;
     logger.info(`tools/call name=${name}`);
+
+    // Generate correlation IDs for tracking
+    const correlationIds: CorrelationIds = generateCorrelationIds(
+      bridgeToken,
+      rpcId
+    );
+    const uiSessionId = correlationIds.ui_session_id;
 
     // Record tool call for client tracking
     if (this.currentClient) {
       await this.stateManager.recordToolCall(this.currentClient.name);
     }
+
+    // Record ui_tool_request event (Phase 6.2)
+    // Token is recorded here for audit, but never forwarded to server
+    this.eventsStore.saveUiToolRequestEvent(
+      uiSessionId,
+      correlationIds.ui_rpc_id,
+      correlationIds.correlation_id,
+      correlationIds.tool_call_fingerprint,
+      name,
+      {
+        arguments: args,
+        sessionToken: bridgeToken, // Recorded for audit only
+      }
+    );
+
+    const startTime = Date.now();
 
     // Handle proofscan_getEvents (stub implementation for Phase 6.1)
     if (name === 'proofscan_getEvents') {
@@ -703,6 +746,31 @@ export class McpProxyServer extends EventEmitter {
           outputSchemaVersion: '1',
         },
       };
+
+      // Record ui_tool_result event
+      const durationMs = Date.now() - startTime;
+      this.eventsStore.saveUiToolResultEvent(
+        uiSessionId,
+        correlationIds.ui_rpc_id,
+        correlationIds.correlation_id,
+        correlationIds.tool_call_fingerprint,
+        {
+          result: callResult,
+          duration_ms: durationMs,
+        }
+      );
+
+      // Record ui_tool_delivered event
+      this.eventsStore.saveUiToolDeliveredEvent(
+        uiSessionId,
+        correlationIds.ui_rpc_id,
+        correlationIds.correlation_id,
+        correlationIds.tool_call_fingerprint,
+        {
+          result: callResult,
+        }
+      );
+
       this.sendResult(id, callResult);
       return;
     }
@@ -711,6 +779,32 @@ export class McpProxyServer extends EventEmitter {
 
     if (!result.success) {
       // Routing or backend error
+      const errorResult = { error: result.error || 'Unknown error' };
+
+      // Record ui_tool_result event (error case)
+      const durationMs = Date.now() - startTime;
+      this.eventsStore.saveUiToolResultEvent(
+        uiSessionId,
+        correlationIds.ui_rpc_id,
+        correlationIds.correlation_id,
+        correlationIds.tool_call_fingerprint,
+        {
+          result: errorResult,
+          duration_ms: durationMs,
+        }
+      );
+
+      // Record ui_tool_delivered event (error case)
+      this.eventsStore.saveUiToolDeliveredEvent(
+        uiSessionId,
+        correlationIds.ui_rpc_id,
+        correlationIds.correlation_id,
+        correlationIds.tool_call_fingerprint,
+        {
+          result: errorResult,
+        }
+      );
+
       this.sendError(id, MCP_ERROR.INTERNAL_ERROR, result.error || 'Unknown error');
       return;
     }
@@ -719,6 +813,30 @@ export class McpProxyServer extends EventEmitter {
       content: result.content,
       isError: result.isError,
     };
+
+    // Record ui_tool_result event
+    const durationMs = Date.now() - startTime;
+    this.eventsStore.saveUiToolResultEvent(
+      uiSessionId,
+      correlationIds.ui_rpc_id,
+      correlationIds.correlation_id,
+      correlationIds.tool_call_fingerprint,
+      {
+        result: callResult,
+        duration_ms: durationMs,
+      }
+    );
+
+    // Record ui_tool_delivered event
+    this.eventsStore.saveUiToolDeliveredEvent(
+      uiSessionId,
+      correlationIds.ui_rpc_id,
+      correlationIds.correlation_id,
+      correlationIds.tool_call_fingerprint,
+      {
+        result: callResult,
+      }
+    );
 
     this.sendResult(id, callResult);
   }
