@@ -246,6 +246,42 @@ export class EventsStore {
     return stmt.all(sessionId) as Event[];
   }
 
+  /**
+   * Get events with pagination support (Phase 6.2)
+   *
+   * @param sessionId - Session ID
+   * @param options - Pagination options
+   * @param options.limit - Maximum number of events to return (default: 50, max: 200)
+   * @param options.before - Event ID for pagination cursor (exclusive)
+   * @returns Events in descending order (newest first)
+   */
+  getEvents(sessionId: string, options: {
+    limit?: number;
+    before?: string;
+  } = {}): Event[] {
+    // Enforce max limit of 200
+    let limit = options.limit ?? 50;
+    if (limit > 200) {
+      limit = 200;
+    }
+
+    let sql = `SELECT * FROM events WHERE session_id = ?`;
+    const params: unknown[] = [sessionId];
+
+    // Exclusive cursor: events with event_id < before
+    if (options.before) {
+      sql += ` AND event_id < ?`;
+      params.push(options.before);
+    }
+
+    // Order by ts DESC (newest first) for stable pagination
+    sql += ` ORDER BY ts DESC LIMIT ?`;
+    params.push(limit);
+
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...params) as Event[];
+  }
+
   getRecentEventsByTarget(targetId: string, limit: number = 20): Event[] {
     const stmt = this.db.prepare(`
       SELECT e.* FROM events e

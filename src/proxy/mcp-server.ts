@@ -85,6 +85,83 @@ function getTraceViewerHtml(): string {
 /** Maximum log lines in ring buffer */
 const MAX_LOG_LINES = 1000;
 
+/** Maximum events to return in a single page */
+const MAX_EVENTS_LIMIT = 200;
+
+/** Maximum payload size before truncation (10KB) */
+const MAX_PAYLOAD_BYTES = 10240;
+
+/** Truncate a payload if it exceeds the max size */
+function truncatePayload(payload: unknown, maxBytes: number = MAX_PAYLOAD_BYTES): unknown {
+  if (payload === null || payload === undefined) {
+    return payload;
+  }
+
+  const str = JSON.stringify(payload, null, 2);
+  if (str.length <= maxBytes) {
+    return payload;
+  }
+
+  return {
+    _truncated: true,
+    preview: str.slice(0, 500) + '...',
+    _originalSize: str.length,
+  };
+}
+
+/** Redact secrets from an object (recursively) */
+function redactSecrets(obj: unknown): unknown {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (typeof obj === 'string') {
+    // Check if string looks like a token/secret
+    if (
+      obj.toLowerCase().includes('token') ||
+      obj.toLowerCase().includes('secret') ||
+      obj.toLowerCase().includes('password') ||
+      obj.toLowerCase().includes('api_key') ||
+      obj.toLowerCase().includes('apikey')
+    ) {
+      return '***';
+    }
+    return obj;
+  }
+
+  if (typeof obj === 'number' || typeof obj === 'boolean') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => redactSecrets(item));
+  }
+
+  if (typeof obj === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      const lowerKey = key.toLowerCase();
+      // Redact keys that look like secrets
+      if (
+        lowerKey.includes('token') ||
+        lowerKey.includes('secret') ||
+        lowerKey.includes('password') ||
+        lowerKey.includes('api_key') ||
+        lowerKey.includes('apikey') ||
+        lowerKey.includes('authorization') ||
+        lowerKey.includes('bearer')
+      ) {
+        result[key] = '***';
+      } else {
+        result[key] = redactSecrets(value);
+      }
+    }
+    return result;
+  }
+
+  return obj;
+}
+
 /**
  * MCP Proxy Server
  *
@@ -727,22 +804,116 @@ export class McpProxyServer extends EventEmitter {
 
     const startTime = Date.now();
 
-    // Handle proofscan_getEvents (stub implementation for Phase 6.1)
+    // Handle proofscan_getEvents (Phase 6.2: pagination + 3-layer result)
     if (name === 'proofscan_getEvents') {
+      const sessionId = args.sessionId as string | undefined;
+      if (!sessionId) {
+        logger.error('proofscan_getEvents: missing sessionId');
+        this.sendError(id, MCP_ERROR.INVALID_PARAMS, 'Missing required parameter: sessionId');
+        return;
+      }
+
+      const limit = Math.min(
+        (args.limit as number | undefined) ?? 50,
+        MAX_EVENTS_LIMIT
+      );
+      const before = args.before as string | undefined;
+
+      // Get events from EventsStore with pagination
+      const events = this.eventsStore.getEvents(sessionId, { limit, before });
+
+      // Calculate duration for events with rpc_id
+      const eventsWithDuration = events.map((e) => {
+        let duration_ms: number | null = null;
+
+        // For request events, try to find matching response to calculate duration
+        if (e.kind === 'request' && e.rpc_id) {
+          const response = events.find(
+            (r) => r.kind === 'response' && r.rpc_id === e.rpc_id
+          );
+          if (response) {
+            const requestTime = new Date(e.ts).getTime();
+            const responseTime = new Date(response.ts).getTime();
+            duration_ms = responseTime - requestTime;
+          }
+        }
+
+        return { ...e, duration_ms };
+      });
+
+      // Prepare human-readable summary (content layer)
+      const summaryLines = eventsWithDuration.slice(0, 5).map(
+        (e) => `- ${e.kind} (${e.direction}${e.duration_ms !== null ? `, ${e.duration_ms}ms` : ''})`
+      );
+      const moreCount = eventsWithDuration.length - 5;
+      const textSummary = `Found ${eventsWithDuration.length} events in session ${sessionId}.\n` +
+        summaryLines.join('\n') +
+        (moreCount > 0 ? `\n... and ${moreCount} more` : '');
+
+      // Prepare structured content (structuredContent layer) - matches outputSchema
+      const structuredEvents = eventsWithDuration.map((e) => ({
+        id: e.event_id,
+        type: e.kind,
+        method: e.rpc_id ? e.rpc_id : null,
+        timestamp: new Date(e.ts).getTime(),
+        duration_ms: e.duration_ms ?? 0,
+      }));
+
+      // Prepare full events for UI (_meta layer) - with truncation and redaction
+      const truncatedEvents = eventsWithDuration.map((e) => {
+        const fullEvent: Record<string, unknown> = {
+          id: e.event_id,
+          session_id: e.session_id,
+          rpc_id: e.rpc_id,
+          direction: e.direction,
+          kind: e.kind,
+          ts: e.ts,
+          seq: e.seq,
+          summary: e.summary,
+          payload_hash: e.payload_hash,
+        };
+
+        // Parse and redact raw_json if present
+        if (e.raw_json) {
+          try {
+            const raw = JSON.parse(e.raw_json);
+            const redacted = redactSecrets(raw);
+            fullEvent.payload = truncatePayload(redacted);
+          } catch {
+            // If parsing fails, just truncate the raw string
+            fullEvent.raw_json = truncatePayload(e.raw_json);
+          }
+        }
+
+        // Parse and redact normalized_json if present
+        if (e.normalized_json) {
+          try {
+            const normalized = JSON.parse(e.normalized_json);
+            const redacted = redactSecrets(normalized);
+            fullEvent.normalized = truncatePayload(redacted);
+          } catch {
+            fullEvent.normalized_json = truncatePayload(e.normalized_json);
+          }
+        }
+
+        return fullEvent;
+      });
+
       const callResult: ToolsCallResult = {
         content: [
           {
             type: 'text',
-            text: 'No events found (stub implementation)',
+            text: textSummary,
           },
         ],
         structuredContent: {
-          events: [],
-          sessionId: args.sessionId || 'unknown',
-          hasMore: false,
+          events: structuredEvents,
+          sessionId,
+          hasMore: eventsWithDuration.length === limit,
         },
         _meta: {
           ui: { resourceUri: TRACE_VIEWER_URI },
+          fullEvents: truncatedEvents,
           outputSchemaVersion: '1',
         },
       };
