@@ -1301,4 +1301,241 @@ export class EventsStore {
       error: error || 'Task poll error',
     });
   }
+
+  // ==================== UI Events (Phase 6.2) ====================
+
+  /**
+   * Save a UI tool request event
+   *
+   * @param uiSessionId - UI session ID (derived from sessionToken)
+   * @param uiRpcId - UI RPC ID
+   * @param correlationId - Correlation ID
+   * @param toolCallFingerprint - Tool call fingerprint
+   * @param toolName - Tool name
+   * @param payload - Event payload (arguments, sessionToken, etc.)
+   * @returns UI event record
+   */
+  saveUiToolRequestEvent(
+    uiSessionId: string,
+    uiRpcId: string,
+    correlationId: string,
+    toolCallFingerprint: string,
+    toolName: string,
+    payload: {
+      arguments: Record<string, unknown>;
+      sessionToken?: string; // Recorded for audit, but never forwarded to server
+    }
+  ): {
+    event_id: string;
+    ts: number;
+  } {
+    const event = {
+      event_id: randomUUID(),
+      ui_session_id: uiSessionId,
+      ui_rpc_id: uiRpcId,
+      correlation_id: correlationId,
+      tool_call_fingerprint: toolCallFingerprint,
+      event_type: 'ui_tool_request' as const,
+      tool_name: toolName,
+      ts: Date.now(),
+      payload_json: JSON.stringify(payload),
+    };
+
+    const stmt = this.db.prepare(`
+      INSERT INTO ui_events (event_id, ui_session_id, ui_rpc_id, correlation_id, tool_call_fingerprint, event_type, tool_name, ts, payload_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      event.event_id,
+      event.ui_session_id,
+      event.ui_rpc_id,
+      event.correlation_id,
+      event.tool_call_fingerprint,
+      event.event_type,
+      event.tool_name,
+      event.ts,
+      event.payload_json
+    );
+
+    return { event_id: event.event_id, ts: event.ts };
+  }
+
+  /**
+   * Save a UI tool result event
+   *
+   * @param uiSessionId - UI session ID
+   * @param uiRpcId - UI RPC ID
+   * @param correlationId - Correlation ID
+   * @param toolCallFingerprint - Tool call fingerprint
+   * @param payload - Event payload (result, duration_ms, etc.)
+   * @returns UI event record
+   */
+  saveUiToolResultEvent(
+    uiSessionId: string,
+    uiRpcId: string,
+    correlationId: string,
+    toolCallFingerprint: string,
+    payload: {
+      result: unknown;
+      duration_ms: number;
+    }
+  ): {
+    event_id: string;
+    ts: number;
+  } {
+    const event = {
+      event_id: randomUUID(),
+      ui_session_id: uiSessionId,
+      ui_rpc_id: uiRpcId,
+      correlation_id: correlationId,
+      tool_call_fingerprint: toolCallFingerprint,
+      event_type: 'ui_tool_result' as const,
+      tool_name: null,
+      ts: Date.now(),
+      payload_json: JSON.stringify(payload),
+    };
+
+    const stmt = this.db.prepare(`
+      INSERT INTO ui_events (event_id, ui_session_id, ui_rpc_id, correlation_id, tool_call_fingerprint, event_type, tool_name, ts, payload_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      event.event_id,
+      event.ui_session_id,
+      event.ui_rpc_id,
+      event.correlation_id,
+      event.tool_call_fingerprint,
+      event.event_type,
+      event.tool_name,
+      event.ts,
+      event.payload_json
+    );
+
+    return { event_id: event.event_id, ts: event.ts };
+  }
+
+  /**
+   * Save a UI tool delivered event (sent to UI)
+   *
+   * @param uiSessionId - UI session ID
+   * @param uiRpcId - UI RPC ID
+   * @param correlationId - Correlation ID
+   * @param toolCallFingerprint - Tool call fingerprint
+   * @param payload - Event payload (result)
+   * @returns UI event record
+   */
+  saveUiToolDeliveredEvent(
+    uiSessionId: string,
+    uiRpcId: string,
+    correlationId: string,
+    toolCallFingerprint: string,
+    payload: { result: unknown }
+  ): {
+    event_id: string;
+    ts: number;
+  } {
+    const event = {
+      event_id: randomUUID(),
+      ui_session_id: uiSessionId,
+      ui_rpc_id: uiRpcId,
+      correlation_id: correlationId,
+      tool_call_fingerprint: toolCallFingerprint,
+      event_type: 'ui_tool_delivered' as const,
+      tool_name: null,
+      ts: Date.now(),
+      payload_json: JSON.stringify(payload),
+    };
+
+    const stmt = this.db.prepare(`
+      INSERT INTO ui_events (event_id, ui_session_id, ui_rpc_id, correlation_id, tool_call_fingerprint, event_type, tool_name, ts, payload_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      event.event_id,
+      event.ui_session_id,
+      event.ui_rpc_id,
+      event.correlation_id,
+      event.tool_call_fingerprint,
+      event.event_type,
+      event.tool_name,
+      event.ts,
+      event.payload_json
+    );
+
+    return { event_id: event.event_id, ts: event.ts };
+  }
+
+  /**
+   * Get UI events by correlation ID
+   *
+   * @param correlationId - Correlation ID
+   * @returns UI events with matching correlation ID
+   */
+  getUiEventsByCorrelationId(correlationId: string): Array<{
+    event_id: string;
+    ui_session_id: string;
+    ui_rpc_id: string;
+    correlation_id: string;
+    tool_call_fingerprint: string;
+    event_type: string;
+    tool_name: string | null;
+    ts: number;
+    payload_json: string | null;
+  }> {
+    const stmt = this.db.prepare(`
+      SELECT * FROM ui_events WHERE correlation_id = ? ORDER BY ts ASC
+    `);
+    return stmt.all(correlationId) as Array<{
+      event_id: string;
+      ui_session_id: string;
+      ui_rpc_id: string;
+      correlation_id: string;
+      tool_call_fingerprint: string;
+      event_type: string;
+      tool_name: string | null;
+      ts: number;
+      payload_json: string | null;
+    }>;
+  }
+
+  /**
+   * Get UI events by session ID
+   *
+   * @param uiSessionId - UI session ID
+   * @param limit - Maximum number of events to return
+   * @returns UI events for the session
+   */
+  getUiEventsBySession(uiSessionId: string, limit = 100): Array<{
+    event_id: string;
+    ui_session_id: string;
+    ui_rpc_id: string;
+    correlation_id: string;
+    tool_call_fingerprint: string;
+    event_type: string;
+    tool_name: string | null;
+    ts: number;
+    payload_json: string | null;
+  }> {
+    const sql = `
+      SELECT * FROM ui_events
+      WHERE ui_session_id = ?
+      ORDER BY ts DESC
+      LIMIT ?
+    `;
+    const stmt = this.db.prepare(sql);
+    return stmt.all(uiSessionId, limit) as Array<{
+      event_id: string;
+      ui_session_id: string;
+      ui_rpc_id: string;
+      correlation_id: string;
+      tool_call_fingerprint: string;
+      event_type: string;
+      tool_name: string | null;
+      ts: number;
+      payload_json: string | null;
+    }>;
+  }
 }

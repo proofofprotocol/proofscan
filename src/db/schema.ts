@@ -6,12 +6,13 @@
  * Phase 6.0: Schema version 5 with popl kind support in user_refs
  * Phase 7.0: Schema version 6 with targets table (unified connector/agent) and agent_cache table
  * Phase 2.4: Schema version 7 with task_events table for Task lifecycle tracking
+ * Phase 6.2: Schema version 8 with ui_events table for UI tool tracking
  */
 
-export const EVENTS_DB_VERSION = 7;
+export const EVENTS_DB_VERSION = 8;
 export const PROOFS_DB_VERSION = 2;
 
-// events.db schema (version 3)
+// events.db schema
 export const EVENTS_DB_SCHEMA = `
 -- Sessions table (Phase 7.0: added target_id for unified connector/agent)
 -- Note: connector_id is legacy, target_id is the unified identifier
@@ -155,6 +156,30 @@ CREATE INDEX IF NOT EXISTS idx_task_events_session ON task_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_events_kind ON task_events(event_kind);
 CREATE INDEX IF NOT EXISTS idx_task_events_ts ON task_events(ts);
+
+-- UI events table (Phase 6.2: UI tool tracking with correlation IDs)
+CREATE TABLE IF NOT EXISTS ui_events (
+  event_id TEXT PRIMARY KEY,
+  ui_session_id TEXT NOT NULL,
+  ui_rpc_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  tool_call_fingerprint TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK(
+    event_type IN (
+      'ui_tool_request',
+      'ui_tool_result',
+      'ui_tool_delivered'
+    )
+  ),
+  tool_name TEXT,
+  ts INTEGER NOT NULL,
+  payload_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ui_events_session ON ui_events(ui_session_id);
+CREATE INDEX IF NOT EXISTS idx_ui_events_correlation ON ui_events(correlation_id);
+CREATE INDEX IF NOT EXISTS idx_ui_events_type ON ui_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_ui_events_ts ON ui_events(ts);
 `;
 
 /**
@@ -348,6 +373,36 @@ CREATE INDEX IF NOT EXISTS idx_task_events_session ON task_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_task_events_task ON task_events(task_id);
 CREATE INDEX IF NOT EXISTS idx_task_events_kind ON task_events(event_kind);
 CREATE INDEX IF NOT EXISTS idx_task_events_ts ON task_events(ts);
+`;
+
+/**
+ * Migration from version 7 to version 8
+ * Phase 6.2: Adds ui_events table for UI tool tracking with correlation IDs
+ */
+export const EVENTS_DB_MIGRATION_7_TO_8 = `
+-- Create ui_events table for UI tool tracking
+CREATE TABLE IF NOT EXISTS ui_events (
+  event_id TEXT PRIMARY KEY,
+  ui_session_id TEXT NOT NULL,
+  ui_rpc_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  tool_call_fingerprint TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK(
+    event_type IN (
+      'ui_tool_request',
+      'ui_tool_result',
+      'ui_tool_delivered'
+    )
+  ),
+  tool_name TEXT,
+  ts INTEGER NOT NULL,
+  payload_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_ui_events_session ON ui_events(ui_session_id);
+CREATE INDEX IF NOT EXISTS idx_ui_events_correlation ON ui_events(correlation_id);
+CREATE INDEX IF NOT EXISTS idx_ui_events_type ON ui_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_ui_events_ts ON ui_events(ts);
 `;
 
 // proofs.db schema (version 2: added plans and runs tables)
