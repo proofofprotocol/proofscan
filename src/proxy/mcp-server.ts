@@ -101,6 +101,9 @@ export class McpProxyServer extends EventEmitter {
     protocolVersion: string;
   } | null = null;
 
+  /** Session tokens for UI validation */
+  private sessionTokens: Set<string> = new Set();
+
   constructor(options: ProxyOptions, configPath?: string) {
     super();
     this.options = options;
@@ -813,6 +816,9 @@ export class McpProxyServer extends EventEmitter {
     // Generate random session token
     const sessionToken = crypto.randomUUID();
 
+    // Store token for validation
+    this.sessionTokens.add(sessionToken);
+
     const result: UiInitializeResult = {
       protocolVersion: UI_PROTOCOL_VERSION,
       sessionToken,
@@ -820,6 +826,18 @@ export class McpProxyServer extends EventEmitter {
 
     logger.info(`Session token generated: ${sessionToken}`);
     this.sendResult(id, result);
+  }
+
+  /**
+   * Validate a session token
+   *
+   * Used by future ui/call endpoints to verify requests from authenticated UI sessions.
+   *
+   * @param token - The session token to validate
+   * @returns true if the token is valid and still stored, false otherwise
+   */
+  private isValidSessionToken(token: string): boolean {
+    return this.sessionTokens.has(token);
   }
 
   /**
