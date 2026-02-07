@@ -70,7 +70,7 @@ function getTraceViewerHtml(): string {
     const htmlPath = join(__dirname, '../html/trace-viewer.html');
     return readFileSync(htmlPath, 'utf-8');
   } catch (error) {
-    logger.error('Failed to load trace-viewer.html:', error);
+    logger.error(`Failed to load trace-viewer.html: ${error instanceof Error ? error.message : String(error)}`);
     throw new Error('UI resource unavailable');
   }
 }
@@ -792,7 +792,7 @@ export class McpProxyServer extends EventEmitter {
         };
         this.sendResult(id, result);
       } catch (error) {
-        logger.error('Failed to load UI resource:', error);
+        logger.error(`Failed to load UI resource: ${error instanceof Error ? error.message : String(error)}`);
         this.sendError(id, MCP_ERROR.INTERNAL_ERROR, 'Failed to load UI resource');
         return;
       }
