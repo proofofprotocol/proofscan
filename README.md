@@ -30,6 +30,7 @@ proofscan provides complete visibility into MCP (Model Context Protocol) server 
 | 📦 **Catalog** | Search and install MCP servers from registry |
 | 📈 **Analyze** | Tool usage analysis across sessions |
 | 📝 **Plans** | Validation plans for automated testing |
+| 🖥️ **MCP Apps** | Interactive trace viewer UI in Claude Desktop |
 | 🌍 **i18n** | Multi-language support (English, 日本語) |
 
 ## Quick Links
@@ -41,6 +42,7 @@ proofscan provides complete visibility into MCP (Model Context Protocol) server 
 - 🎭 **[Proxy Guide](docs/PROXY.md)** ([日本語](docs/PROXY.ja.md)) – MCP proxy server
 - 📦 **[POPL Guide](docs/POPL.md)** ([日本語](docs/POPL.ja.md)) – Public Observable Proof Ledger
 - 🔧 **[MCP Server Setup](docs/MCP_SERVER_SETUP_GUIDE.md)** ([日本語](docs/MCP_SERVER_SETUP_GUIDE.ja.md)) – Setting up MCP servers
+- 🖥️ **[MCP Apps UI](docs/MCP_APPS.md)** ([日本語](docs/MCP_APPS.ja.md)) – Interactive trace viewer UI
 
 ### For Developers
 

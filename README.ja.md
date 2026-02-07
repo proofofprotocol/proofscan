@@ -24,6 +24,7 @@ proofscan は MCP (Model Context Protocol) サーバー通信の完全な可視�
 - 🐚 **[シェルモードガイド](docs/SHELL.ja.md)** - 対話型シェルと @参照
 - 🎭 **[プロキシガイド](docs/PROXY.ja.md)** - MCP プロキシサーバードキュメント
 - 📦 **[POPL ガイド](docs/POPL.ja.md)** - 公開可能証明台帳
+- 🖥️ **[MCP Apps UI](docs/MCP_APPS.ja.md)** - インタラクティブトレースビューア
 - 🔧 **[API ドキュメント](docs/API.ja.md)** - 開発者向け TypeScript API
 
 ## インストール
