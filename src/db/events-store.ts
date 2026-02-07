@@ -268,10 +268,17 @@ export class EventsStore {
     let sql = `SELECT * FROM events WHERE session_id = ?`;
     const params: unknown[] = [sessionId];
 
-    // Exclusive cursor: events with event_id < before
+    // Exclusive cursor: get events older than the specified event_id
+    // First, get the ts of the cursor event, then filter by ts < cursor_ts
     if (options.before) {
-      sql += ` AND event_id < ?`;
-      params.push(options.before);
+      const cursorStmt = this.db.prepare(
+        `SELECT ts FROM events WHERE event_id = ?`
+      );
+      const cursorEvent = cursorStmt.get(options.before) as { ts: number } | undefined;
+      if (cursorEvent) {
+        sql += ` AND ts < ?`;
+        params.push(cursorEvent.ts);
+      }
     }
 
     // Order by ts DESC (newest first) for stable pagination
