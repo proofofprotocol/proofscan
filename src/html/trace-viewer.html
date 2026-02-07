@@ -29,6 +29,9 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
 
     h1 {
@@ -74,38 +77,154 @@
     main {
       flex: 1;
       display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 40px;
+      flex-direction: column;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 16px;
+      overflow: hidden;
     }
 
     #message {
       text-align: center;
       font-size: 16px;
       color: #aaa;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    #events {
+    #content {
       display: none;
-      width: 100%;
-      max-width: 1200px;
+      flex: 1;
+      flex-direction: column;
+      overflow: hidden;
     }
 
-    .event-list {
-      background: #0f3460;
+    #loading {
+      text-align: center;
+      padding: 20px;
+      color: #aaa;
+      font-size: 14px;
+    }
+
+    #events-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+      position: relative;
+    }
+
+    .event-card {
+      background: #16213e;
       border-radius: 8px;
-      padding: 16px;
-    }
-
-    .event-item {
       padding: 12px;
-      border-bottom: 1px solid #16213e;
-      font-family: 'Monaco', 'Consolas', monospace;
+      margin: 8px;
+      border-left: 4px solid #e94560;
       font-size: 13px;
+      animation: fadeIn 0.2s ease;
     }
 
-    .event-item:last-child {
-      border-bottom: none;
+    .event-card.response {
+      border-left-color: #0f3460;
+    }
+
+    .event-card.hidden {
+      display: none;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .event-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .event-timestamp {
+      font-family: 'Monaco', 'Consolas', monospace;
+      color: #aaa;
+    }
+
+    .event-kind {
+      background: #0f3460;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #e94560;
+    }
+
+    .event-kind.response {
+      color: #4ade80;
+    }
+
+    .event-direction {
+      font-size: 11px;
+      color: #666;
+    }
+
+    .event-direction::before {
+      content: attr(data-icon);
+      margin-right: 4px;
+    }
+
+    .event-body {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 12px;
+      color: #ccc;
+      background: #0a0a1a;
+      padding: 8px;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    #load-more {
+      text-align: center;
+      padding: 12px;
+      color: #aaa;
+      font-size: 14px;
+      display: none;
+    }
+
+    #load-more.visible {
+      display: block;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .new-event-indicator {
+      position: fixed;
+      top: 70px;
+      right: 20px;
+      background: #e94560;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      animation: bounce 0.5s ease;
+      z-index: 50;
+    }
+
+    @keyframes bounce {
+      0% { transform: scale(0); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
     }
   </style>
 </head>
@@ -120,11 +239,17 @@
 
   <main>
     <div id="message">Connecting to MCP host...</div>
-    <div id="events"></div>
+    <div id="content">
+      <div id="loading">Loading events...</div>
+      <div id="events-container">
+        <div id="events-list"></div>
+      </div>
+      <div id="load-more">Loading more...</div>
+    </div>
   </main>
 
   <script>
-    // MCP Apps UI - Minimal implementation for Phase 6.1
+    // MCP Apps UI - Phase 6.4 Trace Viewer MVP
     (function() {
       'use strict';
 
@@ -133,12 +258,24 @@
       let currentRpcId = 1;
       let trustedOrigin = null;
       const pendingRequests = new Map();
+      const events = [];
+      const eventIds = new Set();
+      const sessionId = 'test-session';
+      let currentPage = 0;
+      const pageSize = 50;
+      let isLoading = false;
+      let hasMore = true;
+      let visibleRange = { start: -50, end: 100 };
 
       // DOM elements
       const statusDot = document.getElementById('statusDot');
       const statusText = document.getElementById('statusText');
       const messageDiv = document.getElementById('message');
-      const eventsDiv = document.getElementById('events');
+      const contentDiv = document.getElementById('content');
+      const loadingDiv = document.getElementById('loading');
+      const eventsContainer = document.getElementById('events-container');
+      const eventsList = document.getElementById('events-list');
+      const loadMoreDiv = document.getElementById('load-more');
 
       // Status helper
       function setStatus(status, text) {
@@ -152,13 +289,193 @@
           jsonrpc: '2.0',
           id: currentRpcId++,
           method: method,
-          params: params
+          params: params || {}
         };
+        // Add session token
+        if (sessionToken) {
+          request.params._sessionToken = sessionToken;
+        }
         console.log('[UI] Sending:', request);
         const targetOrigin = trustedOrigin || '*';
         window.parent.postMessage(request, targetOrigin);
         pendingRequests.set(request.id, { method });
         return request.id;
+      }
+
+      // Format timestamp
+      function formatTimestamp(ts) {
+        if (!ts) return '';
+        const date = new Date(ts);
+        return date.toLocaleTimeString() + '.' +
+               String(date.getMilliseconds()).padStart(3, '0');
+      }
+
+      // Format direction icon
+      function getDirectionIcon(direction) {
+        if (direction === 'client_to_server' || direction === 'request') {
+          return '↑';
+        } else if (direction === 'server_to_client' || direction === 'response') {
+          return '↓';
+        }
+        return '•';
+      }
+
+      // Create event card element
+      function createEventCard(event) {
+        const card = document.createElement('div');
+        card.className = 'event-card';
+        card.dataset.eventId = event.id || '';
+
+        const isResponse = event.kind === 'response' ||
+                          event.direction === 'server_to_client' ||
+                          (event._meta && event._meta.direction === 'server_to_client');
+
+        if (isResponse) {
+          card.classList.add('response');
+        }
+
+        const direction = event.direction || event._meta?.direction || '';
+        const icon = getDirectionIcon(direction);
+        const timestamp = event.timestamp || event._meta?.timestamp || '';
+        const kind = event.kind || event.type || 'unknown';
+
+        let html = '<div class="event-header">';
+        html += '<span class="event-timestamp">' + formatTimestamp(timestamp) + '</span>';
+        html += '<span class="event-kind' + (isResponse ? ' response' : '') + '">' + kind + '</span>';
+        html += '<span class="event-direction" data-icon="' + icon + '">' + direction + '</span>';
+        html += '</div>';
+
+        const body = event.data || event.content || event.payload || JSON.stringify(event, null, 2);
+        html += '<div class="event-body">' + escapeHtml(body) + '</div>';
+
+        card.innerHTML = html;
+        return card;
+      }
+
+      // Escape HTML
+      function escapeHtml(str) {
+        if (typeof str !== 'string') {
+          str = JSON.stringify(str, null, 2);
+        }
+        return str
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      // Add event (idempotent)
+      function addEvent(event, prepend = false) {
+        const eventId = event.id || event._meta?.id || JSON.stringify(event);
+        if (eventIds.has(eventId)) {
+          return false; // Already exists
+        }
+
+        eventIds.add(eventId);
+        events.push(event);
+
+        const card = createEventCard(event);
+        if (prepend) {
+          eventsList.insertBefore(card, eventsList.firstChild);
+        } else {
+          eventsList.appendChild(card);
+        }
+
+        return true;
+      }
+
+      // Show/hide events based on visible range (simple virtual scroll)
+      function updateVisibleEvents() {
+        const container = eventsContainer;
+        const scrollTop = container.scrollTop;
+        const viewportHeight = container.clientHeight;
+        const buffer = 100; // Buffer around viewport
+
+        const visibleStart = Math.floor((scrollTop - buffer) / 50) - 10;
+        const visibleEnd = Math.ceil((scrollTop + viewportHeight + buffer) / 50) + 10;
+
+        const cards = eventsList.querySelectorAll('.event-card');
+        cards.forEach((card, index) => {
+          if (index >= visibleStart && index < visibleEnd) {
+            card.classList.remove('hidden');
+          } else {
+            card.classList.add('hidden');
+          }
+        });
+      }
+
+      // Load events via proofscan_getEvents
+      function loadEvents(beforeCursor = null, prepend = false) {
+        if (isLoading) return;
+        isLoading = true;
+        loadMoreDiv.classList.add('visible');
+
+        const params = {
+          sessionId: sessionId,
+          limit: pageSize
+        };
+
+        if (beforeCursor) {
+          params.before = beforeCursor;
+        }
+
+        const requestId = sendRequest('tools/call', {
+          name: 'proofscan_getEvents',
+          arguments: params
+        });
+
+        pendingRequests.set(requestId, {
+          method: 'tools/call',
+          prepend: prepend,
+          beforeCursor: beforeCursor
+        });
+      }
+
+      // Handle tools/call response
+      function handleToolsCallResponse(msg, pending) {
+        const result = msg.result;
+
+        if (result && result.content && result.content.length > 0) {
+          const content = result.content[0];
+
+          if (content.type === 'text') {
+            try {
+              const data = JSON.parse(content.text);
+
+              if (data.events && Array.isArray(data.events)) {
+                let addedCount = 0;
+                data.events.forEach(event => {
+                  if (addEvent(event, pending.prepend)) {
+                    addedCount++;
+                  }
+                });
+
+                console.log('[UI] Loaded', addedCount, 'events');
+
+                if (data._meta && data._meta.cursors) {
+                  hasMore = !!data._meta.cursors.before;
+                } else {
+                  hasMore = data.events.length >= pageSize;
+                }
+
+                loadingDiv.style.display = 'none';
+
+                if (events.length === 0) {
+                  eventsList.innerHTML = '<div class="empty-state">No events found</div>';
+                }
+              }
+            } catch (e) {
+              console.error('[UI] Failed to parse events:', e);
+              eventsList.innerHTML = '<div class="empty-state">Failed to load events</div>';
+            }
+          }
+        } else if (msg.error) {
+          console.error('[UI] Error loading events:', msg.error);
+          eventsList.innerHTML = '<div class="empty-state">Error: ' + msg.error.message + '</div>';
+        }
+
+        isLoading = false;
+        loadMoreDiv.classList.remove('visible');
       }
 
       // Handle incoming messages
@@ -177,10 +494,10 @@
 
         // Validate JSON-RPC structure
         if (!msg || typeof msg !== 'object' || msg.jsonrpc !== '2.0') {
-          return; // Ignore non-JSON-RPC messages
+          return;
         }
 
-        // Token validation: ignore messages without sessionToken or with mismatched token
+        // Token validation
         if (msg.params && msg.params._sessionToken !== undefined) {
           if (msg.params._sessionToken !== sessionToken) {
             console.log('[UI] Token mismatch - ignoring message');
@@ -193,16 +510,24 @@
         // Handle response (has id)
         if ('id' in msg && !msg.method) {
           const pending = pendingRequests.get(msg.id);
-          if (pending && pending.method === 'ui/initialize') {
-            // Response to ui/initialize
-            if (msg.result && msg.result.sessionToken) {
-              sessionToken = msg.result.sessionToken;
-              setStatus('connected', 'Connected');
-              messageDiv.textContent = 'Connected to ProofScan MCP Server';
-              console.log('[UI] Session token received:', sessionToken);
-            } else if (msg.error) {
-              setStatus('error', 'Error');
-              messageDiv.textContent = 'Error: ' + msg.error.message;
+          if (pending) {
+            if (pending.method === 'ui/initialize') {
+              // Response to ui/initialize
+              if (msg.result && msg.result.sessionToken) {
+                sessionToken = msg.result.sessionToken;
+                setStatus('connected', 'Connected');
+                messageDiv.style.display = 'none';
+                contentDiv.style.display = 'flex';
+                console.log('[UI] Session token received:', sessionToken);
+
+                // Load initial events
+                loadEvents();
+              } else if (msg.error) {
+                setStatus('error', 'Error');
+                messageDiv.textContent = 'Error: ' + msg.error.message;
+              }
+            } else if (pending.method === 'tools/call') {
+              handleToolsCallResponse(msg, pending);
             }
             pendingRequests.delete(msg.id);
           }
@@ -215,13 +540,60 @@
             const type = msg.params?.type;
             const payload = msg.params?.payload;
             console.log('[UI] Notification:', type, payload);
+
+            // If payload contains new events
+            if (payload && payload.events && Array.isArray(payload.events)) {
+              let addedCount = 0;
+              payload.events.forEach(event => {
+                if (addEvent(event, false)) {
+                  addedCount++;
+                }
+              });
+
+              if (addedCount > 0) {
+                console.log('[UI] Added', addedCount, 'new events via notification');
+                updateVisibleEvents();
+              }
+            }
           }
           // Handle ui/notifications/*
           else if (msg.method.startsWith('ui/notifications/')) {
             const type = msg.method.replace('ui/notifications/', '');
             console.log('[UI] Notification:', type, msg.params);
+
+            // Check if this is an event notification
+            const payload = msg.params;
+            if (payload && (payload.event || payload.events || payload.data)) {
+              const eventData = payload.event || payload.events || payload.data;
+
+              if (Array.isArray(eventData)) {
+                eventData.forEach(event => addEvent(event, false));
+              } else {
+                addEvent(eventData, false);
+              }
+
+              updateVisibleEvents();
+            }
           }
         }
+      }
+
+      // Scroll handler for pagination
+      function handleScroll() {
+        const scrollTop = eventsContainer.scrollTop;
+        const scrollHeight = eventsContainer.scrollHeight;
+        const clientHeight = eventsContainer.clientHeight;
+
+        // Load more when scrolled near top
+        if (scrollTop < 100 && hasMore && !isLoading) {
+          const firstCard = eventsList.querySelector('.event-card');
+          if (firstCard) {
+            loadEvents(firstCard.dataset.eventId, true);
+          }
+        }
+
+        // Update visible events
+        updateVisibleEvents();
       }
 
       // Initialize
@@ -230,6 +602,9 @@
 
         // Listen for postMessage
         window.addEventListener('message', handleMessage);
+
+        // Add scroll listener
+        eventsContainer.addEventListener('scroll', handleScroll);
 
         // Send ui/initialize request
         sendRequest('ui/initialize', {
