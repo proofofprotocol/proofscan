@@ -131,6 +131,8 @@
       // State
       let sessionToken = null;
       let currentRpcId = 1;
+      let trustedOrigin = null;
+      const pendingRequests = new Map();
 
       // DOM elements
       const statusDot = document.getElementById('statusDot');
@@ -153,12 +155,24 @@
           params: params
         };
         console.log('[UI] Sending:', request);
-        window.parent.postMessage(request, '*');
+        const targetOrigin = trustedOrigin || '*';
+        window.parent.postMessage(request, targetOrigin);
+        pendingRequests.set(request.id, { method });
         return request.id;
       }
 
       // Handle incoming messages
       function handleMessage(event) {
+        // Origin validation: lock to first origin that sends a message
+        if (!trustedOrigin && event.origin) {
+          trustedOrigin = event.origin;
+          console.log('[UI] Origin locked to:', trustedOrigin);
+        }
+        if (event.origin !== trustedOrigin) {
+          console.log('[UI] Origin mismatch - ignoring message from:', event.origin);
+          return;
+        }
+
         const msg = event.data;
 
         // Validate JSON-RPC structure
@@ -177,8 +191,9 @@
         console.log('[UI] Received:', msg);
 
         // Handle response (has id)
-        if ('id' in msg) {
-          if (msg.id === 1 && msg.method === undefined) {
+        if ('id' in msg && !msg.method) {
+          const pending = pendingRequests.get(msg.id);
+          if (pending && pending.method === 'ui/initialize') {
             // Response to ui/initialize
             if (msg.result && msg.result.sessionToken) {
               sessionToken = msg.result.sessionToken;
@@ -189,6 +204,7 @@
               setStatus('error', 'Error');
               messageDiv.textContent = 'Error: ' + msg.error.message;
             }
+            pendingRequests.delete(msg.id);
           }
         }
 

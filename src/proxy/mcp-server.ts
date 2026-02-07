@@ -59,12 +59,20 @@ const MAX_BUFFER_SIZE = 1024 * 1024;
 /** UI Resource URI for trace viewer */
 const TRACE_VIEWER_URI = 'ui://proofscan/trace-viewer';
 
+/** Maximum URI length to prevent buffer overflow attacks */
+const MAX_URI_LENGTH = 2048;
+
 /** Get the trace-viewer HTML content */
 function getTraceViewerHtml(): string {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = dirname(__filename);
-  const htmlPath = join(__dirname, '../html/trace-viewer.html');
-  return readFileSync(htmlPath, 'utf-8');
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const htmlPath = join(__dirname, '../html/trace-viewer.html');
+    return readFileSync(htmlPath, 'utf-8');
+  } catch (error) {
+    logger.error('Failed to load trace-viewer.html:', error);
+    throw new Error('UI resource unavailable');
+  }
 }
 
 /** Maximum log lines in ring buffer */
@@ -754,18 +762,40 @@ export class McpProxyServer extends EventEmitter {
     const { uri } = params;
     logger.info(`resources/read uri=${uri}`);
 
+    // URI validation
+    if (uri.length > MAX_URI_LENGTH) {
+      this.sendError(id, MCP_ERROR.INVALID_PARAMS, 'URI too long');
+      return;
+    }
+
+    if (!uri.startsWith('ui://proofscan/')) {
+      this.sendError(id, MCP_ERROR.INVALID_PARAMS, 'Invalid URI scheme or host');
+      return;
+    }
+
+    if (uri.includes('..')) {
+      this.sendError(id, MCP_ERROR.INVALID_PARAMS, 'Invalid URI path');
+      return;
+    }
+
     if (uri === TRACE_VIEWER_URI) {
-      const html = getTraceViewerHtml();
-      const result: ResourcesReadResult = {
-        contents: [
-          {
-            uri,
-            mimeType: 'text/html;profile=mcp-app',
-            text: html,
-          },
-        ],
-      };
-      this.sendResult(id, result);
+      try {
+        const html = getTraceViewerHtml();
+        const result: ResourcesReadResult = {
+          contents: [
+            {
+              uri,
+              mimeType: 'text/html;profile=mcp-app',
+              text: html,
+            },
+          ],
+        };
+        this.sendResult(id, result);
+      } catch (error) {
+        logger.error('Failed to load UI resource:', error);
+        this.sendError(id, MCP_ERROR.INTERNAL_ERROR, 'Failed to load UI resource');
+        return;
+      }
     } else {
       this.sendError(id, MCP_ERROR.INVALID_PARAMS, `Resource not found: ${uri}`);
     }
