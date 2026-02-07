@@ -810,8 +810,10 @@ export class McpProxyServer extends EventEmitter {
       );
       const before = args.before as string | undefined;
 
-      // Get events from EventsStore with pagination
-      const events = this.eventsStore.getEvents(sessionId, { limit, before });
+      // Get limit+1 events to determine if there are more
+      const fetchedEvents = this.eventsStore.getEvents(sessionId, { limit: limit + 1, before });
+      const hasMore = fetchedEvents.length > limit;
+      const events = hasMore ? fetchedEvents.slice(0, limit) : fetchedEvents;
 
       // Build response map for O(n) duration calculation (instead of O(n²))
       const responseMap = new Map(
@@ -905,7 +907,7 @@ export class McpProxyServer extends EventEmitter {
         structuredContent: {
           events: structuredEvents,
           sessionId,
-          hasMore: eventsWithDuration.length === limit,
+          hasMore,
         },
         _meta: {
           ui: { resourceUri: TRACE_VIEWER_URI },

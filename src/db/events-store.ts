@@ -269,20 +269,21 @@ export class EventsStore {
     const params: unknown[] = [sessionId];
 
     // Exclusive cursor: get events older than the specified event_id
-    // First, get the ts of the cursor event, then filter by ts < cursor_ts
+    // Use composite cursor (ts, event_id) for stable pagination with same-timestamp events
     if (options.before) {
       const cursorStmt = this.db.prepare(
-        `SELECT ts FROM events WHERE event_id = ?`
+        `SELECT ts, event_id FROM events WHERE event_id = ?`
       );
-      const cursorEvent = cursorStmt.get(options.before) as { ts: number } | undefined;
+      const cursorEvent = cursorStmt.get(options.before) as { ts: number; event_id: string } | undefined;
       if (cursorEvent) {
-        sql += ` AND ts < ?`;
-        params.push(cursorEvent.ts);
+        // Events with earlier timestamp, OR same timestamp but earlier event_id
+        sql += ` AND (ts < ? OR (ts = ? AND event_id < ?))`;
+        params.push(cursorEvent.ts, cursorEvent.ts, cursorEvent.event_id);
       }
     }
 
-    // Order by ts DESC (newest first) for stable pagination
-    sql += ` ORDER BY ts DESC LIMIT ?`;
+    // Order by ts DESC, event_id DESC for deterministic ordering with same-timestamp events
+    sql += ` ORDER BY ts DESC, event_id DESC LIMIT ?`;
     params.push(limit);
 
     const stmt = this.db.prepare(sql);
