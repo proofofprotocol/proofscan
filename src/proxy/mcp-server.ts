@@ -18,6 +18,7 @@ import { EventEmitter } from 'events';
 import { join } from 'path';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import { dirname } from 'path';
 import { logger, initializeRingBuffer, isVerbose } from './logger.js';
 import { ToolAggregator } from './tool-aggregator.js';
@@ -814,7 +815,7 @@ export class McpProxyServer extends EventEmitter {
     logger.info('ui/initialize - generating session token');
 
     // Generate random session token
-    const sessionToken = crypto.randomUUID();
+    const sessionToken = randomUUID();
 
     // Store token for validation
     this.sessionTokens.add(sessionToken);
