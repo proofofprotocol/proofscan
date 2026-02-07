@@ -216,25 +216,6 @@
       font-size: 14px;
     }
 
-    .new-event-indicator {
-      position: fixed;
-      top: 70px;
-      right: 20px;
-      background: #e94560;
-      color: white;
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 12px;
-      cursor: pointer;
-      animation: bounce 0.5s ease;
-      z-index: 50;
-    }
-
-    @keyframes bounce {
-      0% { transform: scale(0); }
-      50% { transform: scale(1.1); }
-      100% { transform: scale(1); }
-    }
   </style>
 </head>
 <body>
@@ -478,6 +459,7 @@
             } catch (e) {
               console.error('[UI] Failed to parse events:', e);
               eventsList.innerHTML = '<div class="empty-state">Failed to load events</div>';
+              hasMore = false; // Prevent retry on parse error
               isLoading = false;
               loadMoreDiv.classList.remove('visible');
               return;
@@ -592,23 +574,26 @@
         }
       }
 
-      // Scroll handler for pagination
+      // Scroll handler for pagination (debounced)
+      let scrollTimeout;
       function handleScroll() {
-        const scrollTop = eventsContainer.scrollTop;
-        const scrollHeight = eventsContainer.scrollHeight;
-        const clientHeight = eventsContainer.clientHeight;
+        // Debounce scroll events to avoid performance issues
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+          const scrollTop = eventsContainer.scrollTop;
 
-        // Load more when scrolled near top
-        if (scrollTop < 100 && hasMore && !isLoading) {
-          const firstCard = eventsList.querySelector('.event-card');
-          const cursor = firstCard?.dataset?.eventId;
-          if (cursor && cursor !== '') {
-            loadEvents(cursor, true);
+          // Load more when scrolled near top
+          if (scrollTop < 100 && hasMore && !isLoading) {
+            const firstCard = eventsList.querySelector('.event-card');
+            const cursor = firstCard?.dataset?.eventId;
+            if (cursor && cursor !== '') {
+              loadEvents(cursor, true);
+            }
           }
-        }
 
-        // Update visible events
-        updateVisibleEvents();
+          // Update visible events
+          updateVisibleEvents();
+        }, 100);
       }
 
       // Initialize
