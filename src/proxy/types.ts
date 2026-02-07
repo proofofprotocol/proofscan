@@ -104,6 +104,7 @@ export interface InitializeResult {
   protocolVersion: string;
   capabilities: {
     tools?: Record<string, unknown>;
+    resources?: Record<string, unknown>;
   };
   serverInfo: {
     name: string;
@@ -130,4 +131,48 @@ export interface ToolsCallParams {
 export interface ToolsCallResult {
   content?: unknown[];
   isError?: boolean;
+  structuredContent?: unknown;
+  _meta?: {
+    ui?: {
+      resourceUri?: string;
+    };
+    outputSchemaVersion?: string;
+    [key: string]: unknown;
+  };
+}
+
+/** MCP resources/list result */
+export interface ResourcesListResult {
+  resources: Array<{
+    uri: string;
+    name: string;
+    description?: string;
+    mimeType?: string;
+  }>;
+}
+
+/** MCP resources/read params */
+export interface ResourcesReadParams {
+  uri: string;
+}
+
+/** MCP resources/read result */
+export interface ResourcesReadResult {
+  contents: Array<{
+    uri: string;
+    mimeType?: string;
+    text?: string;
+    blob?: string; // base64
+  }>;
+}
+
+/** MCP ui/initialize params */
+export interface UiInitializeParams {
+  protocolVersion?: string;
+}
+
+/** MCP ui/initialize result */
+export interface UiInitializeResult {
+  protocolVersion: string;
+  sessionToken: string;
 }

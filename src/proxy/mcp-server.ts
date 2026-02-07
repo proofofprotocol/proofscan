@@ -9,10 +9,16 @@
  * - notifications/initialized
  * - tools/list
  * - tools/call
+ * - resources/list (Phase 6.1+)
+ * - resources/read (Phase 6.1+)
+ * - ui/initialize (Phase 6.1+)
  */
 
 import { EventEmitter } from 'events';
 import { join } from 'path';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import { logger, initializeRingBuffer, isVerbose } from './logger.js';
 import { ToolAggregator } from './tool-aggregator.js';
 import { RequestRouter } from './request-router.js';
@@ -31,6 +37,11 @@ import {
   type ToolsListResult,
   type ToolsCallParams,
   type ToolsCallResult,
+  type ResourcesListResult,
+  type ResourcesReadParams,
+  type ResourcesReadResult,
+  type UiInitializeParams,
+  type UiInitializeResult,
 } from './types.js';
 import { IpcServer } from './ipc-server.js';
 import { getSocketPath, type ReloadResult } from './ipc-types.js';
@@ -38,11 +49,23 @@ import { ConfigManager } from '../config/manager.js';
 import type { Connector } from '../types/config.js';
 
 const PROTOCOL_VERSION = '2024-11-05';
+const UI_PROTOCOL_VERSION = '2025-11-21';
 const SERVER_NAME = 'proofscan-proxy';
 const SERVER_VERSION = '0.7.0';
 
 /** Maximum buffer size in bytes (1MB) - prevents memory exhaustion attacks */
 const MAX_BUFFER_SIZE = 1024 * 1024;
+
+/** UI Resource URI for trace viewer */
+const TRACE_VIEWER_URI = 'ui://proofscan/trace-viewer';
+
+/** Get the trace-viewer HTML content */
+function getTraceViewerHtml(): string {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const htmlPath = join(__dirname, '../html/trace-viewer.html');
+  return readFileSync(htmlPath, 'utf-8');
+}
 
 /** Maximum log lines in ring buffer */
 const MAX_LOG_LINES = 1000;
@@ -471,6 +494,18 @@ export class McpProxyServer extends EventEmitter {
         await this.handleToolsCall(id, params as ToolsCallParams | undefined);
         break;
 
+      case 'resources/list':
+        await this.handleResourcesList(id);
+        break;
+
+      case 'resources/read':
+        await this.handleResourcesRead(id, params as ResourcesReadParams | undefined);
+        break;
+
+      case 'ui/initialize':
+        await this.handleUiInitialize(id, params as UiInitializeParams | undefined);
+        break;
+
       default:
         logger.warn(`Unknown method: ${method}`);
         this.sendError(id, MCP_ERROR.METHOD_NOT_FOUND, `Method not found: ${method}`);
@@ -531,6 +566,7 @@ export class McpProxyServer extends EventEmitter {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: {
         tools: {},
+        resources: {},
       },
       serverInfo: {
         name: SERVER_NAME,
@@ -552,15 +588,57 @@ export class McpProxyServer extends EventEmitter {
     try {
       const tools = await this.aggregator.getAggregatedTools();
 
-      const result: ToolsListResult = {
-        tools: tools.map((t) => ({
+      // Add proofscan_getEvents tool (Phase 6.1)
+      const toolsList = [
+        ...tools.map((t) => ({
           name: t.namespacedName,
           description: t.description,
           inputSchema: t.inputSchema,
         })),
+        {
+          name: 'proofscan_getEvents',
+          description: 'Get protocol events (paginated). Returns text summary + structured data.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              sessionId: { type: 'string' },
+              limit: { type: 'number', default: 50 },
+              before: { type: 'string', description: 'Event ID for pagination' },
+            },
+            required: ['sessionId'],
+          },
+          outputSchema: {
+            type: 'object',
+            properties: {
+              events: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    type: { type: 'string' },
+                    method: { type: 'string' },
+                    timestamp: { type: 'number' },
+                    duration_ms: { type: 'number' },
+                  },
+                },
+              },
+              sessionId: { type: 'string' },
+              hasMore: { type: 'boolean' },
+            },
+          },
+          _meta: {
+            ui: { resourceUri: TRACE_VIEWER_URI },
+            outputSchemaVersion: '1',
+          },
+        },
+      ];
+
+      const result: ToolsListResult = {
+        tools: toolsList,
       };
 
-      logger.info(`Returning ${tools.length} tool(s)`);
+      logger.info(`Returning ${toolsList.length} tool(s)`);
       this.sendResult(id, result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -594,6 +672,29 @@ export class McpProxyServer extends EventEmitter {
       await this.stateManager.recordToolCall(this.currentClient.name);
     }
 
+    // Handle proofscan_getEvents (stub implementation for Phase 6.1)
+    if (name === 'proofscan_getEvents') {
+      const callResult: ToolsCallResult = {
+        content: [
+          {
+            type: 'text',
+            text: 'No events found (stub implementation)',
+          },
+        ],
+        structuredContent: {
+          events: [],
+          sessionId: args.sessionId || 'unknown',
+          hasMore: false,
+        },
+        _meta: {
+          ui: { resourceUri: TRACE_VIEWER_URI },
+          outputSchemaVersion: '1',
+        },
+      };
+      this.sendResult(id, callResult);
+      return;
+    }
+
     const result = await this.router.routeToolCall(name, args as Record<string, unknown>);
 
     if (!result.success) {
@@ -608,6 +709,87 @@ export class McpProxyServer extends EventEmitter {
     };
 
     this.sendResult(id, callResult);
+  }
+
+  /**
+   * Handle resources/list request
+   */
+  private async handleResourcesList(id: string | number | null): Promise<void> {
+    if (!this.initialized) {
+      logger.warn('resources/list before initialize');
+    }
+
+    const result: ResourcesListResult = {
+      resources: [
+        {
+          uri: TRACE_VIEWER_URI,
+          name: 'Protocol Trace Viewer',
+          description: 'Interactive timeline of MCP/A2A events',
+          mimeType: 'text/html;profile=mcp-app',
+        },
+      ],
+    };
+
+    logger.info(`Returning 1 resource(s)`);
+    this.sendResult(id, result);
+  }
+
+  /**
+   * Handle resources/read request
+   */
+  private async handleResourcesRead(
+    id: string | number | null,
+    params: ResourcesReadParams | undefined
+  ): Promise<void> {
+    if (!this.initialized) {
+      logger.warn('resources/read before initialize');
+    }
+
+    if (!params || typeof params.uri !== 'string') {
+      logger.error('resources/read: missing or invalid uri');
+      this.sendError(id, MCP_ERROR.INVALID_PARAMS, 'Missing required parameter: uri');
+      return;
+    }
+
+    const { uri } = params;
+    logger.info(`resources/read uri=${uri}`);
+
+    if (uri === TRACE_VIEWER_URI) {
+      const html = getTraceViewerHtml();
+      const result: ResourcesReadResult = {
+        contents: [
+          {
+            uri,
+            mimeType: 'text/html;profile=mcp-app',
+            text: html,
+          },
+        ],
+      };
+      this.sendResult(id, result);
+    } else {
+      this.sendError(id, MCP_ERROR.INVALID_PARAMS, `Resource not found: ${uri}`);
+    }
+  }
+
+  /**
+   * Handle ui/initialize request
+   */
+  private async handleUiInitialize(
+    id: string | number | null,
+    params: UiInitializeParams | undefined
+  ): Promise<void> {
+    logger.info('ui/initialize - generating session token');
+
+    // Generate random session token
+    const sessionToken = crypto.randomUUID();
+
+    const result: UiInitializeResult = {
+      protocolVersion: UI_PROTOCOL_VERSION,
+      sessionToken,
+    };
+
+    logger.info(`Session token generated: ${sessionToken}`);
+    this.sendResult(id, result);
   }
 
   /**
