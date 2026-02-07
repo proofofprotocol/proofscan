@@ -1621,6 +1621,7 @@ export async function handleA2ASend(
     // Check if agent supports streaming
     const supportsStreaming = agentCard.capabilities?.streaming === true;
 
+    // Hoisted: used in both streaming and non-streaming paths
     const isTTY = process.stdout.isTTY;
     const botPrefix = isTTY ? '\x1b[36m🤖\x1b[0m' : '🤖';
 
@@ -1700,8 +1701,11 @@ export async function handleA2ASend(
             sessionManager.recordMessage(ctxId, msg, false, rpcId);
           }
         }
-        // Record error
+        // Record error - match success pattern with completeRpcCall
         if (sessionManager) {
+          const eventsStore = sessionManager.getEventsStore();
+          const sessionId = sessionManager.getOrCreateSession(streamContextId);
+          eventsStore.completeRpcCall(sessionId, rpcId, false);
           sessionManager.recordError(streamContextId, rpcId, streamResult.error || 'Unknown error');
         }
         printError(`Stream error: ${streamResult.error}`);
