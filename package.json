@@ -17,7 +17,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/html dist/",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
     "test": "vitest run",
