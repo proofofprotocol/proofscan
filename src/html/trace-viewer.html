@@ -306,6 +306,7 @@
       function formatTimestamp(ts) {
         if (!ts) return '';
         const date = new Date(ts);
+        if (isNaN(date.getTime())) return '';
         return date.toLocaleTimeString() + '.' +
                String(date.getMilliseconds()).padStart(3, '0');
       }
@@ -372,12 +373,13 @@
         }
 
         eventIds.add(eventId);
-        events.push(event);
 
         const card = createEventCard(event);
         if (prepend) {
+          events.unshift(event);
           eventsList.insertBefore(card, eventsList.firstChild);
         } else {
+          events.push(event);
           eventsList.appendChild(card);
         }
 
@@ -587,8 +589,9 @@
         // Load more when scrolled near top
         if (scrollTop < 100 && hasMore && !isLoading) {
           const firstCard = eventsList.querySelector('.event-card');
-          if (firstCard) {
-            loadEvents(firstCard.dataset.eventId, true);
+          const cursor = firstCard?.dataset?.eventId;
+          if (cursor && cursor !== '') {
+            loadEvents(cursor, true);
           }
         }
 
