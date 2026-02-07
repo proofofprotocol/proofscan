@@ -1632,7 +1632,7 @@ export async function handleA2ASend(
       const spinner = isTTY ? ora({ text: 'Waiting for response...', spinner: 'dots' }).start() : null;
 
       // Accumulate streamed messages for session recording
-      const streamedMessages: Array<{ role: string; parts: Array<{ text: string } | { data: string; mimeType: string }> }> = [];
+      const streamedMessages: Array<{ role: 'user' | 'assistant'; parts: Array<{ text: string } | { data: string; mimeType: string }> }> = [];
       let streamContextId: string | undefined;
 
       // Spinner helper to avoid repetition
