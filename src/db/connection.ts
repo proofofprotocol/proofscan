@@ -139,6 +139,20 @@ function ensureCriticalTables(db: Database.Database): void {
 }
 
 /**
+ * Parse migration SQL into individual statements
+ * Properly handles SQL comments (-- style) by removing them line by line,
+ * not by filtering entire statements that start with comments.
+ */
+function parseMigrationSql(sql: string): string[] {
+  return sql
+    .split(';')
+    .map(s => s.trim())
+    // Remove comment lines from each statement (not the entire statement)
+    .map(s => s.split('\n').filter(line => !line.trim().startsWith('--')).join('\n').trim())
+    .filter(s => s.length > 0);
+}
+
+/**
  * Run incremental migrations for events.db
  */
 function runEventsMigrations(db: Database.Database, fromVersion: number): void {
@@ -153,10 +167,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
 
       // SQLite doesn't support multiple ALTER TABLE in one exec
       // Split the migration into individual statements
-      const statements = EVENTS_DB_MIGRATION_1_TO_2
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_1_TO_2);
 
       for (const stmt of statements) {
         try {
@@ -181,10 +192,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
     try {
       db.exec('BEGIN TRANSACTION');
 
-      const statements = EVENTS_DB_MIGRATION_2_TO_3
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_2_TO_3);
 
       for (const stmt of statements) {
         try {
@@ -211,10 +219,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
     try {
       db.exec('BEGIN TRANSACTION');
 
-      const statements = EVENTS_DB_MIGRATION_3_TO_4
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_3_TO_4);
 
       for (const stmt of statements) {
         try {
@@ -240,10 +245,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
     try {
       db.exec('BEGIN TRANSACTION');
 
-      const statements = EVENTS_DB_MIGRATION_4_TO_5
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_4_TO_5);
 
       for (const stmt of statements) {
         try {
@@ -269,10 +271,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
     try {
       db.exec('BEGIN TRANSACTION');
 
-      const statements = EVENTS_DB_MIGRATION_5_TO_6
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_5_TO_6);
 
       for (const stmt of statements) {
         try {
@@ -302,10 +301,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
     try {
       db.exec('BEGIN TRANSACTION');
 
-      const statements = EVENTS_DB_MIGRATION_6_TO_7
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_6_TO_7);
 
       for (const stmt of statements) {
         try {
@@ -331,10 +327,7 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
     try {
       db.exec('BEGIN TRANSACTION');
 
-      const statements = EVENTS_DB_MIGRATION_7_TO_8
-        .split(';')
-        .map(s => s.trim())
-        .filter(s => s.length > 0 && !s.startsWith('--'));
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_7_TO_8);
 
       for (const stmt of statements) {
         try {
