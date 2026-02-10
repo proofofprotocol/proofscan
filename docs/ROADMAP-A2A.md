@@ -32,6 +32,8 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 7.3 | バッチ呼び出し | 📋 | - |
 | 7.4 | 出力フォーマット制御 | 📋 | - |
 | 7.5 | proofscanスキル作成 | 📋 | - |
+| 7.6 | レジストリ検索（MCP/A2A） | 📋 | - |
+| 7.7 | リソース使用量表示 | 📋 | - |
 
 ---
 
@@ -385,6 +387,44 @@ $ pfscan tool call yfinance get_info \
 - [ ] ClawHub公開（任意）
 
 **目標:** AIがSKILL.md読むだけでproofscanを使いこなせる
+
+### 7.6 レジストリ検索（MCP/A2A）
+- [ ] MCP: Smithery / npm / PyPI からサーバー検索
+- [ ] A2A: Agent Directory から検索
+- [ ] 未登録コネクタ使用時に追加を提案
+- [ ] `pfscan catalog search <query>` の強化
+
+**目標:**
+```bash
+$ pfscan tool call weather get_forecast ...
+Error: Connector 'weather' not found.
+
+Did you mean? (from registry)
+  • mcp-server-weather (npm)
+  • weather-api-mcp (PyPI)
+
+Add with: pfscan connectors add --name weather --command "npx mcp-server-weather"
+```
+
+### 7.7 リソース使用量表示
+- [ ] 有効コネクタの総ツール数表示
+- [ ] tools/list の推定トークン数/バイト数
+- [ ] 閾値超過時の警告
+- [ ] `pfscan status` に統合
+
+**目標:**
+```bash
+$ pfscan status
+
+Connectors: 5 enabled / 8 total
+Tools: 127 total
+Estimated context: ~8,500 tokens
+
+⚠️ Warning: Tool list exceeds 5,000 tokens
+   Consider disabling unused connectors
+```
+
+**背景:** コネクタが増えすぎるとtools/listが肥大化し、MCPクライアント/AIのコンテキストを圧迫する。バロメーターを提供して自己管理を促す。
 
 ---
 
