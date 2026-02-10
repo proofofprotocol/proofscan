@@ -27,6 +27,11 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 6.PR2 | BridgeEnvelope + 監査ログ | 📋 | - |
 | 6.PR3 | proofscan_getEvents | 📋 | - |
 | 6.PR4 | trace-viewer MVP | 📋 | - |
+| 7.1 | tool list description表示 | 📋 | - |
+| 7.2 | 事前バリデーション | 📋 | - |
+| 7.3 | バッチ呼び出し | 📋 | - |
+| 7.4 | 出力フォーマット制御 | 📋 | - |
+| 7.5 | proofscanスキル作成 | 📋 | - |
 
 ---
 
@@ -301,6 +306,88 @@ MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロ
 
 ---
 
+## Phase 7: AI UX改善
+
+AIエージェントがproofscanを使いやすくするための改善。MCPエコシステムへのブリッジとしての価値を最大化。
+
+### 背景
+- AIがMCPサーバーを使う際、proofscanが最短ルート
+- 現状は `--help` を見ながら手探りで使用
+- 改善によりAI/人間両方のUXが向上
+
+### 進捗サマリー
+
+| Sub | 内容 | 状態 |
+|-----|------|------|
+| 7.1 | tool list description表示 | 📋 |
+| 7.2 | 事前バリデーション | 📋 |
+| 7.3 | バッチ呼び出し | 📋 |
+| 7.4 | 出力フォーマット制御 | 📋 |
+| 7.5 | proofscanスキル作成 | 📋 |
+
+### 7.1 tool list description表示
+- [ ] inputSchema.description を truncate して表示
+- [ ] 50文字程度で切り詰め
+- [ ] 日本語対応（文字幅考慮）
+
+**現状:** Description列が空
+**目標:**
+```
+Tool                   Req  Description
+-----------------------------------------------
+get_info               1    Get stock info for...
+get_analyst_rec...     1    Analyst recommenda...
+```
+
+### 7.2 事前バリデーション
+- [ ] `tool call` 前に inputSchema と照合
+- [ ] 必須パラメータ欠落を事前検出
+- [ ] 型チェック（string/number/boolean等）
+- [ ] エラーメッセージに期待スキーマ表示
+
+**目標:**
+```bash
+$ pfscan tool call yfinance get_info --args '{}'
+Error: Missing required parameter 'ticker'
+  Expected: { ticker: string }
+  
+  Run: pfscan tool show yfinance get_info for details
+```
+
+### 7.3 バッチ呼び出し
+- [ ] `--batch` オプション追加
+- [ ] 並列実行（Promise.all）
+- [ ] 結果を配列で返却
+- [ ] 個別エラーハンドリング
+
+**目標:**
+```bash
+$ pfscan tool call yfinance get_info \
+    --batch '[{"ticker":"9107.T"},{"ticker":"7148.T"}]'
+[
+  { "ticker": "9107.T", "result": {...} },
+  { "ticker": "7148.T", "result": {...} }
+]
+```
+
+### 7.4 出力フォーマット制御
+- [ ] `--output json` (デフォルト、現行)
+- [ ] `--output compact` (1行JSON)
+- [ ] `--output table` (表形式)
+- [ ] `--output value` (結果値のみ)
+
+### 7.5 proofscanスキル作成
+- [ ] SKILL.md 作成
+- [ ] インストール手順
+- [ ] コマンド一覧
+- [ ] よくある使用パターン
+- [ ] コネクタ追加手順
+- [ ] ClawHub公開（任意）
+
+**目標:** AIがSKILL.md読むだけでproofscanを使いこなせる
+
+---
+
 ## 参考リンク
 
 - [A2A Protocol Spec](https://google.github.io/A2A/)
@@ -311,4 +398,4 @@ MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロ
 
 ---
 
-*Last updated: 2026-02-07*
+*Last updated: 2026-02-11*
