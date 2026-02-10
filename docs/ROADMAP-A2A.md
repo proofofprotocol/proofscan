@@ -427,6 +427,8 @@ Estimated context: ~8,500 tokens
 
 **背景:** コネクタが増えすぎるとtools/listが肥大化し、MCPクライアント/AIのコンテキストを圧迫する。バロメーターを提供して自己管理を促す。
 
+**注意:** token数は概算（1 token ≒ 4 bytes）。表示時に `Estimated token count is approximate` の注記を含める。
+
 ### 7.8 doctor拡張（統合診断）
 - [ ] 既存のDB診断を維持
 - [ ] コネクタ診断（接続確認、応答時間）
@@ -457,6 +459,8 @@ Registry:
 ```
 
 **背景:** AIが「今の状態で何ができるか」を即座に把握できる統合診断。7.6/7.7の機能を統合し、ワンコマンドで全体像を確認。
+
+**実装メモ:** Connector ping の timeout は定数化（`CONNECTOR_PING_TIMEOUT_MS = 3000`）。将来 `--timeout` オプションで上書き可能にする余地を残す。
 
 ---
 
