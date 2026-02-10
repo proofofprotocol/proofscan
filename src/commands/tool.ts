@@ -148,6 +148,27 @@ function truncate(str: string, maxLen: number): string {
   return str.slice(0, maxLen - 3) + '...';
 }
 
+/**
+ * Get first non-empty line from description, truncated
+ * Returns "(no description)" if empty or missing
+ */
+function getFirstLine(description: string | undefined, maxLen: number): string {
+  if (!description) return '(no description)';
+
+  // Trim and split by newlines
+  const lines = description.trim().split('\n');
+
+  // Find first non-empty line
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length > 0) {
+      return truncate(trimmed, maxLen);
+    }
+  }
+
+  return '(no description)';
+}
+
 export function createToolCommand(getConfigPath: () => string): Command {
   const cmd = new Command('tool')
     .description('MCP tool operations');
@@ -210,9 +231,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
         for (const tool of result.tools) {
           const schema = formatInputSchema(tool.inputSchema);
           const requiredCount = schema.required.length;
-          const desc = tool.description
-            ? truncate(tool.description.split('\n')[0], 40)
-            : '-';
+          const desc = getFirstLine(tool.description, 40);
 
           console.log(
             tool.name.padEnd(maxName) + '  ' +

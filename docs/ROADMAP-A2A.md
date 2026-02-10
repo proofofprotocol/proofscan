@@ -27,6 +27,14 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 6.PR2 | BridgeEnvelope + 監査ログ | 📋 | - |
 | 6.PR3 | proofscan_getEvents | 📋 | - |
 | 6.PR4 | trace-viewer MVP | 📋 | - |
+| 7.1 | tool list description表示 | 📋 | - |
+| 7.2 | 事前バリデーション | 📋 | - |
+| 7.3 | バッチ呼び出し | 📋 | - |
+| 7.4 | 出力フォーマット制御 | 📋 | - |
+| 7.5 | proofscanスキル作成 | 📋 | - |
+| 7.6 | レジストリ検索（MCP/A2A） | 📋 | - |
+| 7.7 | リソース使用量表示 | 📋 | - |
+| 7.8 | doctor拡張（統合診断） | 📋 | - |
 
 ---
 
@@ -301,6 +309,161 @@ MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロ
 
 ---
 
+## Phase 7: AI UX改善
+
+AIエージェントがproofscanを使いやすくするための改善。MCPエコシステムへのブリッジとしての価値を最大化。
+
+### 背景
+- AIがMCPサーバーを使う際、proofscanが最短ルート
+- 現状は `--help` を見ながら手探りで使用
+- 改善によりAI/人間両方のUXが向上
+
+### 進捗サマリー
+
+| Sub | 内容 | 状態 |
+|-----|------|------|
+| 7.1 | tool list description表示 | 📋 |
+| 7.2 | 事前バリデーション | 📋 |
+| 7.3 | バッチ呼び出し | 📋 |
+| 7.4 | 出力フォーマット制御 | 📋 |
+| 7.5 | proofscanスキル作成 | 📋 |
+
+### 7.1 tool list description表示
+- [ ] inputSchema.description を truncate して表示
+- [ ] 50文字程度で切り詰め
+- [ ] 日本語対応（文字幅考慮）
+
+**現状:** Description列が空
+**目標:**
+```
+Tool                   Req  Description
+-----------------------------------------------
+get_info               1    Get stock info for...
+get_analyst_rec...     1    Analyst recommenda...
+```
+
+### 7.2 事前バリデーション
+- [ ] `tool call` 前に inputSchema と照合
+- [ ] 必須パラメータ欠落を事前検出
+- [ ] 型チェック（string/number/boolean等）
+- [ ] エラーメッセージに期待スキーマ表示
+
+**目標:**
+```bash
+$ pfscan tool call yfinance get_info --args '{}'
+Error: Missing required parameter 'ticker'
+  Expected: { ticker: string }
+  
+  Run: pfscan tool show yfinance get_info for details
+```
+
+### 7.3 バッチ呼び出し
+- [ ] `--batch` オプション追加
+- [ ] 並列実行（Promise.all）
+- [ ] 結果を配列で返却
+- [ ] 個別エラーハンドリング
+
+**目標:**
+```bash
+$ pfscan tool call yfinance get_info \
+    --batch '[{"ticker":"9107.T"},{"ticker":"7148.T"}]'
+[
+  { "ticker": "9107.T", "result": {...} },
+  { "ticker": "7148.T", "result": {...} }
+]
+```
+
+### 7.4 出力フォーマット制御
+- [ ] `--output json` (デフォルト、現行)
+- [ ] `--output compact` (1行JSON)
+- [ ] `--output table` (表形式)
+- [ ] `--output value` (結果値のみ)
+
+### 7.5 proofscanスキル作成
+- [ ] SKILL.md 作成
+- [ ] インストール手順
+- [ ] コマンド一覧
+- [ ] よくある使用パターン
+- [ ] コネクタ追加手順
+- [ ] ClawHub公開（任意）
+
+**目標:** AIがSKILL.md読むだけでproofscanを使いこなせる
+
+### 7.6 レジストリ検索（MCP/A2A）
+- [ ] MCP: Smithery / npm / PyPI からサーバー検索
+- [ ] A2A: Agent Directory から検索
+- [ ] 未登録コネクタ使用時に追加を提案
+- [ ] `pfscan catalog search <query>` の強化
+
+**目標:**
+```bash
+$ pfscan tool call weather get_forecast ...
+Error: Connector 'weather' not found.
+
+Did you mean? (from registry)
+  • mcp-server-weather (npm)
+  • weather-api-mcp (PyPI)
+
+Add with: pfscan connectors add --name weather --command "npx mcp-server-weather"
+```
+
+### 7.7 リソース使用量表示
+- [ ] 有効コネクタの総ツール数表示
+- [ ] tools/list の推定トークン数/バイト数
+- [ ] 閾値超過時の警告
+- [ ] `pfscan status` に統合
+
+**目標:**
+```bash
+$ pfscan status
+
+Connectors: 5 enabled / 8 total
+Tools: 127 total
+Estimated context: ~8,500 tokens
+
+⚠️ Warning: Tool list exceeds 5,000 tokens
+   Consider disabling unused connectors
+```
+
+**背景:** コネクタが増えすぎるとtools/listが肥大化し、MCPクライアント/AIのコンテキストを圧迫する。バロメーターを提供して自己管理を促す。
+
+**注意:** token数は概算（1 token ≒ 4 bytes）。表示時に `Estimated token count is approximate` の注記を含める。
+
+### 7.8 doctor拡張（統合診断）
+- [ ] 既存のDB診断を維持
+- [ ] コネクタ診断（接続確認、応答時間）
+- [ ] リソース診断（7.7と連携）
+- [ ] レジストリ診断（7.6と連携）
+- [ ] `--fix` でコネクタ再起動等も対応
+
+**目標:**
+```bash
+$ pfscan doctor
+
+Database:
+  ✅ Schema version: 7 (current)
+  ✅ No corruption detected
+
+Connectors:
+  ✅ yfinance: OK (ping 120ms)
+  ⚠️ github: timeout (3000ms)
+  
+Resources:
+  Enabled: 5 connectors, 127 tools
+  Estimated context: ~8,500 tokens
+  ⚠️ Consider disabling unused connectors
+
+Registry:
+  ✅ Smithery: reachable
+  ✅ npm: reachable
+```
+
+**背景:** AIが「今の状態で何ができるか」を即座に把握できる統合診断。7.6/7.7の機能を統合し、ワンコマンドで全体像を確認。
+
+**実装メモ:** Connector ping の timeout は定数化（`CONNECTOR_PING_TIMEOUT_MS = 3000`）。将来 `--timeout` オプションで上書き可能にする余地を残す。
+
+---
+
 ## 参考リンク
 
 - [A2A Protocol Spec](https://google.github.io/A2A/)
@@ -311,4 +474,4 @@ MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロ
 
 ---
 
-*Last updated: 2026-02-07*
+*Last updated: 2026-02-11*
