@@ -34,6 +34,7 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 7.5 | proofscanスキル作成 | 📋 | - |
 | 7.6 | レジストリ検索（MCP/A2A） | 📋 | - |
 | 7.7 | リソース使用量表示 | 📋 | - |
+| 7.8 | doctor拡張（統合診断） | 📋 | - |
 
 ---
 
@@ -425,6 +426,37 @@ Estimated context: ~8,500 tokens
 ```
 
 **背景:** コネクタが増えすぎるとtools/listが肥大化し、MCPクライアント/AIのコンテキストを圧迫する。バロメーターを提供して自己管理を促す。
+
+### 7.8 doctor拡張（統合診断）
+- [ ] 既存のDB診断を維持
+- [ ] コネクタ診断（接続確認、応答時間）
+- [ ] リソース診断（7.7と連携）
+- [ ] レジストリ診断（7.6と連携）
+- [ ] `--fix` でコネクタ再起動等も対応
+
+**目標:**
+```bash
+$ pfscan doctor
+
+Database:
+  ✅ Schema version: 7 (current)
+  ✅ No corruption detected
+
+Connectors:
+  ✅ yfinance: OK (ping 120ms)
+  ⚠️ github: timeout (3000ms)
+  
+Resources:
+  Enabled: 5 connectors, 127 tools
+  Estimated context: ~8,500 tokens
+  ⚠️ Consider disabling unused connectors
+
+Registry:
+  ✅ Smithery: reachable
+  ✅ npm: reachable
+```
+
+**背景:** AIが「今の状態で何ができるか」を即座に把握できる統合診断。7.6/7.7の機能を統合し、ワンコマンドで全体像を確認。
 
 ---
 
