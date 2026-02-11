@@ -15,6 +15,7 @@ import { Command } from 'commander';
 import { ConfigManager } from '../config/index.js';
 import type { Connector } from '../types/index.js';
 import { output, getOutputOptions, outputError } from '../utils/output.js';
+import { t } from '../i18n/index.js';
 
 /**
  * Connector with computed fields for display
@@ -22,7 +23,6 @@ import { output, getOutputOptions, outputError } from '../utils/output.js';
 interface ConnectorDisplay extends Connector {
   displayName: string;
   displayType: string;
-  toolCount?: number;
 }
 
 /**
@@ -86,7 +86,6 @@ export function searchConnectors(connectors: Connector[], query: string): Connec
 function formatConnectorForDisplay(connector: Connector): ConnectorDisplay {
   let displayName = connector.id;
   const displayType = connector.transport.type;
-  let toolCount: number | undefined;
 
   // Try to derive display name from command (for stdio)
   if (connector.transport.type === 'stdio') {
@@ -100,17 +99,10 @@ function formatConnectorForDisplay(connector: Connector): ConnectorDisplay {
     }
   }
 
-  // Count tools if available from plugins
-  if (connector.plugins) {
-    // Future: could add tool count from session data
-    // For now, this is undefined
-  }
-
   return {
     ...connector,
     displayName,
     displayType,
-    toolCount,
   };
 }
 
@@ -139,14 +131,14 @@ function formatSearchResults(
   }
 
   // Human-readable format
-  console.log(`Registry search: "${query}"`);
+  console.log(`${t('registry.searchTitle')} "${query}"`);
   console.log();
 
   const enabledCount = connectors.filter(c => c.enabled).length;
   const totalCount = connectors.length;
 
   if (connectors.length === 0) {
-    console.log('No connectors found.');
+    console.log(t('registry.noConnectors'));
     console.log();
     console.log('Tip: pfscan connectors add <id> --stdio "<command>" to add a new connector');
     return;
@@ -154,11 +146,8 @@ function formatSearchResults(
 
   for (const connector of connectors) {
     const display = formatConnectorForDisplay(connector);
-    const status = connector.enabled ? '' : '[disabled]';
-    const toolPart = display.toolCount !== undefined
-      ? `| Tools: ${display.toolCount} `
-      : '';
-    const typePart = `Type: ${display.displayType}`;
+    const status = connector.enabled ? '' : `[${t('registry.disabled')}]`;
+    const typePart = `${t('registry.type')}: ${display.displayType}`;
 
     // Format transport info
     let transportInfo = '';
@@ -171,7 +160,7 @@ function formatSearchResults(
     }
 
     console.log(`  ${display.displayName} ${status}`);
-    console.log(`    ${typePart} ${toolPart}`);
+    console.log(`    ${typePart}`);
     if (transportInfo) {
       const truncated = transportInfo.length > 50
         ? transportInfo.slice(0, 47) + '...'
@@ -181,10 +170,10 @@ function formatSearchResults(
     console.log();
   }
 
-  console.log(`Found: ${totalCount} connector(s) (${enabledCount} enabled, ${totalCount - enabledCount} disabled)`);
+  console.log(`${t('registry.found')} ${totalCount} ${t('registry.connectors')} (${enabledCount} ${t('registry.enabled')}, ${totalCount - enabledCount} ${t('registry.disabled')})`);
   console.log();
   if (totalCount - enabledCount > 0) {
-    console.log('Tip: pfscan connectors enable --id <connector> to enable');
+    console.log(t('registry.tipEnable'));
   }
 }
 
@@ -211,7 +200,7 @@ function formatListResults(connectors: Connector[]): void {
 
   // Human-readable format
   if (connectors.length === 0) {
-    console.log('No connectors found.');
+    console.log(t('registry.noConnectors'));
     console.log();
     console.log('Tip: pfscan connectors add <id> --stdio "<command>" to add a new connector');
     return;
@@ -220,16 +209,13 @@ function formatListResults(connectors: Connector[]): void {
   const enabledCount = connectors.filter(c => c.enabled).length;
   const totalCount = connectors.length;
 
-  console.log(`Registry: ${totalCount} connector(s) (${enabledCount} enabled, ${totalCount - enabledCount} disabled)`);
+  console.log(`${t('registry.listTitle')} ${totalCount} ${t('registry.connectors')} (${enabledCount} ${t('registry.enabled')}, ${totalCount - enabledCount} ${t('registry.disabled')})`);
   console.log();
 
   for (const connector of connectors) {
     const display = formatConnectorForDisplay(connector);
-    const statusBadge = connector.enabled ? '[enabled]' : '[disabled]';
-    const toolPart = display.toolCount !== undefined
-      ? `| Tools: ${display.toolCount} `
-      : '';
-    const typePart = `Type: ${display.displayType}`;
+    const statusBadge = connector.enabled ? `[${t('registry.enabled')}]` : `[${t('registry.disabled')}]`;
+    const typePart = `${t('registry.type')}: ${display.displayType}`;
 
     // Format transport info
     let transportInfo = '';
@@ -242,7 +228,7 @@ function formatListResults(connectors: Connector[]): void {
     }
 
     console.log(`  ${display.displayName} ${statusBadge}`);
-    console.log(`    ${typePart} ${toolPart}`);
+    console.log(`    ${typePart}`);
     if (transportInfo) {
       const truncated = transportInfo.length > 50
         ? transportInfo.slice(0, 47) + '...'
@@ -253,8 +239,8 @@ function formatListResults(connectors: Connector[]): void {
   }
 
   if (totalCount - enabledCount > 0) {
-    console.log('Tip: pfscan connectors enable --id <connector> to enable');
-    console.log('Tip: pfscan connectors disable --id <connector> to disable');
+    console.log(t('registry.tipEnable'));
+    console.log(t('registry.tipDisable'));
   }
 }
 
@@ -292,7 +278,7 @@ export function createRegistryCommand(getConfigPath: () => string): Command {
       try {
         // Validate conflicting options
         if (options.enabled && options.disabled) {
-          outputError('Cannot use --enabled and --disabled together');
+          outputError(t('registry.conflictingFlags'));
           process.exit(1);
         }
 
