@@ -218,8 +218,9 @@ function truncate(str: string, maxLen: number): string {
 
 /**
  * Format output according to specified format
+ * @internal Exported for testing
  */
-function formatOutput(data: unknown, format: string): string {
+export function formatOutput(data: unknown, format: string): string {
   switch (format) {
     case 'compact':
       return JSON.stringify(data);
@@ -250,8 +251,9 @@ function formatOutput(data: unknown, format: string): string {
 /**
  * Format array of objects as table
  * Falls back to JSON for edge cases (empty array, non-objects)
+ * @internal Exported for testing
  */
-function formatAsTable(data: object[]): string {
+export function formatAsTable(data: object[]): string {
   // Fallback for empty arrays
   if (data.length === 0) {
     return JSON.stringify([], null, 2);
@@ -503,6 +505,14 @@ export function createToolCommand(getConfigPath: () => string): Command {
     ) => {
       try {
         const timeout = parseTimeout(options.timeout);
+
+        // Validate output format
+        const validFormats = ['json', 'compact', 'table', 'value'];
+        if (options.output && !validFormats.includes(options.output)) {
+          console.error(`Invalid output format: ${options.output}`);
+          console.error(`Valid formats: ${validFormats.join(', ')}`);
+          process.exit(1);
+        }
 
         // Resolve arguments first (before connector validation for dry-run)
         // Skip in batch mode - args are provided in --batch
