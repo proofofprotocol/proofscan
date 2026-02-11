@@ -217,6 +217,52 @@ function truncate(str: string, maxLen: number): string {
 }
 
 /**
+ * Format output according to specified format
+ */
+function formatOutput(data: unknown, format: string): string {
+  switch (format) {
+    case 'compact':
+      return JSON.stringify(data);
+    case 'table':
+      // 配列かつオブジェクトの配列の場合のみtable表示
+      if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object') {
+        return formatAsTable(data);
+      }
+      // フォールバック
+      return JSON.stringify(data, null, 2);
+    case 'value':
+      // tool call結果の場合、resultフィールドのみ抽出
+      if (data && typeof data === 'object' && 'result' in data) {
+        return JSON.stringify((data as any).result, null, 2);
+      }
+      // batch結果の場合
+      if (data && typeof data === 'object' && 'results' in data) {
+        const results = (data as any).results.map((r: any) => r.result);
+        return JSON.stringify(results, null, 2);
+      }
+      return JSON.stringify(data, null, 2);
+    case 'json':
+    default:
+      return JSON.stringify(data, null, 2);
+  }
+}
+
+/**
+ * Format array of objects as table
+ */
+function formatAsTable(data: object[]): string {
+  if (data.length === 0) {
+    return '';
+  }
+  // オブジェクト配列を表形式に変換
+  // キーをヘッダーに、値を行に
+  const keys = Object.keys(data[0]);
+  const header = keys.join('\t');
+  const rows = data.map(row => keys.map(k => String((row as any)[k] ?? '')).join('\t'));
+  return [header, ...rows].join('\n');
+}
+
+/**
  * Get first non-empty line from description, truncated
  * Returns "(no description)" if empty or missing
  */
@@ -422,6 +468,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
     .option('--timeout <sec>', 'Timeout in seconds', '30')
     .option('--dry-run', 'Show what would be sent without executing')
     .option('--skip-validation', 'Skip argument validation against schema')
+    .option('--output <format>', 'Output format: json, compact, table, value', 'json')
     .action(async (
       connectorId: string,
       toolName: string,
@@ -433,6 +480,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
         timeout: string;
         dryRun?: boolean;
         skipValidation?: boolean;
+        output?: string;
       }
     ) => {
       try {
@@ -450,20 +498,22 @@ export function createToolCommand(getConfigPath: () => string): Command {
 
         // Dry run - show what would be sent (no connector validation needed)
         if (options.dryRun) {
-          if (getOutputOptions().json) {
-            output({
-              dryRun: true,
-              connector: connectorId,
-              tool: toolName,
-              arguments: args,
-            });
-          } else {
+          const outputFormat = options.output || 'json';
+          if (outputFormat === 'json' && !getOutputOptions().json) {
             console.log('Dry run - would send:');
             console.log(JSON.stringify({
               connector: connectorId,
               tool: toolName,
               arguments: args,
             }, null, 2));
+          } else {
+            const data = {
+              dryRun: true,
+              connector: connectorId,
+              tool: toolName,
+              arguments: args,
+            };
+            console.log(formatOutput(data, outputFormat));
           }
           return;
         }
@@ -578,8 +628,11 @@ export function createToolCommand(getConfigPath: () => string): Command {
             })
           );
 
-          if (getOutputOptions().json) {
-            output({ batch: true, results, sessionId: 'batch' });
+          if (getOutputOptions().json || options.output) {
+            // --outputが指定されている場合、優先
+            const outputFormat = options.output || 'json';
+            const data = { batch: true, results, sessionId: 'batch' };
+            console.log(formatOutput(data, outputFormat));
             return;
           }
 
@@ -609,14 +662,17 @@ export function createToolCommand(getConfigPath: () => string): Command {
           timeout,
         });
 
-        if (getOutputOptions().json) {
-          output({
+        if (getOutputOptions().json || options.output) {
+          // --outputが指定されている場合、優先
+          const outputFormat = options.output || 'json';
+          const data = {
             success: result.success,
             sessionId: result.sessionId,
             content: result.content,
             isError: result.isError,
             error: result.error,
-          });
+          };
+          console.log(formatOutput(data, outputFormat));
           if (!result.success) {
             process.exit(1);
           }
