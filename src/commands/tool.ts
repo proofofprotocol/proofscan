@@ -515,6 +515,21 @@ export function createToolCommand(getConfigPath: () => string): Command {
             process.exit(1);
           }
 
+          // Validate: batch array must not be empty
+          if (batchArgs.length === 0) {
+            console.error('Error: --batch requires at least one item');
+            process.exit(1);
+          }
+
+          // Validate: each batch item must be an object (not null, not array, not primitive)
+          for (let i = 0; i < batchArgs.length; i++) {
+            const item = batchArgs[i];
+            if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+              console.error(`Error: Batch item ${i + 1} must be an object, got ${Array.isArray(item) ? 'array' : typeof item}`);
+              process.exit(1);
+            }
+          }
+
           // Get tool schema for validation if enabled
           if (!options.skipValidation && !toolResult) {
             toolResult = await getTool(ctx, connector, toolName, {
