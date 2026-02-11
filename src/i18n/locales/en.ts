@@ -113,6 +113,19 @@ export const en = {
     quickCommands: 'Quick Commands',
     noDataYet: 'No data yet. Initialize and run a scan:',
   },
+  // resources section (Phase 7.7)
+  resources: {
+    title: 'Resources:',
+    connectors: 'Connectors:',
+    enabled: 'enabled',
+    total: 'total',
+    tools: 'Tools:',
+    estimatedContext: 'Estimated context:',
+    tokens: 'tokens',
+    warningExceeds: 'Tool list exceeds 5,000 tokens',
+    considerDisabling: 'Consider disabling unused connectors',
+    noConnectors: 'No connectors configured.',
+  },
 
   // doctor command output
   doctor: {

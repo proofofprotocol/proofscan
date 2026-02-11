@@ -33,7 +33,7 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 7.4 | 出力フォーマット制御 | ✅ 完了 | - |
 | 7.5 | proofscanスキル作成 | ✅ 完了 | 2026-02-11 |
 | 7.6 | レジストリ検索（MCP/A2A） | ✅ 完了 | 2026-02-11 |
-| 7.7 | リソース使用量表示 | 📋 | - |
+| 7.7 | リソース使用量表示 | ✅ 完了 | 2026-02-11 |
 | 7.8 | doctor拡張（統合診断） | 📋 | - |
 
 ---
@@ -420,10 +420,10 @@ pfscan --json registry search "yfinance"
 **PR:** `feature/phase7.6-registry` (pending merge)
 
 ### 7.7 リソース使用量表示
-- [ ] 有効コネクタの総ツール数表示
-- [ ] tools/list の推定トークン数/バイト数
-- [ ] 閾値超過時の警告
-- [ ] `pfscan status` に統合
+- [x] 有効コネクタの総ツール数表示
+- [x] tools/list の推定トークン数/バイト数
+- [x] 閾値超過時の警告
+- [x] `pfscan status` に統合
 
 **目標:**
 ```bash
