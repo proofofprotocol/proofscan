@@ -33,6 +33,74 @@ const MIN_TIMEOUT_SEC = 1;
 const MAX_TIMEOUT_SEC = 300;
 
 /**
+ * Validation error interface
+ */
+interface ValidationError {
+  field: string;
+  message: string;
+  expected?: string;
+  got?: string;
+}
+
+/**
+ * Validate arguments against inputSchema
+ */
+function validateArgs(
+  args: Record<string, unknown>,
+  inputSchema: unknown
+): ValidationError[] {
+  const errors: ValidationError[] = [];
+
+  if (!inputSchema || typeof inputSchema !== 'object') return errors;
+
+  const schema = inputSchema as { properties?: Record<string, { type?: string; description?: string }>; required?: string[] };
+  const properties = schema.properties || {};
+  const required = schema.required || [];
+
+  // Check required fields
+  for (const field of required) {
+    if (!(field in args) || args[field] === undefined || args[field] === null) {
+      const prop = properties[field];
+      errors.push({
+        field,
+        message: `Missing required parameter '${field}'`,
+        expected: prop?.type ? `{ ${field}: ${prop.type} }` : undefined,
+      });
+    }
+  }
+
+  // Check types for provided fields
+  for (const [field, value] of Object.entries(args)) {
+    const prop = properties[field];
+    if (!prop) continue; // Unknown field, let server handle it
+
+    const expectedType = prop.type;
+    if (!expectedType) continue;
+
+    const actualType = getJsonType(value);
+    if (expectedType !== actualType && !(expectedType === 'integer' && actualType === 'number')) {
+      errors.push({
+        field,
+        message: `Type mismatch for '${field}'`,
+        expected: `{ ${field}: ${expectedType} }`,
+        got: `{ ${field}: ${JSON.stringify(value)} } (${actualType})`,
+      });
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Get JSON type of a value
+ */
+function getJsonType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
+/**
  * Parse and validate timeout value
  */
 function parseTimeout(timeoutStr: string): number {
@@ -352,6 +420,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
     .option('--stdin', 'Read arguments from stdin (JSON)')
     .option('--timeout <sec>', 'Timeout in seconds', '30')
     .option('--dry-run', 'Show what would be sent without executing')
+    .option('--skip-validation', 'Skip argument validation against schema')
     .action(async (
       connectorId: string,
       toolName: string,
@@ -361,6 +430,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
         stdin?: boolean;
         timeout: string;
         dryRun?: boolean;
+        skipValidation?: boolean;
       }
     ) => {
       try {
@@ -399,6 +469,30 @@ export function createToolCommand(getConfigPath: () => string): Command {
           connectorId,
           configDir,
         };
+
+        // Validate arguments against schema (unless skipped)
+        if (!options.skipValidation) {
+          const toolResult = await getTool(ctx, connector, toolName, {
+            timeout,
+          });
+
+          if (toolResult.tool?.inputSchema) {
+            const validationErrors = validateArgs(args, toolResult.tool.inputSchema);
+
+            if (validationErrors.length > 0) {
+              console.error('Validation failed:');
+              for (const err of validationErrors) {
+                console.error(`  ${err.message}`);
+                if (err.expected) console.error(`    Expected: ${err.expected}`);
+                if (err.got) console.error(`    Got: ${err.got}`);
+              }
+              console.error();
+              console.error(`Run: pfscan tool show ${connectorId} ${toolName} for details`);
+              console.error('Use --skip-validation to bypass this check');
+              process.exit(1);
+            }
+          }
+        }
 
         const result = await callTool(ctx, connector, toolName, args, {
           timeout,
