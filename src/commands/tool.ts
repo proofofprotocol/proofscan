@@ -231,11 +231,11 @@ function formatOutput(data: unknown, format: string): string {
       // フォールバック
       return JSON.stringify(data, null, 2);
     case 'value':
-      // tool call結果の場合、resultフィールドのみ抽出
-      if (data && typeof data === 'object' && 'result' in data) {
-        return JSON.stringify((data as any).result, null, 2);
+      // tool call結果の場合、contentフィールドのみ抽出
+      if (data && typeof data === 'object' && 'content' in data) {
+        return JSON.stringify((data as any).content, null, 2);
       }
-      // batch結果の場合
+      // batch結果の場合（各要素のresultフィールドを抽出）
       if (data && typeof data === 'object' && 'results' in data) {
         const results = (data as any).results.map((r: any) => r.result);
         return JSON.stringify(results, null, 2);
