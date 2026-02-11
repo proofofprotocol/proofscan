@@ -7,14 +7,21 @@ import { Command } from 'commander';
 import { createToolCommand } from '../tool.js';
 import { TargetsStore } from '../../db/targets-store.js';
 import { ConfigManager } from '../../config/index.js';
-import { getConnector } from '../../tools/adapter.js';
+import { getConnector, callTool, type ToolCallResult } from '../../tools/adapter.js';
 
 // Mock dependencies
 vi.mock('../../db/targets-store.js');
 vi.mock('../../a2a/client.js');
 vi.mock('../../proxy/client.js');
 vi.mock('../../config/index.js');
-vi.mock('../../tools/adapter.js');
+vi.mock('../../tools/adapter.js', async () => {
+  const actual = await vi.importActual<typeof import('../../tools/adapter.js')>('../../tools/adapter.js');
+  return {
+    ...actual,
+    callTool: vi.fn(),
+    getConnector: vi.fn(),
+  };
+});
 
 describe('tool command', () => {
   let program: Command;
@@ -50,13 +57,22 @@ describe('tool command', () => {
         command: 'mock',
         args: [],
       },
-      callTool: vi.fn().mockResolvedValue({
-        content: { result: 'ok' },
-        success: true,
-        isError: false,
-      }),
+      transport: {
+        type: 'stdio' as const,
+        command: 'mock',
+        args: [],
+      },
     };
     vi.mocked(getConnector).mockResolvedValue(mockConnector as never);
+
+    // Mock callTool to return a successful result
+    const mockCallResult: ToolCallResult = {
+      success: true,
+      content: [{ type: 'text', text: 'ok' }],
+      isError: false,
+      sessionId: 'test-session-id',
+    };
+    vi.mocked(callTool).mockResolvedValue(mockCallResult);
   });
 
   describe('batch execution', () => {
