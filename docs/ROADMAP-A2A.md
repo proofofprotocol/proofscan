@@ -32,7 +32,7 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 7.3 | バッチ呼び出し | ✅ 完了 | 2026-02-11 |
 | 7.4 | 出力フォーマット制御 | ✅ 完了 | - |
 | 7.5 | proofscanスキル作成 | ✅ 完了 | 2026-02-11 |
-| 7.6 | レジストリ検索（MCP/A2A） | 📋 | - |
+| 7.6 | レジストリ検索（MCP/A2A） | ✅ 完了 | 2026-02-11 |
 | 7.7 | リソース使用量表示 | 📋 | - |
 | 7.8 | doctor拡張（統合診断） | 📋 | - |
 
@@ -327,6 +327,7 @@ AIエージェントがproofscanを使いやすくするための改善。MCPエ
 | 7.3 | バッチ呼び出し | 📋 |
 | 7.4 | 出力フォーマット制御 | ✅ 完了 |
 | 7.5 | proofscanスキル作成 | 📋 |
+| 7.6 | レジストリ検索（MCP/A2A） | ✅ 完了 |
 
 ### 7.1 tool list description表示
 - [ ] inputSchema.description を truncate して表示
@@ -389,23 +390,34 @@ $ pfscan tool call yfinance get_info \
 
 **目標:** AIがSKILL.md読むだけでproofscanを使いこなせる
 
-### 7.6 レジストリ検索（MCP/A2A）
-- [ ] MCP: Smithery / npm / PyPI からサーバー検索
-- [ ] A2A: Agent Directory から検索
-- [ ] 未登録コネクタ使用時に追加を提案
-- [ ] `pfscan catalog search <query>` の強化
+### 7.6 レジストリ検索（MCP/A2A） ✅
+- [x] `pfscan registry search <query>` でローカルコネクタ検索
+- [x] `pfscan registry list` で全コネクタ一覧（状態付き）
+- [x] `--enabled/--disabled` フィルタ
+- [x] `--json` 出力対応
+- [x] キーワード検索（ID, type, command, URL）
 
-**目標:**
+**実装:** ローカルレジストリ方式（外部レジストリ未使用）
+- 管理者が事前に信頼できるMCPサーバーを登録
+- AIは登録済みコネクタからのみ選択可能
+- `pfscan connectors enable/disable` で制御
+
+**コマンド:**
 ```bash
-$ pfscan tool call weather get_forecast ...
-Error: Connector 'weather' not found.
+# 検索
+pfscan registry search "yfinance"
+pfscan registry search "http"
 
-Did you mean? (from registry)
-  • mcp-server-weather (npm)
-  • weather-api-mcp (PyPI)
+# 一覧
+pfscan registry list
+pfscan registry list --enabled
+pfscan registry list --disabled
 
-Add with: pfscan connectors add --name weather --command "npx mcp-server-weather"
+# JSON出力
+pfscan --json registry search "yfinance"
 ```
+
+**PR:** `feature/phase7.6-registry` (pending merge)
 
 ### 7.7 リソース使用量表示
 - [ ] 有効コネクタの総ツール数表示
