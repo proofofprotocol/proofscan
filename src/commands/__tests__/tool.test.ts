@@ -278,23 +278,31 @@ describe('tool command', () => {
     });
   });
 
-  // TODO: Fix output format tests - mocking issue with callTool/getTool flow
-  describe.skip('output format', () => {
+  // Integration tests for output format with command execution
+  describe('output format', () => {
     it('should output compact format (single-line JSON)', async () => {
       const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const processExitSpy = vi.spyOn(process, 'exit').mockImplementation((code) => {
         throw new Error(`exit called with code ${code}`);
       });
 
+      let caughtError: Error | null = null;
       try {
         await program.parseAsync([
           'node', 'test', 'tool', 'call', 'mock-connector', 'mock-tool',
           '--args', '{"test": "value"}',
           '--output', 'compact',
-          '--json',  // Add --json flag to trigger output path
+          '--skip-validation',
         ]);
       } catch (e) {
-        // exit may be called
+        caughtError = e as Error;
+      }
+
+      // Debug: show what happened
+      if (!consoleLogSpy.mock.calls.length) {
+        console.log('DEBUG - Error calls:', consoleErrorSpy.mock.calls);
+        console.log('DEBUG - Caught error:', caughtError?.message);
       }
 
       expect(consoleLogSpy).toHaveBeenCalled();
@@ -304,6 +312,7 @@ describe('tool command', () => {
       expect(output).toContain('"success":true');
 
       consoleLogSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
       processExitSpy.mockRestore();
     });
 
@@ -321,7 +330,7 @@ describe('tool command', () => {
           'node', 'test', 'tool', 'call', 'mock-connector', 'mock-tool',
           '--args', '{"test": "value"}',
           '--output', 'value',
-          '--json',  // Add --json flag to trigger output path
+          '--skip-validation',
         ]);
       } catch (e) {
         // exit may be called
@@ -345,7 +354,7 @@ describe('tool command', () => {
           'node', 'test', 'tool', 'call', 'mock-connector', 'mock-tool',
           '--args', '{"test": "value"}',
           '--output', 'json',
-          '--json',  // Add --json flag to trigger output path
+          '--skip-validation',
         ]);
       } catch (e) {
         // exit may be called
@@ -355,7 +364,7 @@ describe('tool command', () => {
       const output = consoleLogSpy.mock.calls[0]?.[0] as string;
       // JSON format should have newlines for formatting
       expect(output).toContain('\n');
-      expect(output).toContain('"success":true');
+      expect(output).toContain('"success": true');
 
       consoleLogSpy.mockRestore();
       processExitSpy.mockRestore();
@@ -372,7 +381,7 @@ describe('tool command', () => {
           'node', 'test', 'tool', 'call', 'mock-connector', 'mock-tool',
           '--args', '{"test": "value"}',
           '--output', 'table',
-          '--json',  // Add --json flag to trigger output path
+          '--skip-validation',
         ]);
       } catch (e) {
         // exit may be called
@@ -397,7 +406,7 @@ describe('tool command', () => {
           '--batch', '[{"test": "value1"}, {"test": "value2"}]',
           '--skip-validation',
           '--output', 'compact',
-          '--json',  // Add --json flag to trigger output path
+          
         ]);
       } catch (e) {
         // exit may be called
