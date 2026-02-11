@@ -413,4 +413,100 @@ describe('tool command', () => {
       processExitSpy.mockRestore();
     });
   });
+
+  // Unit tests for formatOutput and formatAsTable functions
+  describe('formatOutput function', () => {
+    // Import directly for unit testing
+    let formatOutput: typeof import('../tool.js').formatOutput;
+
+    beforeEach(async () => {
+      const module = await import('../tool.js');
+      formatOutput = module.formatOutput;
+    });
+
+    it('should format json with indentation', () => {
+      const result = formatOutput({ foo: 'bar' }, 'json');
+      expect(result).toBe(JSON.stringify({ foo: 'bar' }, null, 2));
+      expect(result).toContain('\n');
+    });
+
+    it('should format compact as single line', () => {
+      const result = formatOutput({ foo: 'bar' }, 'compact');
+      expect(result).toBe('{"foo":"bar"}');
+      expect(result).not.toContain('\n');
+    });
+
+    it('should extract content for value format', () => {
+      const data = { content: [{ type: 'text', text: 'hello' }], sessionId: 'test' };
+      const result = formatOutput(data, 'value');
+      expect(result).toContain('hello');
+      expect(result).not.toContain('sessionId');
+    });
+
+    it('should extract results for value format with batch data', () => {
+      const data = {
+        batch: true,
+        results: [
+          { args: { a: 1 }, result: 'result1', ok: true },
+          { args: { a: 2 }, result: 'result2', ok: true },
+        ],
+      };
+      const result = formatOutput(data, 'value');
+      expect(result).toContain('result1');
+      expect(result).toContain('result2');
+      expect(result).not.toContain('args');
+    });
+
+    it('should fallback to json for table format with non-array', () => {
+      const result = formatOutput({ foo: 'bar' }, 'table');
+      expect(result).toBe(JSON.stringify({ foo: 'bar' }, null, 2));
+    });
+
+    it('should use default json format for unknown format', () => {
+      const result = formatOutput({ foo: 'bar' }, 'unknown');
+      expect(result).toBe(JSON.stringify({ foo: 'bar' }, null, 2));
+    });
+  });
+
+  describe('formatAsTable function', () => {
+    let formatAsTable: typeof import('../tool.js').formatAsTable;
+
+    beforeEach(async () => {
+      const module = await import('../tool.js');
+      formatAsTable = module.formatAsTable;
+    });
+
+    it('should format homogeneous array as tab-separated table', () => {
+      const data = [{ a: 1, b: 2 }, { a: 3, b: 4 }];
+      const result = formatAsTable(data);
+      expect(result).toBe('a\tb\n1\t2\n3\t4');
+    });
+
+    it('should handle heterogeneous objects by collecting all keys', () => {
+      const data = [{ a: 1 }, { b: 2 }, { a: 3, b: 4 }];
+      const result = formatAsTable(data);
+      // Should have both keys
+      expect(result).toContain('a');
+      expect(result).toContain('b');
+    });
+
+    it('should fallback to JSON for empty array', () => {
+      const result = formatAsTable([]);
+      expect(result).toBe('[]');
+    });
+
+    it('should fallback to JSON for non-object elements', () => {
+      const data = ['string', 123] as unknown as object[];
+      const result = formatAsTable(data);
+      expect(result).toBe(JSON.stringify(data, null, 2));
+    });
+
+    it('should handle null/undefined values as empty strings', () => {
+      const data = [{ a: null, b: undefined, c: 'value' }];
+      const result = formatAsTable(data);
+      expect(result).toContain('value');
+      // null/undefined become empty string
+      expect(result.split('\n')[1]).toContain('\t\t');
+    });
+  });
 });
