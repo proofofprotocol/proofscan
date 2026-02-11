@@ -325,6 +325,7 @@ export const ja: LocaleMessages = {
     tipSearch: 'ヒント: 別の検索語を試してください',
     tipEnable: 'ヒント: pfscan connectors enable --id <connector> で有効化',
     tipDisable: 'ヒント: pfscan connectors disable --id <connector> で無効化',
+    tipAdd: 'ヒント: pfscan connectors add <id> --stdio "<command>" で新しいコネクタを追加',
     conflictingFlags: '--enabled と --disabled は同時に使用できません',
   },
 };
