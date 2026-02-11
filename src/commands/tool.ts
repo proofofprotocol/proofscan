@@ -249,16 +249,34 @@ function formatOutput(data: unknown, format: string): string {
 
 /**
  * Format array of objects as table
+ * Falls back to JSON for edge cases (empty array, non-objects)
  */
 function formatAsTable(data: object[]): string {
+  // Fallback for empty arrays
   if (data.length === 0) {
-    return '';
+    return JSON.stringify([], null, 2);
   }
-  // オブジェクト配列を表形式に変換
-  // キーをヘッダーに、値を行に
-  const keys = Object.keys(data[0]);
+
+  // Validate first element is a plain object
+  const first = data[0];
+  if (!first || typeof first !== 'object' || Array.isArray(first)) {
+    return JSON.stringify(data, null, 2);
+  }
+
+  // Collect all unique keys across all objects for heterogeneous data
+  const allKeys = new Set<string>();
+  for (const obj of data) {
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      Object.keys(obj).forEach(k => allKeys.add(k));
+    }
+  }
+  const keys = Array.from(allKeys);
+
+  // Format as tab-separated table
   const header = keys.join('\t');
-  const rows = data.map(row => keys.map(k => String((row as any)[k] ?? '')).join('\t'));
+  const rows = data.map(row => 
+    keys.map(k => String((row as Record<string, unknown>)[k] ?? '')).join('\t')
+  );
   return [header, ...rows].join('\n');
 }
 
@@ -498,22 +516,21 @@ export function createToolCommand(getConfigPath: () => string): Command {
 
         // Dry run - show what would be sent (no connector validation needed)
         if (options.dryRun) {
-          const outputFormat = options.output || 'json';
-          if (outputFormat === 'json' && !getOutputOptions().json) {
-            console.log('Dry run - would send:');
-            console.log(JSON.stringify({
-              connector: connectorId,
-              tool: toolName,
-              arguments: args,
-            }, null, 2));
-          } else {
-            const data = {
-              dryRun: true,
-              connector: connectorId,
-              tool: toolName,
-              arguments: args,
-            };
+          const data = {
+            dryRun: true,
+            connector: connectorId,
+            tool: toolName,
+            arguments: args,
+          };
+
+          // Consistent with execution paths: --output or --json triggers formatOutput
+          if (options.output || getOutputOptions().json) {
+            const outputFormat = options.output || 'json';
             console.log(formatOutput(data, outputFormat));
+          } else {
+            // Human-readable output (no --json, no --output)
+            console.log('Dry run - would send:');
+            console.log(JSON.stringify(data, null, 2));
           }
           return;
         }
