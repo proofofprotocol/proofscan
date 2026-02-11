@@ -114,6 +114,19 @@ export const ja: LocaleMessages = {
     quickCommands: 'クイックコマンド',
     noDataYet: 'データがありません。初期化してスキャンを実行してください:',
   },
+  // resources section (Phase 7.7)
+  resources: {
+    title: 'リソース:',
+    connectors: 'コネクタ:',
+    enabled: '有効',
+    total: '合計',
+    tools: 'ツール:',
+    estimatedContext: '推定コンテキスト:',
+    tokens: 'トークン',
+    warningExceeds: 'ツール一覧が5,000トークンを超過',
+    considerDisabling: '使用していないコネクタの無効化を検討してください',
+    noConnectors: 'コネクタが設定されていません。',
+  },
 
   // doctor command output
   doctor: {
