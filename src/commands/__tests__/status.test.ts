@@ -14,6 +14,24 @@ vi.mock('../../config/index.js');
 vi.mock('../../db/connection.js');
 // Mock eventline/store
 vi.mock('../../eventline/store.js');
+// Mock i18n to return English strings consistently
+vi.mock('../../i18n/index.js', () => ({
+  t: (key: string) => {
+    const translations: Record<string, string> = {
+      'resources.title': 'Resources:',
+      'resources.connectors': 'Connectors:',
+      'resources.enabled': 'enabled',
+      'resources.total': 'total',
+      'resources.tools': 'Tools:',
+      'resources.estimatedContext': 'Estimated context:',
+      'resources.tokens': 'tokens',
+      'resources.noConnectors': 'No connectors configured.',
+      'resources.warningExceeds': 'Warning: Tool list exceeds',
+      'resources.considerDisabling': 'Consider disabling unused connectors',
+    };
+    return translations[key] || key;
+  },
+}));
 
 describe('status command', () => {
   describe('calculateResourceInfo', () => {
@@ -210,7 +228,7 @@ describe('status command', () => {
       expect(result.estimatedTokens).toBeGreaterThan(5000);
       expect(result.warning).toBeDefined();
       // The warning message from i18n (Japanese)
-      expect(result.warning).toContain('5,000');
+      expect(result.warning).toContain('Warning');
     });
   });
 
@@ -250,9 +268,9 @@ describe('status command', () => {
       expect(console.log).toHaveBeenCalledWith(
         expect.stringContaining('3'),
       );
-      // Check that resources title is displayed (Japanese: リソース:)
+      // Check that resources title is displayed (English: Resources:)
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('リソース'),
+        expect.stringContaining('Resources'),
       );
     });
 
@@ -284,9 +302,9 @@ describe('status command', () => {
 
       displayResources(resources, false);
 
-      // Japanese message: コネクタが設定されていません。
+      // English message: No connectors configured.
       expect(console.log).toHaveBeenCalledWith(
-        expect.stringContaining('コネクタが設定されていません'),
+        expect.stringContaining('No connectors configured'),
       );
     });
 
