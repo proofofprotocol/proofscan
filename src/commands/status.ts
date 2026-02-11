@@ -24,7 +24,7 @@ interface ResourceInfo {
  * @param showTools - Whether to fetch tool counts (slow operation)
  * @returns Resource usage information
  */
-async function calculateResourceInfo(manager: ConfigManager, showTools: boolean): Promise<ResourceInfo> {
+export async function calculateResourceInfo(manager: ConfigManager, showTools: boolean): Promise<ResourceInfo> {
   const connectors = await manager.getConnectors();
 
   // Count enabled/total connectors
@@ -74,7 +74,14 @@ async function calculateResourceInfo(manager: ConfigManager, showTools: boolean)
     }
 
     toolCount = totalTools;
-    estimatedTokens = Math.ceil(totalBytes / 4); // 1 token ≈ 4 bytes
+
+    /**
+     * Estimate token count from bytes
+     * Uses 4 bytes per token heuristic (reasonable for ASCII/English)
+     * Note: May underestimate for non-ASCII text (Japanese uses 3+ bytes per char)
+     * This is acceptable for estimation purposes in AI context management
+     */
+    estimatedTokens = Math.ceil(totalBytes / 4);
 
     // Warning threshold: 5000 tokens
     if (estimatedTokens > 5000) {
@@ -94,7 +101,7 @@ async function calculateResourceInfo(manager: ConfigManager, showTools: boolean)
 /**
  * Display resource information
  */
-function displayResources(resources: ResourceInfo, json: boolean): void {
+export function displayResources(resources: ResourceInfo, json: boolean): void {
   if (json) {
     output({
       resources: {
