@@ -28,7 +28,7 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 6.PR3 | proofscan_getEvents | 📋 | - |
 | 6.PR4 | trace-viewer MVP | 📋 | - |
 | 7.1 | tool list description表示 | 📋 | - |
-| 7.2 | 事前バリデーション | 📋 | - |
+| 7.2 | 事前バリデーション | ✅ 完了 | 2026-02-11 |
 | 7.3 | バッチ呼び出し | 📋 | - |
 | 7.4 | 出力フォーマット制御 | 📋 | - |
 | 7.5 | proofscanスキル作成 | 📋 | - |
