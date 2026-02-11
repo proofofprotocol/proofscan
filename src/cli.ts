@@ -51,6 +51,7 @@ import {
   createLogCommand,
   createPoplCommand,
   createCatalogCommand,
+  createRegistryCommand,
   createRunnersCommand,
   createPlansCommand,
   createMonitorCommand,
@@ -208,6 +209,9 @@ const catCmd = createCatalogCommand(getConfigPath);
 catCmd.name('cat').description('Alias for catalog');
 program.addCommand(catCmd);
 
+// registry (Phase 7.6: Local connector discovery)
+program.addCommand(createRegistryCommand(getConfigPath));
+
 // runners (Phase 7.x: Package runners)
 program.addCommand(createRunnersCommand());
 
@@ -237,7 +241,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'rpc', 'task', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'runners', 'plans', 'monitor', 'i18n', 'help', 'agent'
+  'connectors', 'connector', 'sessions', 'rpc', 'task', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'registry', 'runners', 'plans', 'monitor', 'i18n', 'help', 'agent'
 ]);
 
 // Shell-only commands (not available as CLI commands)

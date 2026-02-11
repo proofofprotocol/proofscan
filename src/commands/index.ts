@@ -47,6 +47,9 @@ export * from './catalog.js';
 // Phase 7.x: Package Runners
 export * from './runners.js';
 
+// Phase 7.6: Registry (local connector discovery)
+export * from './registry.js';
+
 // Phase 5.2: Plans (validation scenarios)
 export * from './plans.js';
 
