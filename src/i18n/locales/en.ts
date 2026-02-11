@@ -325,6 +325,7 @@ export const en = {
     tipSearch: 'Tip: Try a different search term',
     tipEnable: 'Tip: pfscan connectors enable --id <connector> to enable',
     tipDisable: 'Tip: pfscan connectors disable --id <connector> to disable',
+    tipAdd: 'Tip: pfscan connectors add <id> --stdio "<command>" to add a new connector',
     conflictingFlags: 'Cannot use --enabled and --disabled together',
   },
 } as const;

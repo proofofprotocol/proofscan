@@ -140,7 +140,7 @@ function formatSearchResults(
   if (connectors.length === 0) {
     console.log(t('registry.noConnectors'));
     console.log();
-    console.log('Tip: pfscan connectors add <id> --stdio "<command>" to add a new connector');
+    console.log(t('registry.tipAdd'));
     return;
   }
 
@@ -202,7 +202,7 @@ function formatListResults(connectors: Connector[]): void {
   if (connectors.length === 0) {
     console.log(t('registry.noConnectors'));
     console.log();
-    console.log('Tip: pfscan connectors add <id> --stdio "<command>" to add a new connector');
+    console.log(t('registry.tipAdd'));
     return;
   }
 
