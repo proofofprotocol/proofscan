@@ -310,4 +310,21 @@ export const ja: LocaleMessages = {
     useInsteadOf: '代わりに個別のコマンドを使用してください:',
     troubleshooting: 'トラブルシューティング:',
   },
+
+  // registry command output
+  registry: {
+    searchTitle: 'レジストリ検索:',
+    listTitle: '登録済みコネクタ:',
+    noConnectors: 'コネクタが見つかりません。',
+    noResults: '一致するコネクタがありません',
+    enabled: '有効',
+    disabled: '無効',
+    type: 'タイプ',
+    found: '結果:',
+    connectors: '件',
+    tipSearch: 'ヒント: 別の検索語を試してください',
+    tipEnable: 'ヒント: pfscan connectors enable --id <connector> で有効化',
+    tipDisable: 'ヒント: pfscan connectors disable --id <connector> で無効化',
+    conflictingFlags: '--enabled と --disabled は同時に使用できません',
+  },
 };

@@ -310,6 +310,23 @@ export const en = {
     useInsteadOf: 'Use individual commands instead, e.g:',
     troubleshooting: 'Troubleshooting:',
   },
+
+  // registry command output
+  registry: {
+    searchTitle: 'Registry search:',
+    listTitle: 'Registered connectors:',
+    noConnectors: 'No connectors found.',
+    noResults: 'No connectors match',
+    enabled: 'enabled',
+    disabled: 'disabled',
+    type: 'Type',
+    found: 'Found:',
+    connectors: 'connectors',
+    tipSearch: 'Tip: Try a different search term',
+    tipEnable: 'Tip: pfscan connectors enable --id <connector> to enable',
+    tipDisable: 'Tip: pfscan connectors disable --id <connector> to disable',
+    conflictingFlags: 'Cannot use --enabled and --disabled together',
+  },
 } as const;
 
 /**
