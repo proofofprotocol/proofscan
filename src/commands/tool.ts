@@ -418,6 +418,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
     .option('--args <json>', 'Arguments as JSON string')
     .option('--args-file <path>', 'Read arguments from JSON file')
     .option('--stdin', 'Read arguments from stdin (JSON)')
+    .option('--batch <json-array>', 'Execute tool with multiple argument sets (JSON array)')
     .option('--timeout <sec>', 'Timeout in seconds', '30')
     .option('--dry-run', 'Show what would be sent without executing')
     .option('--skip-validation', 'Skip argument validation against schema')
@@ -428,6 +429,7 @@ export function createToolCommand(getConfigPath: () => string): Command {
         args?: string;
         argsFile?: string;
         stdin?: boolean;
+        batch?: string;
         timeout: string;
         dryRun?: boolean;
         skipValidation?: boolean;
@@ -437,11 +439,14 @@ export function createToolCommand(getConfigPath: () => string): Command {
         const timeout = parseTimeout(options.timeout);
 
         // Resolve arguments first (before connector validation for dry-run)
-        const args = await resolveArgs({
-          args: options.args,
-          argsFile: options.argsFile,
-          stdin: options.stdin,
-        });
+        // Skip in batch mode - args are provided in --batch
+        const args = options.batch
+          ? {}
+          : await resolveArgs({
+              args: options.args,
+              argsFile: options.argsFile,
+              stdin: options.stdin,
+            });
 
         // Dry run - show what would be sent (no connector validation needed)
         if (options.dryRun) {
@@ -470,9 +475,11 @@ export function createToolCommand(getConfigPath: () => string): Command {
           configDir,
         };
 
-        // Validate arguments against schema (unless skipped)
-        if (!options.skipValidation) {
-          const toolResult = await getTool(ctx, connector, toolName, {
+        // Validate arguments against schema (unless skipped or batch mode)
+        // Store toolResult for potential batch mode validation
+        let toolResult: Awaited<ReturnType<typeof getTool>> | undefined;
+        if (!options.skipValidation && !options.batch) {
+          toolResult = await getTool(ctx, connector, toolName, {
             timeout,
           });
 
@@ -492,6 +499,95 @@ export function createToolCommand(getConfigPath: () => string): Command {
               process.exit(1);
             }
           }
+        }
+
+        // Batch execution mode
+        if (options.batch) {
+          // Parse batch arguments
+          let batchArgs: Record<string, unknown>[];
+          try {
+            batchArgs = JSON.parse(options.batch);
+            if (!Array.isArray(batchArgs)) {
+              throw new Error('--batch must be a JSON array');
+            }
+          } catch (e) {
+            console.error(`Invalid JSON in --batch: ${e instanceof Error ? e.message : e}`);
+            process.exit(1);
+          }
+
+          // Get tool schema for validation if enabled
+          if (!options.skipValidation && !toolResult) {
+            toolResult = await getTool(ctx, connector, toolName, {
+              timeout,
+            });
+          }
+
+          // Validate each argument set if validation is enabled
+          if (!options.skipValidation && toolResult?.tool?.inputSchema) {
+            for (let i = 0; i < batchArgs.length; i++) {
+              const validationErrors = validateArgs(batchArgs[i], toolResult.tool.inputSchema);
+              if (validationErrors.length > 0) {
+                console.error(`Validation failed for batch item ${i}:`);
+                for (const err of validationErrors) {
+                  console.error(`  ${err.message}`);
+                  if (err.expected) console.error(`    Expected: ${err.expected}`);
+                  if (err.got) console.error(`    Got: ${err.got}`);
+                }
+                process.exit(1);
+              }
+            }
+          }
+
+          // Execute in parallel
+          // TODO: Add --concurrency option to limit parallel executions
+          const results = await Promise.all(
+            batchArgs.map(async (batchArg) => {
+              try {
+                const result = await callTool(ctx, connector, toolName, batchArg, {
+                  timeout,
+                });
+                return {
+                  args: batchArg,
+                  result: result.content,
+                  ok: result.success && !result.isError,
+                  error: result.error,
+                };
+              } catch (e) {
+                return {
+                  args: batchArg,
+                  result: null,
+                  ok: false,
+                  error: e instanceof Error ? e.message : String(e),
+                };
+              }
+            })
+          );
+
+          if (getOutputOptions().json) {
+            output({ batch: true, results, sessionId: 'batch' });
+            return;
+          }
+
+          // Human-readable output
+          console.log();
+          console.log(`Batch results (${results.length} items):`);
+          console.log();
+          for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            const status = r.ok ? '✓' : '✗';
+            console.log(`[${i}] ${status} ${JSON.stringify(r.args)}`);
+            if (r.ok && r.result) {
+              // Truncate result for display
+              const resultStr = JSON.stringify(r.result);
+              console.log(`    ${resultStr.length > 100 ? resultStr.slice(0, 100) + '...' : resultStr}`);
+            } else if (r.error) {
+              console.log(`    Error: ${r.error}`);
+            }
+          }
+          console.log();
+          const okCount = results.filter(r => r.ok).length;
+          console.log(`${okCount}/${results.length} succeeded`);
+          return;
         }
 
         const result = await callTool(ctx, connector, toolName, args, {
