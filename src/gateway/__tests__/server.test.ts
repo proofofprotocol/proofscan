@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createGatewayServer, GatewayServer } from '../server.js';
 import { generateRequestId, getRequestTimestamp } from '../requestId.js';
 import { createLogger, Logger, LogEntry } from '../logger.js';
+import { createGatewayConfig } from '../config.js';
 
 describe('Gateway Server', () => {
   let server: GatewayServer;
@@ -48,6 +49,28 @@ describe('Gateway Server', () => {
       const address = await server.start();
 
       expect(address).toContain('127.0.0.1');
+    });
+
+    it('should not leak signal handlers on multiple server instances', async () => {
+      // Create and stop multiple server instances
+      // This tests that signal handlers are properly cleaned up
+      const initialListenerCount = process.listenerCount('SIGINT');
+
+      for (let i = 0; i < 3; i++) {
+        const s = createGatewayServer({ port: 0, host: '127.0.0.1' }, logger);
+        await s.start();
+        await s.stop();
+      }
+
+      // Verify no signal handler leaks
+      const finalListenerCount = process.listenerCount('SIGINT');
+      expect(finalListenerCount).toBe(initialListenerCount);
+
+      const stopLogs = logs.filter((l) => l.event === 'server_stopped');
+      expect(stopLogs.length).toBe(3);
+
+      // Clear server reference since we managed lifecycle locally
+      server = undefined as unknown as GatewayServer;
     });
   });
 
@@ -119,6 +142,15 @@ describe('Request ID', () => {
     expect(getRequestTimestamp('')).toBeNull();
     expect(getRequestTimestamp('!!invalid!!')).toBeNull();
   });
+
+  it('should return null for incorrect length ULID', () => {
+    // Too short
+    expect(getRequestTimestamp('01ARYZ6S41TSV4RRFFQ69G5F')).toBeNull(); // 24 chars
+    // Too long
+    expect(getRequestTimestamp('01ARYZ6S41TSV4RRFFQ69G5FAABB')).toBeNull(); // 28 chars
+    // Empty
+    expect(getRequestTimestamp('')).toBeNull();
+  });
 });
 
 describe('Logger', () => {
@@ -180,5 +212,49 @@ describe('Logger', () => {
     expect(parsed.queue_wait_ms).toBe(15);
     expect(parsed.upstream_latency_ms).toBe(105);
     expect(parsed.status).toBe(200);
+  });
+});
+
+describe('Gateway Config Validation', () => {
+  describe('port validation', () => {
+    it('should accept valid ports', () => {
+      expect(() => createGatewayConfig({ port: 1 })).not.toThrow();
+      expect(() => createGatewayConfig({ port: 80 })).not.toThrow();
+      expect(() => createGatewayConfig({ port: 3000 })).not.toThrow();
+      expect(() => createGatewayConfig({ port: 65535 })).not.toThrow();
+    });
+
+    it('should accept port 0 (OS assigns ephemeral port)', () => {
+      expect(() => createGatewayConfig({ port: 0 })).not.toThrow();
+    });
+
+    it('should reject negative ports', () => {
+      expect(() => createGatewayConfig({ port: -1 })).toThrow(/Invalid port/);
+    });
+
+    it('should reject ports above 65535', () => {
+      expect(() => createGatewayConfig({ port: 65536 })).toThrow(/Invalid port: 65536/);
+      expect(() => createGatewayConfig({ port: 100000 })).toThrow(/Invalid port/);
+    });
+  });
+
+  describe('host validation', () => {
+    it('should accept valid hosts', () => {
+      expect(() => createGatewayConfig({ host: 'localhost' })).not.toThrow();
+      expect(() => createGatewayConfig({ host: '127.0.0.1' })).not.toThrow();
+      expect(() => createGatewayConfig({ host: '0.0.0.0' })).not.toThrow();
+      expect(() => createGatewayConfig({ host: 'example.com' })).not.toThrow();
+    });
+
+    it('should reject empty host', () => {
+      expect(() => createGatewayConfig({ host: '' })).toThrow(/Invalid host/);
+      expect(() => createGatewayConfig({ host: '   ' })).toThrow(/Invalid host/);
+    });
+
+    it('should reject hosts with invalid characters', () => {
+      expect(() => createGatewayConfig({ host: 'host name' })).toThrow(/Invalid host/);
+      expect(() => createGatewayConfig({ host: '<script>' })).toThrow(/Invalid host/);
+      expect(() => createGatewayConfig({ host: 'host|name' })).toThrow(/Invalid host/);
+    });
   });
 });

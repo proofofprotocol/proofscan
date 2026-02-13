@@ -90,10 +90,25 @@ export function createGatewayServer(
   // Store cleanup functions for later removal
   const signalHandlers: { [signal: string]: () => void } = {};
 
+  const removeSignalHandlers = () => {
+    for (const [signal, handler] of Object.entries(signalHandlers)) {
+      process.removeListener(signal, handler);
+    }
+    // Clear the handlers object
+    for (const key of Object.keys(signalHandlers)) {
+      delete signalHandlers[key];
+    }
+  };
+
   return {
     server,
 
     async start(): Promise<string> {
+      // Clear existing signal handlers to prevent memory leak on multiple start() calls
+      if (Object.keys(signalHandlers).length > 0) {
+        removeSignalHandlers();
+      }
+
       // Register signal handlers
       signalHandlers['SIGINT'] = () => { void shutdown('SIGINT'); };
       signalHandlers['SIGTERM'] = () => { void shutdown('SIGTERM'); };
@@ -119,9 +134,7 @@ export function createGatewayServer(
 
     async stop(): Promise<void> {
       // Remove signal handlers
-      for (const [signal, handler] of Object.entries(signalHandlers)) {
-        process.removeListener(signal, handler);
-      }
+      removeSignalHandlers();
 
       if (!isShuttingDown) {
         await server.close();
@@ -138,6 +151,9 @@ export function createGatewayServer(
   };
 }
 
+/** Maximum body limit: 100MB */
+const MAX_BODY_LIMIT = 100 * 1024 * 1024;
+
 /**
  * Parse body limit string to bytes
  * @param limit e.g., "1mb", "512kb", "1024"
@@ -149,14 +165,25 @@ function parseBodyLimit(limit: string): number {
   const value = parseInt(match[1], 10);
   const unit = (match[2] || '').toLowerCase();
 
+  let bytes: number;
   switch (unit) {
     case 'kb':
-      return value * 1024;
+      bytes = value * 1024;
+      break;
     case 'mb':
-      return value * 1024 * 1024;
+      bytes = value * 1024 * 1024;
+      break;
     case 'gb':
-      return value * 1024 * 1024 * 1024;
+      bytes = value * 1024 * 1024 * 1024;
+      break;
     default:
-      return value;
+      bytes = value;
   }
+
+  // Enforce upper bound
+  if (bytes > MAX_BODY_LIMIT) {
+    return MAX_BODY_LIMIT;
+  }
+
+  return bytes;
 }

@@ -42,11 +42,44 @@ export const DEFAULT_CONFIG: GatewayConfig = {
 };
 
 /**
+ * Validate port number
+ * Port 0 is allowed (OS assigns available ephemeral port)
+ */
+function validatePort(port: number): void {
+  if (port < 0 || port > 65535) {
+    throw new Error(`Invalid port: ${port}. Must be between 0 and 65535.`);
+  }
+}
+
+/**
+ * Validate host string
+ */
+function validateHost(host: string): void {
+  if (!host || host.trim() === '') {
+    throw new Error('Invalid host: host cannot be empty.');
+  }
+  // Basic format check: reject obviously invalid characters
+  if (/[\s<>{}|\\^`]/.test(host)) {
+    throw new Error(`Invalid host: ${host}. Contains invalid characters.`);
+  }
+}
+
+/**
  * Create gateway configuration with overrides
  */
 export function createGatewayConfig(
   overrides: Partial<GatewayConfig> = {}
 ): GatewayConfig {
+  // Validate port if provided
+  if (overrides.port !== undefined) {
+    validatePort(overrides.port);
+  }
+
+  // Validate host if provided
+  if (overrides.host !== undefined) {
+    validateHost(overrides.host);
+  }
+
   return {
     ...DEFAULT_CONFIG,
     ...overrides,
