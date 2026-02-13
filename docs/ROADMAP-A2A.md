@@ -23,18 +23,19 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 3.2 | UI対応 | ✅ 完了 | 2026-02-03 |
 | 4 | 認証 | 📋 未着手 | - |
 | 5 | 高度な機能 | 📋 未着手 | - |
-| 6.PR1 | MCP Apps基盤 | 🚀 次 | - |
-| 6.PR2 | BridgeEnvelope + 監査ログ | 📋 | - |
-| 6.PR3 | proofscan_getEvents | 📋 | - |
-| 6.PR4 | trace-viewer MVP | 📋 | - |
-| 7.1 | tool list description表示 | 📋 | - |
+| 6.PR1 | MCP Apps基盤 | ✅ 完了 | 2026-02-06 |
+| 6.PR2 | BridgeEnvelope + 監査ログ | ✅ 完了 | 2026-02-06 |
+| 6.PR3 | proofscan_getEvents | ✅ 完了 | 2026-02-07 |
+| 6.PR4 | trace-viewer MVP | ✅ 完了 | 2026-02-07 |
+| 7.1 | tool list description表示 | 📋 未着手 | - |
 | 7.2 | 事前バリデーション | ✅ 完了 | 2026-02-11 |
 | 7.3 | バッチ呼び出し | ✅ 完了 | 2026-02-11 |
-| 7.4 | 出力フォーマット制御 | ✅ 完了 | - |
+| 7.4 | 出力フォーマット制御 | ✅ 完了 | 2026-02-11 |
 | 7.5 | proofscanスキル作成 | ✅ 完了 | 2026-02-11 |
 | 7.6 | レジストリ検索（MCP/A2A） | ✅ 完了 | 2026-02-11 |
-| 7.7 | リソース使用量表示 | ✅ 完了 | 2026-02-11 |
-| 7.8 | doctor拡張（統合診断） | 📋 | - |
+| 7.7 | リソース使用量表示 | ✅ 完了 | 2026-02-13 |
+| 7.8 | doctor拡張（統合診断） | 📋 未着手 | - |
+| 8 | Protocol Gateway | 🚀 次 | - |
 
 ---
 
@@ -249,12 +250,12 @@ Phase 2.2 Task CLI の検証用に、glm-dice-agent に Task 管理機能を追�
 
 ---
 
-## Phase 6: MCP Apps 対応 🚀
+## Phase 6: MCP Apps 対応 ✅
 
 MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロトコル解析体験を向上。
 
 **設計書:** `/home/shin/vault/03_Projects/proofscan/3032 - proofscan Phase 6 - MCP Apps 設計書.md`
-**PRプロンプト:** `docs/PR-PROMPTS-PHASE6.md`
+**完了日:** 2026-02-07
 
 ### 設計方針
 - `_meta.ui.resourceUri` を基準形（SEP-1865準拠）
@@ -265,37 +266,38 @@ MCP Apps Extension (SEP-1865) への対応。インタラクティブUIでプロ
 
 ### PR分割
 
-| PR | 内容 | 状態 |
-|----|------|------|
-| PR1 | Apps基盤: resources, tools/list, ui/initialize, token検証 | 📋 |
-| PR2 | BridgeEnvelope + 相関ID + 監査ログ | 📋 |
-| PR3 | proofscan_getEvents (paging, 3層結果) | 📋 |
-| PR4 | trace-viewer MVP (windowed, 仮想スクロール) | 📋 |
+| PR | 内容 | マージ日 |
+|----|------|----------|
+| PR #100 | psh SSE streaming | 2026-02-05 |
+| PR #101 | Apps基盤: resources, tools/list, ui/initialize, token検証 | 2026-02-06 |
+| PR #102 | BridgeEnvelope + 相関ID + 監査ログ | 2026-02-06 |
+| PR #103 | proofscan_getEvents (paging, 3層結果) | 2026-02-07 |
+| PR #104 | trace-viewer MVP (windowed, 仮想スクロール) | 2026-02-07 |
 
-### PR1: Apps基盤
-- [ ] `resources/list` に `ui://proofscan/trace-viewer` 追加
-- [ ] `mimeType: "text/html;profile=mcp-app"` 必須
-- [ ] `resources/read` で単一HTML（JS/CSS同梱）配信
-- [ ] `tools/list` に `proofscan_getEvents`（outputSchema + _meta.ui）
-- [ ] UI側 `ui/initialize` + sessionToken取得・検証
+### PR1: Apps基盤 ✅
+- [x] `resources/list` に `ui://proofscan/trace-viewer` 追加
+- [x] `mimeType: "text/html;profile=mcp-app"` 必須
+- [x] `resources/read` で単一HTML（JS/CSS同梱）配信
+- [x] `tools/list` に `proofscan_getEvents`（outputSchema + _meta.ui）
+- [x] UI側 `ui/initialize` + sessionToken取得・検証
 
-### PR2: BridgeEnvelope + 監査ログ
-- [ ] `_bridge.sessionToken` 方式（UI→Host）
-- [ ] `sanitizeToolCall()` でServer転送前にstrip
-- [ ] 相関ID生成: ui_session_id, ui_rpc_id, correlation_id, tool_call_fingerprint
-- [ ] ui_* イベント種別でEventLineDB記録
+### PR2: BridgeEnvelope + 監査ログ ✅
+- [x] `_bridge.sessionToken` 方式（UI→Host）
+- [x] `sanitizeToolCall()` でServer転送前にstrip
+- [x] 相関ID生成: ui_session_id, ui_rpc_id, correlation_id, tool_call_fingerprint
+- [x] ui_* イベント種別でEventLineDB記録
 
-### PR3: proofscan_getEvents
-- [ ] EventLineDB → paging handler
-- [ ] 3層結果: content(テキスト), structuredContent(outputSchema準拠), _meta(UI専用)
-- [ ] _meta.fullEvents 制限: 200件, 10KB truncate, secret redact
-- [ ] cursor境界: `before` は指定event含まない
+### PR3: proofscan_getEvents ✅
+- [x] EventLineDB → paging handler
+- [x] 3層結果: content(テキスト), structuredContent(outputSchema準拠), _meta(UI専用)
+- [x] _meta.fullEvents 制限: 200件, 10KB truncate, secret redact
+- [x] cursor境界: `before` は指定event含まない
 
-### PR4: trace-viewer MVP
-- [ ] windowed render（初回50件、上スクロールで追加）
-- [ ] 仮想スクロール
-- [ ] notify両対応: `ui/notify` + `ui/notifications/*`
-- [ ] basic-host or Claude で表示確認
+### PR4: trace-viewer MVP ✅
+- [x] windowed render（初回50件、上スクロールで追加）
+- [x] 仮想スクロール
+- [x] notify両対応: `ui/notify` + `ui/notifications/*`
+- [x] basic-host or Claude で表示確認
 
 ### 6.5 統計ダッシュボード（任意・後続）
 - [ ] RPC呼び出し統計
@@ -419,13 +421,15 @@ pfscan --json registry search "yfinance"
 
 **PR:** `feature/phase7.6-registry` (pending merge)
 
-### 7.7 リソース使用量表示
+### 7.7 リソース使用量表示 ✅
 - [x] 有効コネクタの総ツール数表示
 - [x] tools/list の推定トークン数/バイト数
 - [x] 閾値超過時の警告
 - [x] `pfscan status` に統合
 
-**目標:**
+**PR:** #112 (merged 2026-02-13)
+
+**出力例:**
 ```bash
 $ pfscan status
 
@@ -436,8 +440,6 @@ Estimated context: ~8,500 tokens
 ⚠️ Warning: Tool list exceeds 5,000 tokens
    Consider disabling unused connectors
 ```
-
-**背景:** コネクタが増えすぎるとtools/listが肥大化し、MCPクライアント/AIのコンテキストを圧迫する。バロメーターを提供して自己管理を促す。
 
 **注意:** token数は概算（1 token ≒ 4 bytes）。表示時に `Estimated token count is approximate` の注記を含める。
 
@@ -476,6 +478,56 @@ Registry:
 
 ---
 
+## Phase 8: Protocol Gateway 🚀
+
+proofscanをHTTP/SSEサーバーとして公開し、MCP + A2A両方のプロキシ（Protocol Gateway）として機能させる。
+
+**設計書:** `/home/shin/vault/03_Projects/proofscan/3037 - proofscan Phase 8 - Protocol Gateway 設計書.md`
+
+### 背景
+- **現状:** stdio only → ローカルAI（exec権限あり）のみアクセス可能
+- **課題:** Phase 7.6 の registry ホワイトリスト制限が実質無意味
+- **目標:** リモートAIからアクセス可能にし、ホワイトリスト制御を実効化
+
+### 核心設計
+- **明示許可のみ (default deny)** — permissions に含まれない操作は即deny
+- **完全シリアルモデル** — stdioコネクタの安全性を優先
+- **相関ID完全追跡** — request_id, trace_id, client_id, target_id, decision
+- **Latency分解** — latency_ms, queue_wait_ms, upstream_latency_ms
+- **Token ハッシュ化** — 平文保存回避、ログには絶対出力しない
+- **EventLineDB統合** — request_id を primary correlation key
+
+### PR分割
+
+| PR | 内容 | 依存 | 見積 |
+|----|------|------|------|
+| PR1 | HTTP基盤 + 共通基盤 (ULID, logger, limits) | - | 3h |
+| PR2 | Bearer Token 認証 (ハッシュ化対応) | PR1 | 2h |
+| PR3 | MCP プロキシ + キュー/timeout | PR1, PR2 | 4h |
+| PR4 | A2A プロキシ | PR1, PR2 | 3h |
+| PR5 | 監査ログ + EventLineDB (相関ID対応) | PR3, PR4 | 3h |
+| PR6 | SSE + /events/stream | PR3 | 2h |
+| **合計** | | | **17h** |
+
+### エンドポイント
+```
+POST   /mcp/v1/message          MCP JSON-RPC (単発)
+GET    /mcp/v1/sse              MCP SSE (ストリーミング)
+POST   /a2a/v1/message/send     A2A message/send
+POST   /a2a/v1/tasks/*          A2A task operations
+GET    /events/stream           Gateway イベント購読
+GET    /health                  ヘルスチェック
+```
+
+### セキュリティ
+- TLS必須（本番環境）
+- 127.0.0.1 bind + reverse proxy 経由
+- Token rotation（移行期間サポート）
+- hide_not_found: true（存在秘匿）
+- Rate limiting フック（将来実装用）
+
+---
+
 ## 参考リンク
 
 - [A2A Protocol Spec](https://google.github.io/A2A/)
@@ -483,7 +535,8 @@ Registry:
 - [proofscan repo](https://github.com/proofofprotocol/proofscan)
 - [MCP Apps Extension (SEP-1865)](https://github.com/modelcontextprotocol/ext-apps)
 - [MCP Apps Blog Post](https://blog.modelcontextprotocol.io/posts/2025-11-21-mcp-apps/)
+- [MCP HTTP Transport Spec](https://spec.modelcontextprotocol.io/specification/basic/transports/#http-with-sse)
 
 ---
 
-*Last updated: 2026-02-11*
+*Last updated: 2026-02-13*
