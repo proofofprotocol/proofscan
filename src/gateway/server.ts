@@ -1,12 +1,14 @@
 /**
  * Fastify HTTP server for Protocol Gateway
  * Phase 8.1: HTTP server foundation
+ * Phase 8.2: Bearer Token Authentication
  */
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { GatewayConfig, createGatewayConfig } from './config.js';
 import { generateRequestId } from './requestId.js';
 import { createLogger, Logger } from './logger.js';
+import { createAuthMiddleware, AuthInfo } from './authMiddleware.js';
 
 export interface GatewayServer {
   /** Fastify instance */
@@ -22,6 +24,7 @@ export interface GatewayServer {
 declare module 'fastify' {
   interface FastifyRequest {
     requestId: string;
+    auth?: AuthInfo;
   }
 }
 
@@ -47,11 +50,16 @@ export function createGatewayServer(
     request.requestId = request.id as string;
   });
 
+  // Add authentication middleware
+  const authMiddleware = createAuthMiddleware(fullConfig.auth);
+  server.addHook('preHandler', authMiddleware);
+
   // Log all requests
   server.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     log.info({
       event: 'http_request',
       request_id: request.requestId,
+      client_id: request.auth?.client_id,
       method: request.method,
       url: request.url,
       status: reply.statusCode,
@@ -59,10 +67,19 @@ export function createGatewayServer(
     });
   });
 
-  // Health check endpoint
+  // Health check endpoint (public, no auth required)
   server.get('/health', async (_request: FastifyRequest, _reply: FastifyReply) => {
     return {
       status: 'ok',
+      timestamp: new Date().toISOString(),
+    };
+  });
+
+  // Test endpoint (requires auth)
+  server.get('/test', async (request: FastifyRequest, _reply: FastifyReply) => {
+    return {
+      status: 'ok',
+      client_id: request.auth?.client_id,
       timestamp: new Date().toISOString(),
     };
   });

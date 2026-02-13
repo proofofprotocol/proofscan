@@ -1,7 +1,10 @@
 /**
  * Gateway configuration
  * Phase 8.1: HTTP server foundation
+ * Phase 8.2: Bearer Token Authentication
  */
+
+import { AuthConfig, DEFAULT_AUTH_CONFIG, createAuthConfig } from './auth.js';
 
 export interface GatewayLimits {
   /** Request timeout in milliseconds */
@@ -23,6 +26,8 @@ export interface GatewayConfig {
   port: number;
   /** Gateway limits */
   limits: GatewayLimits;
+  /** Authentication configuration */
+  auth: AuthConfig;
 }
 
 /** Default gateway limits */
@@ -39,6 +44,7 @@ export const DEFAULT_CONFIG: GatewayConfig = {
   host: '127.0.0.1',
   port: 3000,
   limits: DEFAULT_LIMITS,
+  auth: DEFAULT_AUTH_CONFIG,
 };
 
 /**
@@ -87,5 +93,6 @@ export function createGatewayConfig(
       ...DEFAULT_LIMITS,
       ...overrides.limits,
     },
+    auth: createAuthConfig(overrides.auth),
   };
 }
