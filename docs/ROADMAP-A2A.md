@@ -489,6 +489,101 @@ proofscanをHTTP/SSEサーバーとして公開し、MCP + A2A両方のプロキ
 - **課題:** Phase 7.6 の registry ホワイトリスト制限が実質無意味
 - **目標:** リモートAIからアクセス可能にし、ホワイトリスト制御を実効化
 
+### サブフェーズ
+
+| Sub | 内容 | 優先度 |
+|-----|------|--------|
+| 8.1 | HTTP/SSE サーバー化 | 必須 |
+| 8.2 | 認証・認可 | 必須 |
+| 8.3 | プロキシ機能 | 必須 |
+| 8.4 | 監査・ログ | 必須 |
+| 8.5 | MCP over HTTP 準拠 | 推奨 |
+| 8.6 | WebSocket対応 | 任意 |
+
+### 8.1 HTTP/SSE サーバー化
+- [ ] `pfscan serve` コマンド追加
+- [ ] Fastify or Express ベース
+- [ ] `--port`, `--host`, `--tls` オプション
+- [ ] `/health` エンドポイント
+- [ ] シングルプロセス（初期）
+
+**コマンド:**
+```bash
+pfscan serve --port 3000 --host 127.0.0.1
+pfscan serve --tls --cert cert.pem --key key.pem
+```
+
+### 8.2 認証・認可
+- [ ] Bearer Token 認証 (ハッシュ化保存)
+- [ ] 権限文法: `mcp:call:yfinance`, `a2a:task:*`
+- [ ] **明示許可のみ (default deny)**
+- [ ] Token rotation サポート（移行期間）
+- [ ] ホワイトリスト強制（registry連携）
+
+**設定例:**
+```yaml
+gateway:
+  auth:
+    mode: "bearer"
+    tokens:
+      - name: "claude-desktop"
+        token_hash: "sha256:a1b2c3d4..."
+        permissions: ["mcp:*", "registry:read"]
+```
+
+### 8.3 プロキシ機能
+- [ ] MCP JSON-RPC プロキシ (`/mcp/v1/message`)
+- [ ] A2A プロキシ (`/a2a/v1/*`)
+- [ ] **完全シリアルモデル** (max_inflight=1)
+- [ ] キュー管理 (max_queue=10)
+- [ ] タイムアウト (30秒)
+- [ ] クライアント切断時 abort 伝播
+
+**設定:**
+```yaml
+gateway:
+  limits:
+    timeout_ms: 30000
+    max_body_size: "1mb"
+    max_inflight_per_connector: 1
+    max_queue_per_connector: 10
+    rate_limit_per_token: null  # 将来実装用
+```
+
+### 8.4 監査・ログ
+- [ ] **相関ID完全追跡**: request_id, trace_id, client_id, target_id
+- [ ] **Latency分解**: latency_ms, queue_wait_ms, upstream_latency_ms
+- [ ] decision ログ (allow/deny + deny_reason)
+- [ ] EventLineDB統合 (request_id = primary correlation key)
+- [ ] Structured JSON logger
+- [ ] Token は**絶対にログ出力しない**
+
+**ログフォーマット:**
+```json
+{
+  "event": "mcp_request",
+  "request_id": "01JKXYZ...",
+  "trace_id": "abc123...",
+  "client_id": "client-001",
+  "target_id": "yfinance",
+  "decision": "allow",
+  "latency_ms": 120,
+  "queue_wait_ms": 15,
+  "upstream_latency_ms": 105
+}
+```
+
+### 8.5 MCP over HTTP 準拠 (推奨)
+- [ ] `transport_mode: "custom" | "spec"` 切り替え
+- [ ] MCP公式HTTPトランスポート仕様対応
+- [ ] `Mcp-Session-Id` ヘッダー対応
+- [ ] セッション管理（TTL付き）
+
+### 8.6 WebSocket対応 (任意)
+- [ ] `ws://localhost:3000/mcp/v1/ws`
+- [ ] 双方向通信
+- [ ] 初期リリースでは不要（SSEで十分）
+
 ### 核心設計
 - **明示許可のみ (default deny)** — permissions に含まれない操作は即deny
 - **完全シリアルモデル** — stdioコネクタの安全性を優先
@@ -523,8 +618,18 @@ GET    /health                  ヘルスチェック
 - TLS必須（本番環境）
 - 127.0.0.1 bind + reverse proxy 経由
 - Token rotation（移行期間サポート）
-- hide_not_found: true（存在秘匿）
+- hide_not_found: true（存在秘匿、default）
+- Trusted proxy 設定（X-Forwarded-For）
 - Rate limiting フック（将来実装用）
+
+### エラーモデル
+| Code | 意味 |
+|------|------|
+| 401 | トークンなし/不正 |
+| 403 | 権限不足/ホワイトリスト拒否 |
+| 404 | target不存在（hide_not_foundで403化可） |
+| 429 | レート制限/キュー満杯 |
+| 504 | upstream タイムアウト |
 
 ---
 
