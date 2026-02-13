@@ -3,7 +3,7 @@
  * Phase 8.2: Bearer Token Authentication
  */
 
-import { createHash } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 
 /**
  * Token configuration
@@ -57,10 +57,21 @@ export function validateToken(
     return null;
   }
 
-  const tokenHash = hashToken(token);
+  const inputHash = hashToken(token);
+  // Extract hex part after "sha256:" prefix
+  const inputHashHex = inputHash.slice(7);
 
   for (const tokenConfig of config.tokens) {
-    if (tokenConfig.token_hash === tokenHash) {
+    const storedHashHex = tokenConfig.token_hash.slice(7);
+
+    // Use constant-time comparison to prevent timing attacks
+    const inputBuffer = Buffer.from(inputHashHex, 'hex');
+    const storedBuffer = Buffer.from(storedHashHex, 'hex');
+
+    if (
+      inputBuffer.length === storedBuffer.length &&
+      timingSafeEqual(inputBuffer, storedBuffer)
+    ) {
       return tokenConfig;
     }
   }

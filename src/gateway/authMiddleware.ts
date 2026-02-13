@@ -39,6 +39,18 @@ interface AuthErrorResponse {
 const PUBLIC_PATHS = ['/health'];
 
 /**
+ * Normalize path for comparison
+ * - Removes query parameters
+ * - Removes trailing slash (except for root "/")
+ */
+function normalizePath(path: string): string {
+  // Remove query parameters
+  const withoutQuery = path.split('?')[0];
+  // Remove trailing slash (except for root "/")
+  return withoutQuery.length > 1 ? withoutQuery.replace(/\/$/, '') : withoutQuery;
+}
+
+/**
  * Create authentication middleware
  * 
  * Behavior:
@@ -56,8 +68,9 @@ export function createAuthMiddleware(
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> => {
-    // Skip auth for public paths
-    if (PUBLIC_PATHS.includes(request.url)) {
+    // Skip auth for public paths (normalize to handle query params and trailing slashes)
+    const normalizedPath = normalizePath(request.url);
+    if (PUBLIC_PATHS.includes(normalizedPath)) {
       request.auth = {
         client_id: 'anonymous',
         permissions: [],
