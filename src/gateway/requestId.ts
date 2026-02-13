@@ -29,6 +29,9 @@ export function generateTraceId(): string {
   return ulid();
 }
 
+/** ULID length is always 26 characters */
+const ULID_LENGTH = 26;
+
 /**
  * Extract timestamp from request ID
  * @param requestId ULID request ID
@@ -36,6 +39,11 @@ export function generateTraceId(): string {
  */
 export function getRequestTimestamp(requestId: string): Date | null {
   try {
+    // Validate ULID length
+    if (!requestId || requestId.length !== ULID_LENGTH) {
+      return null;
+    }
+
     // ULID timestamp is first 10 characters (48 bits Crockford Base32)
     const ENCODING = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
     const normalized = requestId.toUpperCase();
