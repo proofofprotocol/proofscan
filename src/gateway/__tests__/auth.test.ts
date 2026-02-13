@@ -284,6 +284,49 @@ describe('Auth Middleware Integration', () => {
     expect(body.status).toBe('ok');
   });
 
+  it('should allow /health with query params without auth', async () => {
+    const logger = createLogger((line) => logs.push(JSON.parse(line) as LogEntry));
+    server = createGatewayServer(
+      {
+        port: 0,
+        host: '127.0.0.1',
+        auth: {
+          mode: 'bearer',
+          tokens: [{ name: 'test', token_hash: testTokenHash, permissions: ['*'] }],
+        },
+      },
+      logger
+    );
+    const address = await server.start();
+
+    const response = await fetch(`${address}/health?foo=bar`);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe('ok');
+  });
+
+  it('should allow /health/ (trailing slash) without auth', async () => {
+    const logger = createLogger((line) => logs.push(JSON.parse(line) as LogEntry));
+    server = createGatewayServer(
+      {
+        port: 0,
+        host: '127.0.0.1',
+        auth: {
+          mode: 'bearer',
+          tokens: [{ name: 'test', token_hash: testTokenHash, permissions: ['*'] }],
+        },
+      },
+      logger
+    );
+    const address = await server.start();
+
+    const response = await fetch(`${address}/health/`);
+    // Fastify may return 404 for /health/ due to strict routing, or 200 if routed
+    // The important thing is it should NOT return 401 (unauthorized)
+    expect(response.status).not.toBe(401);
+  });
+
   it('should log client_id in request logs', async () => {
     const logger = createLogger((line) => logs.push(JSON.parse(line) as LogEntry));
     server = createGatewayServer(

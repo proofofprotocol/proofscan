@@ -99,9 +99,10 @@ function buildAuthConfig(mode: 'none' | 'bearer', tokenHashes: string[]): AuthCo
       tokenHash = hash;
     }
 
-    // Validate hash format
-    if (!tokenHash.startsWith('sha256:')) {
-      console.error(`Error: Invalid token hash format: ${tokenHash}. Must start with 'sha256:'`);
+    // Validate hash format: must be sha256:<64 hex chars>
+    const HASH_REGEX = /^sha256:[a-f0-9]{64}$/;
+    if (!HASH_REGEX.test(tokenHash)) {
+      console.error(`Error: Invalid token hash format: ${tokenHash}. Must be sha256:<64 hex chars>`);
       process.exit(1);
     }
 
