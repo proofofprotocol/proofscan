@@ -16,7 +16,7 @@ export function createServeCommand(): Command {
       const port = parseInt(options.port, 10);
       const host = options.host as string;
 
-      if (isNaN(port) || port < 1 || port > 65535) {
+      if (isNaN(port) || port < 0 || port > 65535) {
         console.error(`Error: Invalid port number: ${options.port}`);
         process.exit(1);
       }
@@ -30,13 +30,11 @@ export function createServeCommand(): Command {
         console.log(`Protocol Gateway listening at ${address}`);
         console.log('Press Ctrl+C to stop');
 
-        // Keep the process running
-        await new Promise<void>((resolve) => {
-          process.once('SIGINT', () => resolve());
-          process.once('SIGTERM', () => resolve());
+        // Keep process running until server handles shutdown
+        // Signal handlers in server.ts will handle graceful shutdown and process.exit()
+        await new Promise<void>(() => {
+          // Never resolves - server.ts signal handler will call process.exit()
         });
-
-        await gateway.stop();
       } catch (error) {
         console.error('Failed to start server:', error instanceof Error ? error.message : error);
         process.exit(1);

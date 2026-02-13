@@ -79,11 +79,13 @@ export function createGatewayServer(
     try {
       await server.close();
       log.info({ event: 'server_stopped' });
+      process.exit(0);
     } catch (error) {
       log.error({
         event: 'server_shutdown_error',
         error: error instanceof Error ? error.message : String(error),
       });
+      process.exit(1);
     }
   };
 
