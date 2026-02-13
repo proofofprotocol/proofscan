@@ -2,25 +2,32 @@
  * Serve command - start the Protocol Gateway HTTP server
  * Phase 8.1: HTTP server foundation
  * Phase 8.2: Bearer Token Authentication
+ * Phase 8.3: MCP Proxy
  */
 
 import { Command } from 'commander';
+import { dirname } from 'path';
 import { createGatewayServer } from '../gateway/server.js';
 import { createLogger } from '../gateway/logger.js';
 import { AuthConfig, TokenConfig } from '../gateway/auth.js';
+import { resolveConfigPath } from '../utils/config-path.js';
 
 export function createServeCommand(): Command {
   const cmd = new Command('serve')
     .description('Start the Protocol Gateway HTTP server')
     .option('-p, --port <port>', 'Server port', '3000')
     .option('-h, --host <host>', 'Server host', '127.0.0.1')
+    .option('-c, --config <path>', 'Config file path (enables MCP proxy)')
     .option('--auth-mode <mode>', 'Authentication mode (none, bearer)', 'none')
     .option('--token-hash <hash>', 'Token hash in sha256:xxx format (can be specified multiple times)', collectTokenHashes, [])
+    .option('--no-hide-not-found', 'Return 404 for missing connectors instead of 403')
     .action(async (options) => {
       const port = parseInt(options.port, 10);
       const host = options.host as string;
+      const configPath = options.config as string | undefined;
       const authMode = options.authMode as 'none' | 'bearer';
       const tokenHashes = options.tokenHash as string[];
+      const hideNotFound = options.hideNotFound !== false;
 
       if (isNaN(port) || port < 0 || port > 65535) {
         console.error(`Error: Invalid port number: ${options.port}`);
@@ -44,7 +51,35 @@ export function createServeCommand(): Command {
 
       const logger = createLogger();
 
-      const gateway = createGatewayServer({ port, host, auth }, logger);
+      // Resolve config directory for MCP proxy
+      let configDir: string | undefined;
+      if (configPath) {
+        try {
+          const resolvedPath = resolveConfigPath({ configPath });
+          configDir = dirname(resolvedPath);
+          logger.info({ event: 'config_loaded', configDir });
+        } catch (error) {
+          console.error(`Error: Failed to resolve config path: ${error instanceof Error ? error.message : error}`);
+          process.exit(1);
+        }
+      } else {
+        // Try to use default config location
+        try {
+          const defaultPath = resolveConfigPath({});
+          configDir = dirname(defaultPath);
+          logger.info({ event: 'config_loaded', configDir, source: 'default' });
+        } catch {
+          // No config found, MCP proxy will be disabled
+          logger.info({ event: 'no_config', message: 'MCP proxy disabled' });
+        }
+      }
+
+      const gateway = createGatewayServer({
+        config: { port, host, auth },
+        configDir,
+        logger,
+        hideNotFound,
+      });
 
       try {
         const address = await gateway.start();

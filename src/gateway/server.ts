@@ -2,6 +2,7 @@
  * Fastify HTTP server for Protocol Gateway
  * Phase 8.1: HTTP server foundation
  * Phase 8.2: Bearer Token Authentication
+ * Phase 8.3: MCP Proxy
  */
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -9,6 +10,7 @@ import { GatewayConfig, createGatewayConfig } from './config.js';
 import { generateRequestId } from './requestId.js';
 import { createLogger, Logger } from './logger.js';
 import { createAuthMiddleware, AuthInfo } from './authMiddleware.js';
+import { createMCPProxyHandler, MCPProxyRequest } from './mcpProxy.js';
 
 export interface GatewayServer {
   /** Fastify instance */
@@ -21,6 +23,20 @@ export interface GatewayServer {
   address(): string | null;
 }
 
+/**
+ * Options for creating gateway server
+ */
+export interface GatewayServerOptions {
+  /** Gateway configuration overrides */
+  config?: Partial<GatewayConfig>;
+  /** Config directory for connector loading */
+  configDir?: string;
+  /** Custom logger */
+  logger?: Logger;
+  /** Hide not found as 403 (security feature, default: true) */
+  hideNotFound?: boolean;
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
     requestId: string;
@@ -30,13 +46,27 @@ declare module 'fastify' {
 
 /**
  * Create and configure the gateway server
+ * @deprecated Use createGatewayServer(options) instead
  */
 export function createGatewayServer(
-  config: Partial<GatewayConfig> = {},
+  configOrOptions?: Partial<GatewayConfig> | GatewayServerOptions,
   logger?: Logger
 ): GatewayServer {
-  const fullConfig = createGatewayConfig(config);
-  const log = logger ?? createLogger();
+  // Handle both old and new API
+  let options: GatewayServerOptions;
+  if (configOrOptions && 'config' in configOrOptions) {
+    options = configOrOptions as GatewayServerOptions;
+  } else {
+    options = {
+      config: configOrOptions as Partial<GatewayConfig> | undefined,
+      logger,
+    };
+  }
+
+  const fullConfig = createGatewayConfig(options.config ?? {});
+  const log = options.logger ?? createLogger();
+  const configDir = options.configDir;
+  const hideNotFound = options.hideNotFound ?? true;
 
   // Create Fastify instance with custom request ID generation
   const server = Fastify({
@@ -83,6 +113,22 @@ export function createGatewayServer(
       timestamp: new Date().toISOString(),
     };
   });
+
+  // MCP Proxy endpoint (Phase 8.3)
+  if (configDir) {
+    const mcpProxyHandler = createMCPProxyHandler({
+      configDir,
+      limits: fullConfig.limits,
+      hideNotFound,
+    });
+
+    server.post<{ Body: MCPProxyRequest }>(
+      '/mcp/v1/message',
+      mcpProxyHandler
+    );
+
+    log.info({ event: 'mcp_proxy_enabled', configDir });
+  }
 
   // Graceful shutdown handlers
   let isShuttingDown = false;
