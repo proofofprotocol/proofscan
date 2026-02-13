@@ -55,6 +55,7 @@ import {
   createRunnersCommand,
   createPlansCommand,
   createMonitorCommand,
+  createServeCommand,
 } from './commands/index.js';
 import { createHelpCommand, generateGuideHelp } from './help/index.js';
 
@@ -221,6 +222,9 @@ program.addCommand(createPlansCommand(getConfigPath));
 // monitor (Web Monitor)
 program.addCommand(createMonitorCommand(getConfigPath));
 
+// serve (Phase 8: Protocol Gateway HTTP server)
+program.addCommand(createServeCommand());
+
 // i18n (Issue #47: Internationalization utilities)
 import { createI18nCommand } from './commands/i18n.js';
 program.addCommand(createI18nCommand());
@@ -241,7 +245,7 @@ function hasHelpFlag(): boolean {
 const KNOWN_COMMANDS = new Set([
   'view', 'v', 'tree', 't', 'status', 'st',
   'scan', 's', 'archive', 'a', 'config', 'c',
-  'connectors', 'connector', 'sessions', 'rpc', 'task', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'registry', 'runners', 'plans', 'monitor', 'i18n', 'help', 'agent'
+  'connectors', 'connector', 'sessions', 'rpc', 'task', 'summary', 'analyze', 'record', 'doctor', 'shell', 'secrets', 'secret', 'tool', 'proxy', 'log', 'popl', 'catalog', 'cat', 'registry', 'runners', 'plans', 'monitor', 'i18n', 'help', 'agent', 'serve'
 ]);
 
 // Shell-only commands (not available as CLI commands)
