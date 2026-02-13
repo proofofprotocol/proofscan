@@ -55,3 +55,6 @@ export * from './plans.js';
 
 // Web Monitor
 export * from './monitor.js';
+
+// Phase 8: Protocol Gateway
+export * from './serve.js';
