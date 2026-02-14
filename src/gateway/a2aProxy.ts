@@ -123,6 +123,9 @@ async function executeA2ARequest(
   const { client } = clientResult;
 
   // Check for abort before making request
+  // Note: A2A client methods use internal timeout (timeoutMs) for request cancellation.
+  // The AbortSignal is checked before/after calls but not passed through to HTTP requests.
+  // TODO: Add signal support to A2A client methods for immediate cancellation.
   if (signal.aborted) {
     return {
       error: {
@@ -335,6 +338,13 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
+    // Validate agent ID format (security: prevent path traversal, injection)
+    if (!/^[a-zA-Z0-9_-]+$/.test(agentId)) {
+      return reply.code(400).send(
+        createErrorResponse(ErrorCodes.BAD_REQUEST, 'Invalid agent ID format', requestId)
+      );
+    }
+
     if (!method || typeof method !== 'string') {
       return reply.code(400).send(
         createErrorResponse(ErrorCodes.BAD_REQUEST, 'Missing or invalid "method" field', requestId)
@@ -365,10 +375,10 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
-    // 2. Get agent from registry (targets store)
-    const agents = targetsStore.list({ type: 'agent' });
-    // Exact match only to prevent ambiguous agent resolution
-    const agent = agents.find((a) => a.id === agentId);
+    // 2. Get agent from registry (targets store) - O(1) lookup by ID
+    const target = targetsStore.get(agentId);
+    // Validate it's an A2A agent (not an MCP connector)
+    const agent = target?.type === 'agent' && target?.protocol === 'a2a' ? target : undefined;
 
     // 3. Check agent exists and enabled
     if (!agent) {
@@ -443,8 +453,8 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
         }
 
         // JSON-RPC protocol/transport errors (-32600 to -32603)
-        // Note: checking range with negative numbers - -32603 is the lowest, -32600 is the highest
-        if (code === -32600 || code === -32601 || code === -32602 || code === -32603) {
+        const JSON_RPC_PROTOCOL_ERRORS = new Set([-32600, -32601, -32602, -32603]);
+        if (JSON_RPC_PROTOCOL_ERRORS.has(code)) {
           return reply.code(502).send(
             createErrorResponse(ErrorCodes.BAD_GATEWAY, a2aResult.error.message, requestId)
           );

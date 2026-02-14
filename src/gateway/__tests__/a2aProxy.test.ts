@@ -168,6 +168,53 @@ describe('A2A Proxy', () => {
       expect(body.error.code).toBe(ErrorCodes.BAD_REQUEST);
       expect(body.error.message).toContain('Unsupported A2A method');
     });
+
+    it('should reject invalid agent ID format (path traversal)', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: { agent: '../../../etc/passwd', method: 'message/send', params: { message: 'test' } },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe(ErrorCodes.BAD_REQUEST);
+      expect(body.error.message).toContain('Invalid agent ID format');
+    });
+
+    it('should reject agent ID with special characters', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: { agent: 'agent@invalid!', method: 'message/send', params: { message: 'test' } },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe(ErrorCodes.BAD_REQUEST);
+      expect(body.error.message).toContain('Invalid agent ID format');
+    });
+
+    it('should accept valid agent ID formats', async () => {
+      // Valid formats: alphanumeric, hyphens, underscores
+      const validIds = ['test-agent', 'test_agent', 'TestAgent123', 'agent-1_test'];
+      
+      for (const agentId of validIds) {
+        const response = await server.inject({
+          method: 'POST',
+          url: '/a2a/v1/message/send',
+          payload: { agent: agentId, method: 'message/send', params: { message: 'test' } },
+        });
+        
+        // Should not fail on format validation (may fail on agent not found, which is expected)
+        const body = JSON.parse(response.payload);
+        if (body.error?.message) {
+          expect(body.error.message).not.toContain('Invalid agent ID format');
+        }
+        // Success (200) or permission denied/not found (403) are both acceptable
+        // as they indicate the format validation passed
+      }
+    });
   });
 
   describe('permission check', () => {
