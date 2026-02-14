@@ -120,6 +120,7 @@ describe('A2A Proxy', () => {
     server.post('/a2a/v1/tasks/send', handler);
     server.post('/a2a/v1/tasks/get', handler);
     server.post('/a2a/v1/tasks/cancel', handler);
+    server.post('/a2a/v1/tasks/list', handler);
 
     await server.ready();
   });
@@ -353,6 +354,38 @@ describe('A2A Proxy', () => {
           agent: 'test-agent',
           method: 'tasks/cancel',
           params: { id: 'task-123' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.result).toBeDefined();
+    });
+
+    it('should forward tasks/list to enabled agent', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/tasks/list',
+        payload: {
+          agent: 'test-agent',
+          method: 'tasks/list',
+          params: {},
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.result).toBeDefined();
+    });
+
+    it('should forward tasks/list with filters', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/tasks/list',
+        payload: {
+          agent: 'test-agent',
+          method: 'tasks/list',
+          params: { status: 'completed', pageSize: 10 },
         },
       });
 
