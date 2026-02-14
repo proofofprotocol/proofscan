@@ -16,7 +16,8 @@ import { ConnectorQueueManager, QueueFullError, QueueTimeoutError } from './queu
 import { GatewayLimits } from './config.js';
 import { TargetsStore } from '../db/targets-store.js';
 import { createA2AClient } from '../a2a/client.js';
-import type { A2AMessage } from '../a2a/types.js';
+import type { A2AMessage, TaskState } from '../a2a/types.js';
+import { ErrorCodes } from './mcpProxy.js';
 
 /**
  * A2A Proxy request body
@@ -44,18 +45,7 @@ export interface A2AProxyResponse {
   };
 }
 
-/**
- * Error codes (shared with MCP proxy)
- */
-export const ErrorCodes = {
-  FORBIDDEN: 'FORBIDDEN',
-  NOT_FOUND: 'NOT_FOUND',
-  TOO_MANY_REQUESTS: 'TOO_MANY_REQUESTS',
-  GATEWAY_TIMEOUT: 'GATEWAY_TIMEOUT',
-  BAD_REQUEST: 'BAD_REQUEST',
-  INTERNAL_ERROR: 'INTERNAL_ERROR',
-  BAD_GATEWAY: 'BAD_GATEWAY',
-} as const;
+// ErrorCodes imported from mcpProxy.js
 
 /**
  * Create error response
@@ -224,7 +214,7 @@ async function executeA2ARequest(
       }
       
       case 'tasks/list': {
-        const listParams = params as { contextId?: string; status?: string; pageSize?: number; pageToken?: string };
+        const listParams = params as { contextId?: string; status?: TaskState; pageSize?: number; pageToken?: string };
         const result = await client.listTasks(listParams);
         
         if (!result.ok) {

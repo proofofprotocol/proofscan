@@ -5,7 +5,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
-import { createA2AProxyHandler, ErrorCodes } from '../a2aProxy.js';
+import { createA2AProxyHandler } from '../a2aProxy.js';
+import { ErrorCodes } from '../mcpProxy.js';
 import { DEFAULT_LIMITS } from '../config.js';
 import { tmpdir } from 'os';
 import { mkdtemp, rm, mkdir } from 'fs/promises';
