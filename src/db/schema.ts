@@ -7,9 +7,10 @@
  * Phase 7.0: Schema version 6 with targets table (unified connector/agent) and agent_cache table
  * Phase 2.4: Schema version 7 with task_events table for Task lifecycle tracking
  * Phase 6.2: Schema version 8 with ui_events table for UI tool tracking
+ * Phase 8.5: Schema version 9 with gateway_events table for audit logging
  */
 
-export const EVENTS_DB_VERSION = 8;
+export const EVENTS_DB_VERSION = 9;
 export const PROOFS_DB_VERSION = 2;
 
 // events.db schema
@@ -180,6 +181,42 @@ CREATE INDEX IF NOT EXISTS idx_ui_events_session ON ui_events(ui_session_id);
 CREATE INDEX IF NOT EXISTS idx_ui_events_correlation ON ui_events(correlation_id);
 CREATE INDEX IF NOT EXISTS idx_ui_events_type ON ui_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_ui_events_ts ON ui_events(ts);
+
+-- Gateway events table (Phase 8.5: Audit logging for Protocol Gateway)
+CREATE TABLE IF NOT EXISTS gateway_events (
+  event_id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL,
+  trace_id TEXT,
+  client_id TEXT NOT NULL,
+  event_kind TEXT NOT NULL CHECK(
+    event_kind IN (
+      'gateway_auth_success',
+      'gateway_auth_failure',
+      'gateway_mcp_request',
+      'gateway_mcp_response',
+      'gateway_a2a_request',
+      'gateway_a2a_response',
+      'gateway_error'
+    )
+  ),
+  target_id TEXT,
+  method TEXT,
+  ts TEXT NOT NULL,
+  latency_ms INTEGER,
+  upstream_latency_ms INTEGER,
+  decision TEXT CHECK(decision IN ('allow', 'deny')),
+  deny_reason TEXT,
+  error TEXT,
+  status_code INTEGER,
+  metadata_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_gateway_events_request ON gateway_events(request_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_trace ON gateway_events(trace_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_client ON gateway_events(client_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_kind ON gateway_events(event_kind);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_target ON gateway_events(target_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_ts ON gateway_events(ts);
 `;
 
 /**
@@ -403,6 +440,48 @@ CREATE INDEX IF NOT EXISTS idx_ui_events_session ON ui_events(ui_session_id);
 CREATE INDEX IF NOT EXISTS idx_ui_events_correlation ON ui_events(correlation_id);
 CREATE INDEX IF NOT EXISTS idx_ui_events_type ON ui_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_ui_events_ts ON ui_events(ts);
+`;
+
+/**
+ * Migration from version 8 to version 9
+ * Phase 8.5: Adds gateway_events table for Protocol Gateway audit logging
+ */
+export const EVENTS_DB_MIGRATION_8_TO_9 = `
+-- Create gateway_events table for audit logging
+CREATE TABLE IF NOT EXISTS gateway_events (
+  event_id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL,
+  trace_id TEXT,
+  client_id TEXT NOT NULL,
+  event_kind TEXT NOT NULL CHECK(
+    event_kind IN (
+      'gateway_auth_success',
+      'gateway_auth_failure',
+      'gateway_mcp_request',
+      'gateway_mcp_response',
+      'gateway_a2a_request',
+      'gateway_a2a_response',
+      'gateway_error'
+    )
+  ),
+  target_id TEXT,
+  method TEXT,
+  ts TEXT NOT NULL,
+  latency_ms INTEGER,
+  upstream_latency_ms INTEGER,
+  decision TEXT CHECK(decision IN ('allow', 'deny')),
+  deny_reason TEXT,
+  error TEXT,
+  status_code INTEGER,
+  metadata_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_gateway_events_request ON gateway_events(request_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_trace ON gateway_events(trace_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_client ON gateway_events(client_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_kind ON gateway_events(event_kind);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_target ON gateway_events(target_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_ts ON gateway_events(ts);
 `;
 
 // proofs.db schema (version 2: added plans and runs tables)

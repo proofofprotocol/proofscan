@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, EVENTS_DB_MIGRATION_5_TO_6_DATA, EVENTS_DB_MIGRATION_6_TO_7, EVENTS_DB_MIGRATION_7_TO_8, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, EVENTS_DB_MIGRATION_5_TO_6_DATA, EVENTS_DB_MIGRATION_6_TO_7, EVENTS_DB_MIGRATION_7_TO_8, EVENTS_DB_MIGRATION_8_TO_9, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -328,6 +328,32 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
       db.exec('BEGIN TRANSACTION');
 
       const statements = parseMigrationSql(EVENTS_DB_MIGRATION_7_TO_8);
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Ignore "table already exists" and "index already exists" errors
+          if (err instanceof Error &&
+              !err.message.includes('already exists')) {
+            throw err;
+          }
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  // Migration 8 → 9: Add gateway_events table (Phase 8.5)
+  if (fromVersion < 9) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_8_TO_9);
 
       for (const stmt of statements) {
         try {

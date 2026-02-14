@@ -1,5 +1,5 @@
 /**
- * Database types for Phase2 + Phase 3.4 + Phase 7.0
+ * Database types for Phase2 + Phase 3.4 + Phase 7.0 + Phase 8.5
  */
 
 // Session exit reasons
@@ -82,6 +82,37 @@ export interface UiEvent {
   tool_name: string | null;    // Tool name
   ts: number;                  // Unix timestamp (ms)
   payload_json: string | null;  // JSON string of event payload
+}
+
+// ==================== Gateway Audit Events (Phase 8.5) ====================
+
+/** Gateway event kinds for audit logging */
+export type GatewayEventKind =
+  | 'gateway_auth_success'    // Authentication successful
+  | 'gateway_auth_failure'    // Authentication failed
+  | 'gateway_mcp_request'     // MCP proxy request
+  | 'gateway_mcp_response'    // MCP proxy response
+  | 'gateway_a2a_request'     // A2A proxy request
+  | 'gateway_a2a_response'    // A2A proxy response
+  | 'gateway_error';          // Gateway error
+
+/** Gateway audit event record */
+export interface GatewayEvent {
+  event_id: string;
+  request_id: string;          // Gateway-assigned ULID
+  trace_id: string | null;     // Distributed tracing ID
+  client_id: string;           // Authenticated client ID
+  event_kind: GatewayEventKind;
+  target_id: string | null;    // Connector or agent ID
+  method: string | null;       // MCP/A2A method
+  ts: string;                  // ISO8601 timestamp
+  latency_ms: number | null;   // Total processing time
+  upstream_latency_ms: number | null; // Upstream connector/agent time
+  decision: string | null;     // 'allow' | 'deny'
+  deny_reason: string | null;  // Reason for denial
+  error: string | null;        // Error message if any
+  status_code: number | null;  // HTTP status code
+  metadata_json: string | null; // Additional metadata as JSON
 }
 
 // Target ID (unified connector/agent identifier)
