@@ -15,6 +15,8 @@ export class ConfigManager {
   private cacheTtlMs: number;
   /** Timestamp when cache was last updated */
   private cacheUpdatedAt: number = 0;
+  /** Promise for in-progress load (prevents concurrent disk reads) */
+  private loadingPromise: Promise<Config> | null = null;
 
   constructor(configPath?: string, options?: { cacheTtlMs?: number }) {
     this.configPath = resolveConfigPath({ configPath });
@@ -40,6 +42,26 @@ export class ConfigManager {
       return this.config;
     }
 
+    // Prevent duplicate loads (race condition fix)
+    if (this.loadingPromise) {
+      return this.loadingPromise;
+    }
+
+    this.loadingPromise = this._loadFromDisk();
+    try {
+      const config = await this.loadingPromise;
+      this.config = config;
+      this.cacheUpdatedAt = Date.now();
+      return config;
+    } finally {
+      this.loadingPromise = null;
+    }
+  }
+
+  /**
+   * Internal: Load config from disk
+   */
+  private async _loadFromDisk(): Promise<Config> {
     const content = await readFileSafe(this.configPath);
     if (content === null) {
       throw new Error(`Config file not found: ${this.configPath}`);
@@ -50,8 +72,6 @@ export class ConfigManager {
       throw new Error(`Invalid config: ${errors.map(e => `${e.path}: ${e.message}`).join(', ')}`);
     }
 
-    this.config = config;
-    this.cacheUpdatedAt = now;
     return config;
   }
 
