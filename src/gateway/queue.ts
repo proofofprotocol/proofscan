@@ -12,6 +12,18 @@
 import { GatewayLimits } from './config.js';
 
 /**
+ * Queue result with timing metrics
+ */
+export interface QueueResult<R> {
+  /** The result from the execute function */
+  result: R;
+  /** Pure queue wait time (ms) - time spent waiting in queue before execution started */
+  queueWaitMs: number;
+  /** Upstream latency (ms) - time spent executing the request */
+  upstreamLatencyMs: number;
+}
+
+/**
  * Queued request item
  */
 interface QueuedRequest<T, R> {
@@ -20,7 +32,7 @@ interface QueuedRequest<T, R> {
   /** Execute function to run when dequeued */
   execute: (request: T, signal: AbortSignal) => Promise<R>;
   /** Resolve promise */
-  resolve: (result: R) => void;
+  resolve: (result: R, queueWaitMs: number, upstreamLatencyMs: number) => void;
   /** Reject promise */
   reject: (error: Error) => void;
   /** Abort controller for timeout/cancellation */
@@ -29,6 +41,8 @@ interface QueuedRequest<T, R> {
   timeoutHandle: ReturnType<typeof setTimeout>;
   /** Queue entry time for latency tracking */
   queuedAt: number;
+  /** Flag to prevent race condition with timeout handler */
+  dequeued: boolean;
 }
 
 /**
@@ -57,6 +71,8 @@ class SingleConnectorQueue<T, R> {
   private maxInflight: number;
   private maxQueue: number;
   private timeoutMs: number;
+  /** Track inflight request abort controllers for shutdown */
+  private inflightAbortControllers: Set<AbortController> = new Set();
 
   constructor(
     private connectorId: string,
@@ -87,7 +103,7 @@ class SingleConnectorQueue<T, R> {
   async enqueue(
     request: T,
     execute: (request: T, signal: AbortSignal) => Promise<R>
-  ): Promise<{ result: R; queueWaitMs: number }> {
+  ): Promise<QueueResult<R>> {
     // Check queue capacity
     if (this.queue.length >= this.maxQueue) {
       throw new QueueFullError(this.connectorId);
@@ -96,13 +112,13 @@ class SingleConnectorQueue<T, R> {
     const queuedAt = Date.now();
     const abortController = new AbortController();
 
-    return new Promise<{ result: R; queueWaitMs: number }>((resolve, reject) => {
+    return new Promise<QueueResult<R>>((resolve, reject) => {
       // Set up timeout
       const timeoutHandle = setTimeout(() => {
         abortController.abort();
-        // Remove from queue if still pending
+        // Remove from queue if still pending (check dequeued flag to avoid race)
         const idx = this.queue.findIndex(
-          (q) => q.abortController === abortController
+          (q) => q.abortController === abortController && !q.dequeued
         );
         if (idx !== -1) {
           this.queue.splice(idx, 1);
@@ -113,10 +129,9 @@ class SingleConnectorQueue<T, R> {
       const item: QueuedRequest<T, R> = {
         request,
         execute,
-        resolve: (result: R) => {
+        resolve: (result: R, queueWaitMs: number, upstreamLatencyMs: number) => {
           clearTimeout(timeoutHandle);
-          const queueWaitMs = Date.now() - queuedAt;
-          resolve({ result, queueWaitMs });
+          resolve({ result, queueWaitMs, upstreamLatencyMs });
         },
         reject: (error: Error) => {
           clearTimeout(timeoutHandle);
@@ -125,10 +140,12 @@ class SingleConnectorQueue<T, R> {
         abortController,
         timeoutHandle,
         queuedAt,
+        dequeued: false,
       };
 
       // Check if we can execute immediately
       if (this.inflight < this.maxInflight) {
+        item.dequeued = true;
         this.executeItem(item);
       } else {
         this.queue.push(item);
@@ -141,13 +158,19 @@ class SingleConnectorQueue<T, R> {
    */
   private async executeItem(item: QueuedRequest<T, R>): Promise<void> {
     this.inflight++;
+    this.inflightAbortControllers.add(item.abortController);
+
+    const executionStartedAt = Date.now();
+    const queueWaitMs = executionStartedAt - item.queuedAt;
 
     try {
       const result = await item.execute(item.request, item.abortController.signal);
-      item.resolve(result);
+      const upstreamLatencyMs = Date.now() - executionStartedAt;
+      item.resolve(result, queueWaitMs, upstreamLatencyMs);
     } catch (error) {
       item.reject(error instanceof Error ? error : new Error(String(error)));
     } finally {
+      this.inflightAbortControllers.delete(item.abortController);
       this.inflight--;
       this.processNext();
     }
@@ -159,22 +182,30 @@ class SingleConnectorQueue<T, R> {
   private processNext(): void {
     if (this.queue.length > 0 && this.inflight < this.maxInflight) {
       const next = this.queue.shift();
-      if (next) {
+      if (next && !next.dequeued) {
+        next.dequeued = true;
         this.executeItem(next);
       }
     }
   }
 
   /**
-   * Cancel all pending requests (for shutdown)
+   * Cancel all pending and inflight requests (for shutdown)
    */
   cancelAll(): void {
+    // Cancel queued requests
     for (const item of this.queue) {
       clearTimeout(item.timeoutHandle);
       item.abortController.abort();
       item.reject(new Error('Queue shutdown'));
     }
     this.queue = [];
+
+    // Cancel inflight requests
+    for (const abortController of this.inflightAbortControllers) {
+      abortController.abort();
+    }
+    this.inflightAbortControllers.clear();
   }
 }
 
@@ -195,13 +226,13 @@ export class ConnectorQueueManager<T, R> {
    * @param connector Connector ID
    * @param request Request data
    * @param execute Function to execute the request
-   * @returns Result and queue wait time
+   * @returns Result with timing metrics (queueWaitMs, upstreamLatencyMs)
    */
   async enqueue(
     connector: string,
     request: T,
     execute: (request: T, signal: AbortSignal) => Promise<R>
-  ): Promise<{ result: R; queueWaitMs: number }> {
+  ): Promise<QueueResult<R>> {
     let queue = this.queues.get(connector);
     if (!queue) {
       queue = new SingleConnectorQueue<T, R>(connector, this.limits);

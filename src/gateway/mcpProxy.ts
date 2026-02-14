@@ -291,7 +291,7 @@ export function createMCPProxyHandler(options: MCPProxyOptions) {
 
     // 4. Queue and execute
     try {
-      const { result: mcpResult, queueWaitMs } = await queueManager.enqueue(
+      const { result: mcpResult, queueWaitMs, upstreamLatencyMs } = await queueManager.enqueue(
         connectorId,
         { method, params, connector },
         async (req, signal) => {
@@ -306,8 +306,9 @@ export function createMCPProxyHandler(options: MCPProxyOptions) {
         }
       );
 
-      // Add queue wait time to response headers
+      // Add timing metrics to response headers
       reply.header('X-Queue-Wait-Ms', String(queueWaitMs));
+      reply.header('X-Upstream-Latency-Ms', String(upstreamLatencyMs));
 
       // 5. Return response
       if (mcpResult.error) {
