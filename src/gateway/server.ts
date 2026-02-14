@@ -3,6 +3,7 @@
  * Phase 8.1: HTTP server foundation
  * Phase 8.2: Bearer Token Authentication
  * Phase 8.3: MCP Proxy
+ * Phase 8.4: A2A Proxy
  */
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -11,6 +12,7 @@ import { generateRequestId } from './requestId.js';
 import { createLogger, Logger } from './logger.js';
 import { createAuthMiddleware, AuthInfo } from './authMiddleware.js';
 import { createMCPProxyHandler, MCPProxyRequest } from './mcpProxy.js';
+import { createA2AProxyHandler, A2AProxyRequest } from './a2aProxy.js';
 
 export interface GatewayServer {
   /** Fastify instance */
@@ -128,6 +130,36 @@ export function createGatewayServer(
     );
 
     log.info({ event: 'mcp_proxy_enabled', configDir });
+
+    // A2A Proxy endpoints (Phase 8.4)
+    const a2aProxyHandler = createA2AProxyHandler({
+      configDir,
+      limits: fullConfig.limits,
+      hideNotFound,
+    });
+
+    // All A2A endpoints use the same handler - method is specified in request body
+    server.post<{ Body: A2AProxyRequest }>(
+      '/a2a/v1/message/send',
+      a2aProxyHandler
+    );
+
+    server.post<{ Body: A2AProxyRequest }>(
+      '/a2a/v1/tasks/send',
+      a2aProxyHandler
+    );
+
+    server.post<{ Body: A2AProxyRequest }>(
+      '/a2a/v1/tasks/get',
+      a2aProxyHandler
+    );
+
+    server.post<{ Body: A2AProxyRequest }>(
+      '/a2a/v1/tasks/cancel',
+      a2aProxyHandler
+    );
+
+    log.info({ event: 'a2a_proxy_enabled', configDir });
   }
 
   // Graceful shutdown handlers
