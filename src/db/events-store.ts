@@ -1582,4 +1582,194 @@ export class EventsStore {
       payload_json: string | null;
     }>;
   }
+
+  // ==================== Gateway Audit Events (Phase 8.5) ====================
+
+  /**
+   * Save a gateway audit event
+   *
+   * @param options - Gateway event options
+   * @returns Event ID of the saved event
+   */
+  saveGatewayEvent(options: {
+    requestId: string;
+    traceId: string | null;
+    clientId: string;
+    eventKind: import('./types.js').GatewayEventKind;
+    targetId: string | null;
+    method: string | null;
+    latencyMs: number | null;
+    upstreamLatencyMs: number | null;
+    decision: string | null;
+    denyReason: string | null;
+    error: string | null;
+    statusCode: number | null;
+    metadata: Record<string, unknown> | null;
+  }): string {
+    const eventId = randomUUID();
+    const ts = new Date().toISOString();
+    const metadataJson = options.metadata ? JSON.stringify(options.metadata) : null;
+
+    const stmt = this.db.prepare(`
+      INSERT INTO gateway_events (
+        event_id, request_id, trace_id, client_id, event_kind, target_id, method,
+        ts, latency_ms, upstream_latency_ms, decision, deny_reason, error, status_code, metadata_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      eventId,
+      options.requestId,
+      options.traceId,
+      options.clientId,
+      options.eventKind,
+      options.targetId,
+      options.method,
+      ts,
+      options.latencyMs,
+      options.upstreamLatencyMs,
+      options.decision,
+      options.denyReason,
+      options.error,
+      options.statusCode,
+      metadataJson
+    );
+
+    return eventId;
+  }
+
+  /**
+   * Get gateway events by request ID
+   *
+   * @param requestId - Request ID
+   * @returns Gateway events for the request
+   */
+  getGatewayEventsByRequestId(requestId: string): import('./types.js').GatewayEvent[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM gateway_events WHERE request_id = ? ORDER BY ts ASC
+    `);
+    return stmt.all(requestId) as import('./types.js').GatewayEvent[];
+  }
+
+  /**
+   * Get gateway events by client ID
+   *
+   * @param clientId - Client ID
+   * @param limit - Maximum number of events to return
+   * @returns Gateway events for the client
+   */
+  getGatewayEventsByClientId(clientId: string, limit = 100): import('./types.js').GatewayEvent[] {
+    const sql = `
+      SELECT * FROM gateway_events
+      WHERE client_id = ?
+      ORDER BY ts DESC
+      LIMIT ?
+    `;
+    const stmt = this.db.prepare(sql);
+    return stmt.all(clientId, limit) as import('./types.js').GatewayEvent[];
+  }
+
+  /**
+   * Get gateway events by target ID
+   *
+   * @param targetId - Target ID (connector or agent)
+   * @param limit - Maximum number of events to return
+   * @returns Gateway events for the target
+   */
+  getGatewayEventsByTargetId(targetId: string, limit = 100): import('./types.js').GatewayEvent[] {
+    const sql = `
+      SELECT * FROM gateway_events
+      WHERE target_id = ?
+      ORDER BY ts DESC
+      LIMIT ?
+    `;
+    const stmt = this.db.prepare(sql);
+    return stmt.all(targetId, limit) as import('./types.js').GatewayEvent[];
+  }
+
+  /**
+   * Get recent gateway events
+   *
+   * @param limit - Maximum number of events to return
+   * @param eventKind - Optional filter by event kind
+   * @returns Recent gateway events
+   */
+  getRecentGatewayEvents(
+    limit = 50,
+    eventKind?: import('./types.js').GatewayEventKind
+  ): import('./types.js').GatewayEvent[] {
+    let sql = `SELECT * FROM gateway_events`;
+    const params: unknown[] = [];
+
+    if (eventKind) {
+      sql += ` WHERE event_kind = ?`;
+      params.push(eventKind);
+    }
+
+    sql += ` ORDER BY ts DESC LIMIT ?`;
+    params.push(limit);
+
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...params) as import('./types.js').GatewayEvent[];
+  }
+
+  /**
+   * Get gateway events by trace ID (for distributed tracing)
+   *
+   * @param traceId - Trace ID
+   * @returns Gateway events with the trace ID
+   */
+  getGatewayEventsByTraceId(traceId: string): import('./types.js').GatewayEvent[] {
+    const stmt = this.db.prepare(`
+      SELECT * FROM gateway_events WHERE trace_id = ? ORDER BY ts ASC
+    `);
+    return stmt.all(traceId) as import('./types.js').GatewayEvent[];
+  }
+
+  /**
+   * Get gateway error events
+   *
+   * @param limit - Maximum number of events to return
+   * @param since - Optional ISO8601 timestamp to filter events after
+   * @returns Gateway error events
+   */
+  getGatewayErrors(limit = 50, since?: string): import('./types.js').GatewayEvent[] {
+    let sql = `SELECT * FROM gateway_events WHERE event_kind = 'gateway_error'`;
+    const params: unknown[] = [];
+
+    if (since) {
+      sql += ` AND ts > ?`;
+      params.push(since);
+    }
+
+    sql += ` ORDER BY ts DESC LIMIT ?`;
+    params.push(limit);
+
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...params) as import('./types.js').GatewayEvent[];
+  }
+
+  /**
+   * Get gateway auth failure events
+   *
+   * @param limit - Maximum number of events to return
+   * @param since - Optional ISO8601 timestamp to filter events after
+   * @returns Gateway auth failure events
+   */
+  getGatewayAuthFailures(limit = 50, since?: string): import('./types.js').GatewayEvent[] {
+    let sql = `SELECT * FROM gateway_events WHERE event_kind = 'gateway_auth_failure'`;
+    const params: unknown[] = [];
+
+    if (since) {
+      sql += ` AND ts > ?`;
+      params.push(since);
+    }
+
+    sql += ` ORDER BY ts DESC LIMIT ?`;
+    params.push(limit);
+
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...params) as import('./types.js').GatewayEvent[];
+  }
 }
