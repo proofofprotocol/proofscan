@@ -323,7 +323,8 @@ export function createA2AProxyHandler(options: A2AProxyOptions) {
 
     // 2. Get agent from registry (targets store)
     const agents = targetsStore.list({ type: 'agent' });
-    const agent = agents.find((a) => a.id === agentId || a.id.startsWith(agentId));
+    // Exact match only to prevent ambiguous agent resolution
+    const agent = agents.find((a) => a.id === agentId);
 
     // 3. Check agent exists and enabled
     if (!agent) {
