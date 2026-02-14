@@ -159,6 +159,11 @@ export function createGatewayServer(
       a2aProxyHandler
     );
 
+    server.post<{ Body: A2AProxyRequest }>(
+      '/a2a/v1/tasks/list',
+      a2aProxyHandler
+    );
+
     log.info({ event: 'a2a_proxy_enabled', configDir });
   }
 
