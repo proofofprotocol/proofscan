@@ -15,6 +15,7 @@ export interface GatewayLimits {
   max_inflight_per_connector: number;
   /** Maximum queue length per connector */
   max_queue_per_connector: number;
+  // TODO: Implement rate limiting per token (Phase 8.4 or later)
   /** Rate limit per token (requests/minute), null = no limit */
   rate_limit_per_token: number | null;
 }

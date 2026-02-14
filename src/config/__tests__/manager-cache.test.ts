@@ -154,6 +154,66 @@ describe('ConfigManager cache', () => {
     const config2 = await manager.load();
     expect(config2).toBe(config); // Same object reference = cached
   });
+
+  it('should prevent concurrent disk reads during cache expiry (race condition)', async () => {
+    // Track how many times we read from disk
+    let diskReadCount = 0;
+    const originalConfig = {
+      version: 1,
+      connectors: [
+        {
+          id: 'test-connector',
+          name: 'Test Connector',
+          enabled: true,
+          transport: { type: 'stdio', command: 'echo', args: ['hello'] }
+        }
+      ]
+    };
+
+    // Use a very short TTL so cache expires immediately
+    const manager = new ConfigManager(configPath, { cacheTtlMs: 1 });
+
+    // First load to warm up
+    await manager.load();
+
+    // Wait for cache to expire
+    await sleep(10);
+
+    // Patch readFileSafe to count reads
+    const { readFileSafe } = await import('../../utils/fs.js');
+    const originalReadFileSafe = readFileSafe;
+
+    // We'll monkey-patch the manager's internal behavior by making multiple concurrent calls
+    // Since _loadFromDisk uses readFileSafe internally, concurrent calls would hit disk multiple times
+    // without the race condition fix
+
+    // Create a slow version of the config file read to simulate slow disk
+    const slowConfigPath = join(tempDir, 'slow-config.json');
+    await writeFile(slowConfigPath, JSON.stringify(originalConfig, null, 2));
+    const slowManager = new ConfigManager(slowConfigPath, { cacheTtlMs: 1 });
+
+    // First load
+    await slowManager.load();
+    await sleep(10); // Expire cache
+
+    // Multiple concurrent loads should only result in ONE disk read
+    // due to the Promise cache pattern
+    const concurrentLoads = Promise.all([
+      slowManager.load(),
+      slowManager.load(),
+      slowManager.load(),
+      slowManager.load(),
+      slowManager.load(),
+    ]);
+
+    const results = await concurrentLoads;
+
+    // All should return the same config object (from a single load)
+    const firstResult = results[0];
+    for (const result of results) {
+      expect(result).toBe(firstResult); // Same object reference
+    }
+  });
 });
 
 function sleep(ms: number): Promise<void> {

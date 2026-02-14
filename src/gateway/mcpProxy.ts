@@ -312,13 +312,25 @@ export function createMCPProxyHandler(options: MCPProxyOptions) {
 
       // 5. Return response
       if (mcpResult.error) {
-        // MCP-level error (from connector)
-        return reply.code(502).send(
-          createErrorResponse(
-            ErrorCodes.BAD_GATEWAY,
-            mcpResult.error.message,
-            requestId
-          )
+        const code = mcpResult.error.code;
+
+        // JSON-RPC parse error from client
+        if (code === -32700) {
+          return reply.code(400).send(
+            createErrorResponse(ErrorCodes.BAD_REQUEST, mcpResult.error.message, requestId)
+          );
+        }
+
+        // JSON-RPC protocol/transport errors (-32600 to -32603)
+        if (code >= -32603 && code <= -32600) {
+          return reply.code(502).send(
+            createErrorResponse(ErrorCodes.BAD_GATEWAY, mcpResult.error.message, requestId)
+          );
+        }
+
+        // Application errors (connector returned error but communication succeeded)
+        return reply.code(400).send(
+          createErrorResponse(ErrorCodes.BAD_REQUEST, mcpResult.error.message, requestId)
         );
       }
 

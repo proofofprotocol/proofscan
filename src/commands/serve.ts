@@ -70,7 +70,7 @@ export function createServeCommand(): Command {
           logger.info({ event: 'config_loaded', configDir, source: 'default' });
         } catch {
           // No config found, MCP proxy will be disabled
-          logger.info({ event: 'no_config', message: 'MCP proxy disabled' });
+          logger.warn({ event: 'no_config', message: 'MCP proxy disabled - no config file found' });
         }
       }
 
