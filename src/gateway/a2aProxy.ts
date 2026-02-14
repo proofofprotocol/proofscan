@@ -136,6 +136,15 @@ async function executeA2ARequest(
     // Route to appropriate A2A method
     switch (method) {
       case 'message/send': {
+        // Validate params structure
+        if (!params || typeof params !== 'object' || !('message' in params)) {
+          return {
+            error: {
+              code: -32602,
+              message: 'Invalid params: message field required',
+            },
+          };
+        }
         const messageParams = params as { message: string | A2AMessage; blocking?: boolean };
         const result = await client.sendMessage(messageParams.message, {
           timeout: timeoutMs,
@@ -157,6 +166,15 @@ async function executeA2ARequest(
       }
       
       case 'tasks/send': {
+        // Validate params structure
+        if (!params || typeof params !== 'object' || !('message' in params)) {
+          return {
+            error: {
+              code: -32602,
+              message: 'Invalid params: message field required',
+            },
+          };
+        }
         // tasks/send is equivalent to message/send with blocking semantics
         const taskParams = params as { message: string | A2AMessage };
         const result = await client.sendMessage(taskParams.message, {
@@ -179,6 +197,15 @@ async function executeA2ARequest(
       }
       
       case 'tasks/get': {
+        // Validate params structure
+        if (!params || typeof params !== 'object' || !('id' in params) || typeof (params as { id: unknown }).id !== 'string') {
+          return {
+            error: {
+              code: -32602,
+              message: 'Invalid params: id field (string) required',
+            },
+          };
+        }
         const getParams = params as { id: string; historyLength?: number };
         const result = await client.getTask(getParams.id, {
           historyLength: getParams.historyLength,
@@ -198,6 +225,15 @@ async function executeA2ARequest(
       }
       
       case 'tasks/cancel': {
+        // Validate params structure
+        if (!params || typeof params !== 'object' || !('id' in params) || typeof (params as { id: unknown }).id !== 'string') {
+          return {
+            error: {
+              code: -32602,
+              message: 'Invalid params: id field (string) required',
+            },
+          };
+        }
         const cancelParams = params as { id: string };
         const result = await client.cancelTask(cancelParams.id);
         
@@ -257,9 +293,17 @@ async function executeA2ARequest(
 }
 
 /**
+ * A2A Proxy handler result
+ */
+export interface A2AProxyHandlerResult {
+  handler: (request: FastifyRequest<{ Body: A2AProxyRequest }>, reply: FastifyReply) => Promise<A2AProxyResponse>;
+  shutdown: () => void;
+}
+
+/**
  * Create A2A Proxy handler
  */
-export function createA2AProxyHandler(options: A2AProxyOptions) {
+export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandlerResult {
   const { configDir, limits, hideNotFound = true } = options;
   const targetsStore = new TargetsStore(configDir);
   const queueManager = new ConnectorQueueManager<
@@ -267,7 +311,7 @@ export function createA2AProxyHandler(options: A2AProxyOptions) {
     { result?: unknown; error?: { code: number; message: string } }
   >(limits);
 
-  return async (
+  const handler = async (
     request: FastifyRequest<{ Body: A2AProxyRequest }>,
     reply: FastifyReply
   ): Promise<A2AProxyResponse> => {
@@ -399,7 +443,8 @@ export function createA2AProxyHandler(options: A2AProxyOptions) {
         }
 
         // JSON-RPC protocol/transport errors (-32600 to -32603)
-        if (code >= -32603 && code <= -32600) {
+        // Note: checking range with negative numbers - -32603 is the lowest, -32600 is the highest
+        if (code === -32600 || code === -32601 || code === -32602 || code === -32603) {
           return reply.code(502).send(
             createErrorResponse(ErrorCodes.BAD_GATEWAY, a2aResult.error.message, requestId)
           );
@@ -436,13 +481,9 @@ export function createA2AProxyHandler(options: A2AProxyOptions) {
       );
     }
   };
-}
 
-/**
- * Shutdown queue manager (for graceful shutdown)
- */
-export function createA2AProxyShutdown(queueManager: ConnectorQueueManager<unknown, unknown>) {
-  return () => {
-    queueManager.shutdown();
+  return {
+    handler,
+    shutdown: () => queueManager.shutdown(),
   };
 }
