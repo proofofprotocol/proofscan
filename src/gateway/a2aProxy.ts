@@ -91,10 +91,10 @@ type A2AMethod = keyof typeof A2A_METHODS;
 
 /**
  * Get permission type for A2A method
+ * Note: Caller must validate method exists in A2A_METHODS before calling
  */
-function getPermissionType(method: string): string {
-  const methodType = A2A_METHODS[method as A2AMethod];
-  return methodType || 'message';
+function getPermissionType(method: A2AMethod): string {
+  return A2A_METHODS[method];
 }
 
 /**
@@ -362,8 +362,8 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
-    // 1. Permission check
-    const permissionType = getPermissionType(method);
+    // 1. Permission check (method is validated above, safe to cast)
+    const permissionType = getPermissionType(method as A2AMethod);
     const requiredPermission = buildA2APermission(permissionType, agentId);
     if (!hasPermission(auth.permissions, requiredPermission)) {
       return reply.code(403).send(
@@ -452,8 +452,9 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
           );
         }
 
-        // JSON-RPC protocol/transport errors (-32600 to -32603)
-        const JSON_RPC_PROTOCOL_ERRORS = new Set([-32600, -32601, -32602, -32603]);
+        // JSON-RPC protocol/transport errors (-32600, -32601, -32603)
+        // Note: -32602 (Invalid params) is handled above as 404, not included here
+        const JSON_RPC_PROTOCOL_ERRORS = new Set([-32600, -32601, -32603]);
         if (JSON_RPC_PROTOCOL_ERRORS.has(code)) {
           return reply.code(502).send(
             createErrorResponse(ErrorCodes.BAD_GATEWAY, a2aResult.error.message, requestId)
