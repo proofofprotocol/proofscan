@@ -8,6 +8,7 @@ import {
   ConnectorQueueManager,
   QueueFullError,
   QueueTimeoutError,
+  QueueResult,
 } from '../queue.js';
 import { GatewayLimits } from '../config.js';
 
@@ -28,7 +29,7 @@ describe('ConnectorQueueManager', () => {
   describe('serial execution', () => {
     it('should execute requests serially (one at a time)', async () => {
       const executionOrder: number[] = [];
-      const results: Promise<{ result: string; queueWaitMs: number }>[] = [];
+      const results: Promise<QueueResult<string>>[] = [];
 
       // Queue 3 requests that complete in order
       for (let i = 0; i < 3; i++) {
@@ -48,10 +49,10 @@ describe('ConnectorQueueManager', () => {
       expect(executionOrder).toEqual([0, 1, 2]);
     });
 
-    it('should track queue wait time', async () => {
-      const results: Promise<{ result: string; queueWaitMs: number }>[] = [];
+    it('should track queue wait time and upstream latency separately', async () => {
+      const results: Promise<QueueResult<string>>[] = [];
 
-      // Queue 2 requests
+      // Queue 2 requests - first takes 100ms
       results.push(
         manager.enqueue('connector-1', 'req-1', async () => {
           await sleep(100);
@@ -61,24 +62,26 @@ describe('ConnectorQueueManager', () => {
 
       results.push(
         manager.enqueue('connector-1', 'req-2', async () => {
+          await sleep(50);
           return 'res-2';
         })
       );
 
       const [first, second] = await Promise.all(results);
 
-      // First request should have queue wait time (includes execution time)
-      // The queueWaitMs is calculated from enqueue to resolve, so it includes execution
-      expect(first.queueWaitMs).toBeGreaterThanOrEqual(0);
+      // First request: no queue wait (executed immediately), ~100ms upstream latency
+      expect(first.queueWaitMs).toBeLessThan(20);
+      expect(first.upstreamLatencyMs).toBeGreaterThanOrEqual(90);
 
-      // Second request should have waited for first to complete
+      // Second request: waited ~100ms in queue (while first executed), ~50ms upstream latency
       expect(second.queueWaitMs).toBeGreaterThanOrEqual(90);
+      expect(second.upstreamLatencyMs).toBeGreaterThanOrEqual(40);
     });
   });
 
   describe('queue limits', () => {
     it('should reject when queue is full', async () => {
-      const results: Promise<{ result: string; queueWaitMs: number }>[] = [];
+      const results: Promise<QueueResult<string>>[] = [];
 
       // Fill queue (1 inflight + 3 queued = 4 total)
       for (let i = 0; i < 4; i++) {
@@ -100,7 +103,7 @@ describe('ConnectorQueueManager', () => {
     });
 
     it('should manage separate queues per connector', async () => {
-      const results: Promise<{ result: string; queueWaitMs: number }>[] = [];
+      const results: Promise<QueueResult<string>>[] = [];
 
       // Fill connector-1 queue
       for (let i = 0; i < 4; i++) {
@@ -241,7 +244,7 @@ describe('ConnectorQueueManager', () => {
 
   describe('shutdown', () => {
     it('should cancel all pending requests on shutdown', async () => {
-      const results: Promise<{ result: string; queueWaitMs: number }>[] = [];
+      const results: Promise<QueueResult<string>>[] = [];
 
       // Queue requests
       for (let i = 0; i < 3; i++) {
@@ -266,6 +269,49 @@ describe('ConnectorQueueManager', () => {
       for (const result of settled) {
         expect(result.status).toBe('rejected');
       }
+    });
+
+    it('should abort inflight requests on shutdown', async () => {
+      let signalAborted = false;
+
+      // Start a request that respects abort signal
+      const promise = manager.enqueue('connector-1', 'req', async (_, signal) => {
+        // Setup abort listener
+        return new Promise<string>((resolve, reject) => {
+          const abortHandler = () => {
+            signalAborted = true;
+            reject(new Error('Aborted'));
+          };
+
+          if (signal.aborted) {
+            abortHandler();
+            return;
+          }
+
+          signal.addEventListener('abort', abortHandler);
+
+          // Simulate long-running work
+          const timeout = setTimeout(() => {
+            signal.removeEventListener('abort', abortHandler);
+            resolve('result');
+          }, 500);
+
+          signal.addEventListener('abort', () => clearTimeout(timeout), { once: true });
+        });
+      });
+
+      // Wait for request to start
+      await sleep(10);
+
+      // Shutdown should abort the inflight request
+      manager.shutdown();
+
+      // Wait for promise to settle
+      const result = await Promise.allSettled([promise]);
+      expect(result[0].status).toBe('rejected');
+
+      // The signal should have been aborted
+      expect(signalAborted).toBe(true);
     });
   });
 });

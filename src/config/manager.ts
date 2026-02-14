@@ -11,9 +11,14 @@ import { dirname } from 'path';
 export class ConfigManager {
   private configPath: string;
   private config: Config | null = null;
+  /** Cache TTL in milliseconds (default: 5 seconds) */
+  private cacheTtlMs: number;
+  /** Timestamp when cache was last updated */
+  private cacheUpdatedAt: number = 0;
 
-  constructor(configPath?: string) {
+  constructor(configPath?: string, options?: { cacheTtlMs?: number }) {
     this.configPath = resolveConfigPath({ configPath });
+    this.cacheTtlMs = options?.cacheTtlMs ?? 5000;
   }
 
   getConfigPath(): string {
@@ -29,6 +34,12 @@ export class ConfigManager {
   }
 
   async load(): Promise<Config> {
+    // Return cached config if still valid
+    const now = Date.now();
+    if (this.config && (now - this.cacheUpdatedAt) < this.cacheTtlMs) {
+      return this.config;
+    }
+
     const content = await readFileSafe(this.configPath);
     if (content === null) {
       throw new Error(`Config file not found: ${this.configPath}`);
@@ -40,7 +51,15 @@ export class ConfigManager {
     }
 
     this.config = config;
+    this.cacheUpdatedAt = now;
     return config;
+  }
+
+  /**
+   * Invalidate the config cache (force reload on next access)
+   */
+  invalidateCache(): void {
+    this.cacheUpdatedAt = 0;
   }
 
   async loadOrDefault(): Promise<Config> {
