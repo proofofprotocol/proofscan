@@ -110,7 +110,7 @@ describe('A2A Proxy', () => {
     });
 
     // Add A2A proxy handler
-    const handler = createA2AProxyHandler({
+    const { handler } = createA2AProxyHandler({
       configDir,
       limits: DEFAULT_LIMITS,
       hideNotFound: true,
@@ -183,7 +183,7 @@ describe('A2A Proxy', () => {
         };
       });
 
-      const handler = createA2AProxyHandler({
+      const { handler } = createA2AProxyHandler({
         configDir,
         limits: DEFAULT_LIMITS,
         hideNotFound: true,
@@ -221,7 +221,7 @@ describe('A2A Proxy', () => {
         };
       });
 
-      const handler = createA2AProxyHandler({
+      const { handler } = createA2AProxyHandler({
         configDir,
         limits: DEFAULT_LIMITS,
         hideNotFound: true,
@@ -274,7 +274,7 @@ describe('A2A Proxy', () => {
         };
       });
 
-      const handler = createA2AProxyHandler({
+      const { handler } = createA2AProxyHandler({
         configDir,
         limits: DEFAULT_LIMITS,
         hideNotFound: false,
@@ -468,7 +468,7 @@ describe('A2A Proxy', () => {
         };
       });
 
-      const handler = createA2AProxyHandler({
+      const { handler } = createA2AProxyHandler({
         configDir,
         limits: DEFAULT_LIMITS,
         hideNotFound: true,
@@ -517,7 +517,7 @@ describe('A2A Proxy', () => {
         };
       });
 
-      const handler = createA2AProxyHandler({
+      const { handler } = createA2AProxyHandler({
         configDir,
         limits: DEFAULT_LIMITS,
         hideNotFound: true,

@@ -132,7 +132,7 @@ export function createGatewayServer(
     log.info({ event: 'mcp_proxy_enabled', configDir });
 
     // A2A Proxy endpoints (Phase 8.4)
-    const a2aProxyHandler = createA2AProxyHandler({
+    const { handler: a2aProxyHandler, shutdown: a2aProxyShutdown } = createA2AProxyHandler({
       configDir,
       limits: fullConfig.limits,
       hideNotFound,
@@ -163,6 +163,11 @@ export function createGatewayServer(
       '/a2a/v1/tasks/list',
       a2aProxyHandler
     );
+
+    // Register A2A proxy shutdown
+    server.addHook('onClose', () => {
+      a2aProxyShutdown();
+    });
 
     log.info({ event: 'a2a_proxy_enabled', configDir });
   }
