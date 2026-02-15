@@ -87,9 +87,13 @@ export class SseManager {
    * Broadcast an event to all matching clients
    */
   broadcast(event: SseEventData): void {
-    for (const [clientId, client] of this.clients.entries()) {
+    // Copy entries to avoid race condition when modifying map during iteration
+    const entries = Array.from(this.clients.entries());
+    const toDelete: string[] = [];
+
+    for (const [clientId, client] of entries) {
       if (!client.isConnected) {
-        this.clients.delete(clientId);
+        toDelete.push(clientId);
         continue;
       }
 
@@ -102,7 +106,19 @@ export class SseManager {
       }
 
       // Send event to client
-      this.sendEvent(client, event);
+      try {
+        const data = JSON.stringify(event);
+        client.response.raw.write(`event: gateway_event\ndata: ${data}\n\n`);
+      } catch {
+        // Client disconnected
+        client.isConnected = false;
+        toDelete.push(clientId);
+      }
+    }
+
+    // Delete disconnected clients after iteration completes
+    for (const clientId of toDelete) {
+      this.clients.delete(clientId);
     }
   }
 
@@ -113,10 +129,10 @@ export class SseManager {
     try {
       const data = JSON.stringify(event);
       client.response.raw.write(`event: gateway_event\ndata: ${data}\n\n`);
-    } catch (error) {
-      // Client disconnected
+    } catch {
+      // Client disconnected - mark but don't delete from map
+      // (caller should handle cleanup to avoid race conditions)
       client.isConnected = false;
-      this.clients.delete(client.id);
     }
   }
 
@@ -124,11 +140,15 @@ export class SseManager {
    * Get connected client count
    */
   getClientCount(): number {
-    // Clean up disconnected clients
+    // Clean up disconnected clients (avoid modifying map during iteration)
+    const toDelete: string[] = [];
     for (const [clientId, client] of this.clients.entries()) {
       if (!client.isConnected) {
-        this.clients.delete(clientId);
+        toDelete.push(clientId);
       }
+    }
+    for (const clientId of toDelete) {
+      this.clients.delete(clientId);
     }
     return this.clients.size;
   }
@@ -276,20 +296,18 @@ export async function sseStreamHandler(
     }
 
     // Handle client disconnect
-    request.raw.on('close', () => {
+    let resolvePromise: () => void;
+    const closeHandler = () => {
       manager.removeClient(clientId);
-    });
+      resolvePromise();
+    };
 
-    request.raw.on('error', () => {
-      manager.removeClient(clientId);
-    });
+    request.raw.on('close', closeHandler);
+    request.raw.on('error', closeHandler);
 
-    // Keep connection alive
-    // Note: Fastify handles this, we just need to keep the request open
-    // The promise never resolves (connection stays open until client disconnects)
-    return new Promise<void>(() => {
-      // This promise intentionally never resolves
-      // The connection stays open until the client disconnects
+    // Keep connection alive until client disconnects
+    return new Promise<void>((resolve) => {
+      resolvePromise = resolve;
     });
   } catch (error) {
     // Log error and send 500 response
