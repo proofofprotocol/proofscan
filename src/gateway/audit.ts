@@ -11,7 +11,8 @@
  */
 
 import { EventsStore } from '../db/events-store.js';
-import type { GatewayEventKind } from '../db/types.js';
+import type { GatewayEventKind, GatewayEvent } from '../db/types.js';
+import type { SseManager } from './sse.js';
 
 /**
  * Options for logging an audit event
@@ -50,9 +51,18 @@ export interface AuditLogOptions {
  */
 export class AuditLogger {
   private store: EventsStore;
+  private sseManager?: SseManager;
 
-  constructor(configDir: string) {
+  constructor(configDir: string, sseManager?: SseManager) {
     this.store = new EventsStore(configDir);
+    this.sseManager = sseManager;
+  }
+
+  /**
+   * Set SSE manager for real-time event streaming
+   */
+  setSseManager(sseManager: SseManager): void {
+    this.sseManager = sseManager;
   }
 
   /**
@@ -62,7 +72,7 @@ export class AuditLogger {
    * @returns Event ID of the logged event
    */
   logEvent(options: AuditLogOptions): string {
-    return this.store.saveGatewayEvent({
+    const eventId = this.store.saveGatewayEvent({
       requestId: options.requestId,
       traceId: options.traceId ?? null,
       clientId: options.clientId,
@@ -77,6 +87,28 @@ export class AuditLogger {
       statusCode: options.statusCode ?? null,
       metadata: options.metadata ?? null,
     });
+
+    // Broadcast to SSE clients if SSE manager is configured
+    if (this.sseManager) {
+      this.sseManager.broadcast({
+        event_kind: options.event,
+        client_id: options.clientId,
+        ts: Date.now(),
+        request_id: options.requestId,
+        trace_id: options.traceId ?? null,
+        target_id: options.target ?? null,
+        method: options.method ?? null,
+        latency_ms: options.latencyMs ?? null,
+        upstream_latency_ms: options.upstreamLatencyMs ?? null,
+        decision: options.decision ?? null,
+        deny_reason: options.denyReason ?? null,
+        error: options.error ?? null,
+        status_code: options.statusCode ?? null,
+        metadata: options.metadata ?? null,
+      });
+    }
+
+    return eventId;
   }
 
   /**
