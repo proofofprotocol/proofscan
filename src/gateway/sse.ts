@@ -109,7 +109,7 @@ export class SseManager {
   /**
    * Send an event to a specific client
    */
-  private sendEvent(client: SseClient, event: SseEventData): void {
+  public sendEvent(client: SseClient, event: SseEventData): void {
     try {
       const data = JSON.stringify(event);
       client.response.raw.write(`event: gateway_event\ndata: ${data}\n\n`);
