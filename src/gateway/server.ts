@@ -13,6 +13,8 @@ import { createLogger, Logger } from './logger.js';
 import { createAuthMiddleware, AuthInfo } from './authMiddleware.js';
 import { createMCPProxyHandler, MCPProxyRequest } from './mcpProxy.js';
 import { createA2AProxyHandler, A2AProxyRequest } from './a2aProxy.js';
+import { createAuditLogger, AuditLogger } from './audit.js';
+import { sseStreamHandler, getSseManager } from './sse.js';
 
 export interface GatewayServer {
   /** Fastify instance */
@@ -116,6 +118,12 @@ export function createGatewayServer(
     };
   });
 
+  // SSE endpoint for real-time event streaming (Phase 8.6)
+  // Query parameters:
+  // - kinds: Comma-separated list of event kinds to receive (optional)
+  // - client_id: Filter events by client_id (optional)
+  server.get('/events/stream', sseStreamHandler);
+
   // MCP Proxy endpoint (Phase 8.3)
   if (configDir) {
     const mcpProxyHandler = createMCPProxyHandler({
@@ -182,6 +190,9 @@ export function createGatewayServer(
     log.info({ event: 'server_shutdown', signal });
 
     try {
+      // Disconnect all SSE clients
+      getSseManager().disconnectAll();
+
       await server.close();
       log.info({ event: 'server_stopped' });
       process.exit(0);
