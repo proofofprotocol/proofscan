@@ -700,11 +700,54 @@ function parseValue(value: string, type?: string): unknown {
 }
 
 /**
- * Truncate a string to max length
+ * Get display width of a string (full-width = 2, half-width = 1)
  */
-function truncate(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return str.slice(0, maxLen - 3) + '...';
+function getDisplayWidth(str: string): number {
+  let width = 0;
+  for (const char of str) {
+    const code = char.codePointAt(0) || 0;
+    // Full-width: CJK, full-width forms, etc.
+    if (
+      (code >= 0x1100 && code <= 0x115F) ||  // Hangul Jamo
+      (code >= 0x2E80 && code <= 0x9FFF) ||  // CJK
+      (code >= 0xAC00 && code <= 0xD7A3) ||  // Hangul Syllables
+      (code >= 0xF900 && code <= 0xFAFF) ||  // CJK Compatibility
+      (code >= 0xFE10 && code <= 0xFE1F) ||  // Vertical forms
+      (code >= 0xFE30 && code <= 0xFE6F) ||  // CJK Compatibility Forms
+      (code >= 0xFF00 && code <= 0xFF60) ||  // Full-width forms
+      (code >= 0xFFE0 && code <= 0xFFE6) ||  // Full-width symbols
+      (code >= 0x20000 && code <= 0x2FFFF)   // CJK Extension B+
+    ) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * Truncate a string to max display width
+ */
+function truncate(str: string, maxWidth: number): string {
+  const totalWidth = getDisplayWidth(str);
+  if (totalWidth <= maxWidth) {
+    return str;
+  }
+
+  let width = 0;
+  let i = 0;
+  for (const char of str) {
+    const charWidth = getDisplayWidth(char);
+    // Check if adding this character would exceed maxWidth (accounting for '...')
+    if (width + charWidth + 3 > maxWidth) {
+      return str.slice(0, i) + '...';
+    }
+    width += charWidth;
+    i += char.length;
+  }
+  // Fallback: should never reach here if totalWidth > maxWidth
+  return str.slice(0, i) + '...';
 }
 
 /**
