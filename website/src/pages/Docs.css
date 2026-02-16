@@ -1,0 +1,243 @@
+.docs-page {
+  min-height: calc(100vh - 200px);
+}
+
+.docs-container {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 3rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.docs-sidebar {
+  position: sticky;
+  top: 90px;
+  height: fit-content;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.docs-nav {
+  padding: 1rem;
+}
+
+.docs-nav-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: var(--color-text-primary);
+}
+
+.docs-nav-section {
+  margin-bottom: 1.5rem;
+}
+
+.docs-nav-heading {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  margin-bottom: 0.5rem;
+}
+
+.docs-nav-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.docs-nav-list li {
+  margin-bottom: 0.25rem;
+}
+
+.docs-nav-link {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text-secondary);
+  font-size: 0.9375rem;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  border-left: 3px solid transparent;
+}
+
+.docs-nav-link:hover {
+  color: var(--color-primary);
+  background-color: var(--color-bg-secondary);
+  border-left-color: var(--color-primary);
+}
+
+.docs-nav-link.active {
+  color: var(--color-primary);
+  background-color: var(--color-bg-secondary);
+  border-left-color: var(--color-primary);
+  font-weight: 600;
+}
+
+.docs-content {
+  max-width: 900px;
+  padding: 0 1rem;
+}
+
+.docs-content h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  color: var(--color-text-primary);
+}
+
+.docs-content h2 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+
+.docs-content h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  color: var(--color-text-primary);
+}
+
+.docs-content h4 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--color-text-primary);
+}
+
+.docs-content p {
+  line-height: 1.7;
+  margin-bottom: 1rem;
+  color: var(--color-text-secondary);
+}
+
+.docs-content ul,
+.docs-content ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+  color: var(--color-text-secondary);
+}
+
+.docs-content li {
+  margin-bottom: 0.5rem;
+  line-height: 1.7;
+}
+
+.docs-content pre {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.docs-content code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background-color: var(--color-bg-tertiary);
+  padding: 0.2em 0.4em;
+  border-radius: var(--radius-sm);
+  color: var(--color-primary);
+}
+
+.docs-content pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+.docs-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+}
+
+.docs-content th,
+.docs-content td {
+  padding: 0.75rem;
+  text-align: left;
+  border: 1px solid var(--color-border);
+}
+
+.docs-content th {
+  background-color: var(--color-bg-secondary);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.docs-content td {
+  color: var(--color-text-secondary);
+}
+
+.docs-content blockquote {
+  padding: 1rem 1.5rem;
+  margin: 1.5rem 0;
+  border-left: 4px solid var(--color-primary);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+}
+
+.docs-content a:not(.btn) {
+  color: var(--color-primary);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color var(--transition-fast);
+}
+
+.docs-content a:not(.btn):hover {
+  text-decoration-color: var(--color-primary);
+}
+
+@media (max-width: 1024px) {
+  .docs-container {
+    grid-template-columns: 240px 1fr;
+    gap: 2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .docs-container {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .docs-sidebar {
+    position: static;
+    max-height: none;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .docs-content h1 {
+    font-size: 2rem;
+  }
+  
+  .docs-content h2 {
+    font-size: 1.5rem;
+  }
+  
+  .docs-content h3 {
+    font-size: 1.25rem;
+  }
+  
+  .docs-content pre {
+    font-size: 0.8125rem;
+    padding: 1rem;
+  }
+}
