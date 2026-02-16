@@ -8,7 +8,6 @@ Complete command reference for proofscan CLI. For interactive shell mode, see [S
 - [Configuration](#configuration)
 - [View Commands](#view-commands)
 - [Tree Command](#tree-command)
-- [Explore Command](#explore-command)
 - [Scan Commands](#scan-commands)
 - [RPC Commands](#rpc-commands)
 - [Status Command](#status-command)
@@ -210,44 +209,6 @@ pfscan tree --status err
 
 # Compact view for scripting
 pfscan tree --compact --json
-```
-
-## Explore Command
-
-Interactive data browser with navigation.
-
-### Basic Usage
-
-```bash
-pfscan explore                    # Start from connectors
-pfscan explore --session abc123   # Jump to specific session
-pfscan e                          # Short alias
-```
-
-### Navigation
-
-- **Number**: Select item
-- **b**: Go back
-- **t**: Show tree view
-- **p**: View request/response pair (in RPC view)
-- **?**: Help
-- **q**: Quit
-
-### Example Session
-
-```
-═══════════════════════════════════════════════════════════════
-  proofscan explore
-═══════════════════════════════════════════════════════════════
-  Path: connectors
-───────────────────────────────────────────────────────────────
-
-  Connectors:
-
-    [1] time (3 sessions)
-    [2] weather (1 session)
-
-  > 1
 ```
 
 ## Scan Commands
@@ -981,11 +942,11 @@ Use short aliases for faster typing:
 ```bash
 pfscan v        # view
 pfscan t        # tree
-pfscan e        # explore
 pfscan s        # scan
 pfscan st       # status
 pfscan a        # archive
 pfscan c        # config
+pfscan cat      # catalog
 ```
 
 ### JSON Output for Scripting

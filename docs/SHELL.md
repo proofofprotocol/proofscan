@@ -723,7 +723,7 @@ mytask    lastscan    initcall    mycontext
 
 ```bash
 # Jump directly to session
-proofscan> up abc<TAB>  # Completes to abc123...
+proofscan> cd abc<TAB>  # Completes to abc123...
 
 # Use partial IDs
 proofscan> cd f24       # Matches f2442c9b
@@ -776,7 +776,7 @@ proofscan> ref add time-call @last
 If a command fails:
 - Check context with `pwd`
 - Verify connector exists: `cc <TAB>`
-- Verify session exists: `up <TAB>`
+- Verify session exists: `cd <TAB>`
 - Check command syntax: `<command> --help`
 
 ### Performance Tips
@@ -790,14 +790,14 @@ If a command fails:
 
 - Shell requires interactive terminal (TTY)
 - Cannot be used in scripts or non-interactive pipes
-- Some commands (like `explore`) may not work well in shell mode
+- Some commands may have different behavior in shell mode compared to CLI
 - Long-running commands block the shell (use `scan` in separate terminal)
 
 ## Shell-Only Features
 
 These features are **only available in shell mode**, not in regular CLI:
 
-✅ Context management (pwd, cc, up)
+✅ Context management (pwd, cc, cd)
 ✅ @references (@this, @last, @ref:name)
 ✅ Router commands (ls, show)
 ✅ TAB completion for everything
