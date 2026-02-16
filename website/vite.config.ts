@@ -9,7 +9,15 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 3000,
     strictPort: true,
-    open: false
+    open: false,
+    allowedHosts: [
+      'localhost',
+      '.sandbox.novita.ai',
+      '.e2b.dev'
+    ],
+    hmr: {
+      clientPort: 3000
+    }
   },
   build: {
     outDir: 'dist',
