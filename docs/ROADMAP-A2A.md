@@ -27,14 +27,14 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 6.PR2 | BridgeEnvelope + 監査ログ | ✅ 完了 | 2026-02-06 |
 | 6.PR3 | proofscan_getEvents | ✅ 完了 | 2026-02-07 |
 | 6.PR4 | trace-viewer MVP | ✅ 完了 | 2026-02-07 |
-| 7.1 | tool list description表示 | 📋 未着手 | - |
+| 7.1 | tool list description表示 | ✅ 完了 | 2026-02-15 |
 | 7.2 | 事前バリデーション | ✅ 完了 | 2026-02-11 |
 | 7.3 | バッチ呼び出し | ✅ 完了 | 2026-02-11 |
 | 7.4 | 出力フォーマット制御 | ✅ 完了 | 2026-02-11 |
 | 7.5 | proofscanスキル作成 | ✅ 完了 | 2026-02-11 |
 | 7.6 | レジストリ検索（MCP/A2A） | ✅ 完了 | 2026-02-11 |
 | 7.7 | リソース使用量表示 | ✅ 完了 | 2026-02-13 |
-| 7.8 | doctor拡張（統合診断） | 📋 未着手 | - |
+| 7.8 | doctor拡張（統合診断） | ✅ 完了 | 2026-02-15 |
 | 8 | Protocol Gateway | ✅ 完了 | 2026-02-15 | - |
 
 ---
@@ -331,10 +331,12 @@ AIエージェントがproofscanを使いやすくするための改善。MCPエ
 | 7.5 | proofscanスキル作成 | 📋 |
 | 7.6 | レジストリ検索（MCP/A2A） | ✅ 完了 |
 
-### 7.1 tool list description表示
-- [ ] inputSchema.description を truncate して表示
-- [ ] 50文字程度で切り詰め
-- [ ] 日本語対応（文字幅考慮）
+### 7.1 tool list description表示 ✅
+- [x] inputSchema.description を truncate して表示
+- [x] 50文字程度で切り詰め
+- [x] 日本語対応（CJK文字幅考慮）
+
+**PR:** #119 (merged 2026-02-15)
 
 **現状:** Description列が空
 **目標:**
@@ -443,12 +445,14 @@ Estimated context: ~8,500 tokens
 
 **注意:** token数は概算（1 token ≒ 4 bytes）。表示時に `Estimated token count is approximate` の注記を含める。
 
-### 7.8 doctor拡張（統合診断）
-- [ ] 既存のDB診断を維持
-- [ ] コネクタ診断（接続確認、応答時間）
-- [ ] リソース診断（7.7と連携）
-- [ ] レジストリ診断（7.6と連携）
-- [ ] `--fix` でコネクタ再起動等も対応
+### 7.8 doctor拡張（統合診断） ✅
+- [x] 既存のDB診断を維持
+- [x] コネクタ診断（接続確認、応答時間）
+- [x] リソース診断（7.7と連携）
+- [x] レジストリ診断（7.6と連携）
+- [ ] `--fix` でコネクタ再起動等も対応（後続）
+
+**PR:** #119 (merged 2026-02-15)
 
 **目標:**
 ```bash
@@ -644,4 +648,4 @@ GET    /health                  ヘルスチェック
 
 ---
 
-*Last updated: 2026-02-13*
+*Last updated: 2026-02-16*
