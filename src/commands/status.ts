@@ -253,7 +253,7 @@ export function createStatusCommand(getConfigPath: () => string): Command {
         console.log('Quick Commands:');
         console.log('  pfscan view           Show recent events');
         console.log('  pfscan tree           Show structure');
-        console.log('  pfscan explore        Interactive browse');
+        console.log('  pfscan shell          Interactive REPL');
         console.log('  pfscan scan start     Run a new scan');
 
       } catch (error) {

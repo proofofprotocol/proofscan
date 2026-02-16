@@ -241,20 +241,27 @@ Main Commands
   analyze         Analyze tool usage across sessions
   scan (s)        Run a new scan against MCP servers
   proxy           Run MCP proxy server
+  serve           Protocol gateway HTTP server
   shell           Start interactive shell (REPL)
+  monitor         Web monitor UI
   tool            List, inspect and call MCP tools
   catalog (cat)   Search and inspect MCP servers from registry
+  registry        Local connector discovery
+  runners         Manage package runners (npx, uvx)
   connectors      Manage MCP server connectors
   config (c)      Configuration management
   secrets         Secret management
-  runners         Manage package runners (npx, uvx)
   archive (a)     Data retention and cleanup
   doctor          Diagnose and fix issues
   status (st)     Show database and system status
   popl            Public Observable Proof Ledger management
+  plans           Manage validation plans
+
+A2A Agent Commands
+  agent           A2A agent management (add, ls, scan)
+  task            A2A task management (ls, show, cancel)
 
 Ancillary Commands
-  plans           Manage validation plans
   sessions        Manage scan sessions
   record          Record management commands
   log             View proxy logs

@@ -1,7 +1,7 @@
 /**
  * EventLine - Normalized event model for Phase 2.1
  *
- * This is the canonical internal representation used by view/tree/explore.
+ * This is the canonical internal representation used by view/tree/shell.
  * Direction uses → / ← (MCP Client → MCP Server / MCP Server → MCP Client).
  */
 

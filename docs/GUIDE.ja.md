@@ -173,19 +173,6 @@ pfscan tree [options]
    └─ → tools/call [get_current_time] (OK, 45ms)
 ```
 
-#### `explore` (別名: `e`)
-対話的データブラウザ（TUI）
-
-```bash
-pfscan explore
-```
-
-- **矢印キー**: ナビゲーション
-- **Enter**: 詳細表示
-- **q**: 終了
-
----
-
 ### 🔍 スキャンコマンド
 
 #### `scan start`
