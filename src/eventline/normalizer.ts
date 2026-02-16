@@ -2,7 +2,7 @@
  * EventLine Normalizer - converts raw DB events to normalized EventLine format
  *
  * This layer absorbs schema differences and provides a consistent interface
- * for view/tree/explore commands.
+ * for view/tree/shell commands.
  *
  * Phase 2.1: Added support for seq, summary, payload_hash
  */
