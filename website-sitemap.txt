@@ -1,0 +1,128 @@
+ProofScan Website Sitemap (proofofprotocol.online)
+=================================================
+
+📍 TOP LEVEL
+├─ 🏠 Home (index.html)
+│  ├─ Hero Section
+│  ├─ Quick Feature Overview (3-4 cards)
+│  ├─ CTA (Get Started / View Docs)
+│  └─ Latest Updates / News
+
+├─ ⚡ Features (features.html)
+│  ├─ AI Autonomous Connection
+│  ├─ Inscribe (HCS Integration)
+│  ├─ MCP & A2A Support
+│  ├─ Catalog Functionality
+│  ├─ Web Monitor UI
+│  ├─ Complete Data Persistence
+│  └─ Open Source (MIT)
+
+├─ 🔧 Modes (modes.html)
+│  ├─ CLI Mode
+│  ├─ Proxy Mode
+│  └─ Server (Monitor) Mode
+
+├─ 💡 Use Cases (use-cases.html)
+│  ├─ Debugging & Development
+│  ├─ Performance Analysis
+│  ├─ Security Auditing
+│  ├─ Automated Testing
+│  ├─ Documentation Generation
+│  └─ Agent Integration
+
+├─ 🚀 Getting Started (installation.html)
+│  ├─ System Requirements
+│  ├─ Installation (npm/npx)
+│  ├─ Quick Start (4 steps)
+│  ├─ Configuration
+│  └─ First Scan Tutorial
+
+├─ 💻 Examples (examples.html)
+│  ├─ CLI Command Examples
+│  ├─ Shell Mode Demo
+│  ├─ Proxy Setup Example
+│  ├─ Analyze Output
+│  └─ Video Demos (optional)
+
+├─ 📚 Documentation (docs/index.html)
+│  ├─ 📖 User Guide (docs/guide.html)
+│  │  ├─ Overview
+│  │  ├─ Core Concepts
+│  │  ├─ Basic Operations
+│  │  └─ Advanced Usage
+│  │
+│  ├─ 🐚 Shell Mode (docs/shell.html)
+│  │  ├─ Interactive Shell
+│  │  ├─ Commands Reference
+│  │  ├─ TAB Completion
+│  │  └─ Shell Workflows
+│  │
+│  ├─ 🔀 Proxy Guide (docs/proxy.html)
+│  │  ├─ Proxy Setup
+│  │  ├─ Multi-Backend Config
+│  │  ├─ Real-time Monitoring
+│  │  └─ Use Cases
+│  │
+│  ├─ 🔐 POPL Guide (docs/popl.html)
+│  │  ├─ Proof of Protocol
+│  │  ├─ HCS Integration
+│  │  ├─ Audit Trail Generation
+│  │  └─ Verification
+│  │
+│  ├─ 🔌 MCP Server Setup (docs/mcp-setup.html)
+│  │  ├─ MCP Protocol Basics
+│  │  ├─ Server Configuration
+│  │  ├─ Catalog Integration
+│  │  └─ Troubleshooting
+│  │
+│  ├─ 🤖 A2A Agent Guide (docs/a2a-agent.html)
+│  │  ├─ Agent-to-Agent Protocol
+│  │  ├─ Agent Configuration
+│  │  ├─ Communication Patterns
+│  │  └─ Best Practices
+│  │
+│  ├─ 🔧 API Reference (docs/api.html)
+│  │  ├─ CLI Commands
+│  │  ├─ Configuration Options
+│  │  ├─ Database Schema
+│  │  └─ Programmatic API
+│  │
+│  └─ ❓ FAQ (docs/faq.html)
+
+├─ 👥 Community (community.html)
+│  ├─ GitHub Repository
+│  ├─ Discussions
+│  ├─ Issues & Bug Reports
+│  ├─ Contributing Guidelines
+│  ├─ Roadmap
+│  └─ Support Channels
+
+└─ 🔗 Resources (resources.html)
+   ├─ Related Projects
+   ├─ MCP Protocol Spec
+   ├─ Blog Posts
+   ├─ Video Tutorials
+   └─ External Links
+
+GLOBAL ELEMENTS (All Pages)
+============================
+Header:
+├─ Logo
+├─ Main Navigation
+├─ Search Bar
+└─ GitHub Star Button
+
+Footer:
+├─ Quick Links
+├─ Documentation Links
+├─ Community Links
+├─ Social Media
+└─ Copyright
+
+Sidebar (Documentation Pages Only):
+├─ Documentation TOC
+├─ Current Page Outline
+└─ Related Pages
+
+Breadcrumbs (All Pages Except Home):
+└─ Home > Section > Current Page

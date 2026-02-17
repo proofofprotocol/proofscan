@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ProofScan - MCP通信の完全可視化ツール。JSON-RPCトラフィックをキャプチャ・分析・監査。オープンソース（MIT）。">
+  <meta name="keywords" content="ProofScan, MCP, Model Context Protocol, JSON-RPC, CLI, Proxy, Monitoring, Open Source">
+  <title>ProofScan - MCP Communication Scanner & Analyzer</title>
+  <link rel="stylesheet" href="/css/docs.css">
+  <style>
+    /* Hero Section */
+    .hero {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 80px 24px;
+      text-align: center;
+    }
+    
+    .hero-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .hero h1 {
+      font-size: 48px;
+      margin-bottom: 16px;
+      color: white;
+    }
+    
+    .hero-subtitle {
+      font-size: 20px;
+      margin-bottom: 32px;
+      opacity: 0.9;
+    }
+    
+    .hero-badges {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+    
+    .badge {
+      background: rgba(255,255,255,0.2);
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    
+    .btn {
+      padding: 12px 32px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-decoration: none;
+      display: inline-block;
+    }
+    
+    .btn-primary {
+      background: white;
+      color: #667eea;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+    }
+    
+    .btn-secondary {
+      background: transparent;
+      color: white;
+      border: 2px solid white;
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    
+    /* Terminal Demo */
+    .terminal-demo {
+      background: #1e1e1e;
+      border-radius: 8px;
+      padding: 24px;
+      margin: 32px auto 0;
+      max-width: 800px;
+      text-align: left;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+    
+    .terminal-header {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    
+    .terminal-content {
+      color: #d4d4d4;
+      line-height: 1.6;
+    }
+    
+    .cmd {
+      color: #4ec9b0;
+    }
+    
+    .output {
+      color: #ce9178;
+    }
+    
+    /* Features Grid */
+    .features {
+      padding: 80px 24px;
+      background: var(--bg-secondary);
+    }
+    
+    .features-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .section-title {
+      text-align: center;
+      font-size: 36px;
+      margin-bottom: 16px;
+    }
+    
+    .section-subtitle {
+      text-align: center;
+      font-size: 18px;
+      color: var(--text-secondary);
+      margin-bottom: 48px;
+    }
+    
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+    
+    .feature-card {
+      background: white;
+      padding: 32px;
+      border-radius: 12px;
+      border: 1px solid var(--border-light);
+      transition: all 0.3s;
+    }
+    
+    .feature-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--primary);
+    }
+    
+    .feature-icon {
+      font-size: 32px;
+      margin-bottom: 16px;
+    }
+    
+    .feature-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text-primary);
+    }
+    
+    .feature-description {
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+    
+    /* Quick Start */
+    .quick-start {
+      padding: 80px 24px;
+      background: white;
+    }
+    
+    .quick-start-container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    
+    .install-command {
+      background: var(--bg-code);
+      border: 1px solid var(--border-light);
+      border-radius: 8px;
+      padding: 16px 24px;
+      font-family: var(--font-mono);
+      font-size: 16px;
+      margin: 24px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    /* Footer */
+    .footer {
+      background: var(--bg-tertiary);
+      padding: 48px 24px;
+      border-top: 1px solid var(--border-light);
+    }
+    
+    .footer-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 32px;
+    }
+    
+    .footer-section h4 {
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+    
+    .footer-links {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .footer-links li {
+      margin-bottom: 8px;
+    }
+    
+    .footer-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+    }
+    
+    .footer-links a:hover {
+      color: var(--primary);
+    }
+    
+    .footer-bottom {
+      text-align: center;
+      margin-top: 32px;
+      padding-top: 32px;
+      border-top: 1px solid var(--border-light);
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo">
+          <span>🔍</span>
+          <span>ProofScan</span>
+        </a>
+        <nav class="main-nav">
+          <a href="/" class="active">Home</a>
+          <a href="/commands/">Commands</a>
+          <a href="/docs/">Docs</a>
+          <a href="/examples/">Examples</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search docs...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
+          <span>⭐</span>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-container">
+      <h1>ProofScan</h1>
+      <p class="hero-subtitle">MCP通信を完全可視化する次世代スキャナー</p>
+      
+      <div class="hero-badges">
+        <span class="badge">v0.11.2</span>
+        <span class="badge">MCP & A2A対応</span>
+        <span class="badge">MIT License</span>
+        <span class="badge">27 Commands</span>
+      </div>
+      
+      <div class="hero-cta">
+        <a href="/docs/" class="btn btn-primary">ドキュメントを見る</a>
+        <a href="https://github.com/proofofprotocol/proofscan" class="btn btn-secondary">View on GitHub</a>
+      </div>
+      
+      <!-- Terminal Demo -->
+      <div class="terminal-demo">
+        <div class="terminal-header">
+          <div class="terminal-dot" style="background: #ff5f56;"></div>
+          <div class="terminal-dot" style="background: #ffbd2e;"></div>
+          <div class="terminal-dot" style="background: #27c93f;"></div>
+        </div>
+        <div class="terminal-content">
+          <div><span class="cmd">$</span> npm install -g proofscan</div>
+          <div><span class="cmd">$</span> pfscan scan start --id time</div>
+          <div class="output">✓ Session started: f2442c9b</div>
+          <div class="output">✓ Captured 8 events, 2 RPCs</div>
+          <div><span class="cmd">$</span> pfscan tree</div>
+          <div class="output">└── 📦 time</div>
+          <div class="output">    └── 📋 f2442c9b... (2 rpcs, 8 events)</div>
+          <div class="output">        ├── ↔️ ✓ tools/list (12ms)</div>
+          <div class="output">        └── ↔️ ✓ initialize (269ms)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features">
+    <div class="features-container">
+      <h2 class="section-title">主な機能</h2>
+      <p class="section-subtitle">ProofScanが提供する強力な機能群</p>
+      
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📖</div>
+          <h3 class="feature-title">完全なオープンソース</h3>
+          <p class="feature-description">MIT ライセンスで公開。ソースコードの完全な透明性、自由なカスタマイズ、コミュニティ主導の開発。</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🔍</div>
+          <h3 class="feature-title">完全可視化</h3>
+          <p class="feature-description">すべてのJSON-RPCメッセージをキャプチャ。リクエスト、レスポンス、通知を時系列で表示。</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🌳</div>
+          <h3 class="feature-title">階層構造</h3>
+          <p class="feature-description">コネクター → セッション → RPC の階層を視覚化。複雑な通信パターンを直感的に理解。</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🎭</div>
+          <h3 class="feature-title">MCPプロキシ</h3>
+          <p class="feature-description">複数のMCPサーバーを統合プロキシとして起動。ツールの名前空間を統一管理。</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🐚</div>
+          <h3 class="feature-title">対話型シェル</h3>
+          <p class="feature-description">TAB補完対応のインタラクティブシェル。リアルタイムでMCPサーバーを探索。</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3 class="feature-title">POPL監査証跡</h3>
+          <p class="feature-description">公開可能な監査証跡を生成。Hedera Consensus Service（HCS）と連携。</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3 class="feature-title">A2A対応</h3>
+          <p class="feature-description">Agent-to-Agent プロトコルをサポート。エージェント間通信の可視化。</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3 class="feature-title">MCPカタログ</h3>
+          <p class="feature-description">レジストリからMCPサーバーを検索・インストール。1コマンドで環境構築。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
+  <section class="quick-start">
+    <div class="quick-start-container">
+      <h2 class="section-title">クイックスタート</h2>
+      <p class="section-subtitle">3ステップで始めるProofScan</p>
+      
+      <h3>1. インストール</h3>
+      <div class="install-command">
+        <code>npm install -g proofscan</code>
+        <button class="copy-btn">Copy</button>
+      </div>
+      
+      <h3>2. 設定初期化</h3>
+      <div class="install-command">
+        <code>pfscan config init</code>
+        <button class="copy-btn">Copy</button>
+      </div>
+      
+      <h3>3. MCPサーバー追加 & スキャン</h3>
+      <div class="install-command">
+        <code>pfscan catalog install @modelcontextprotocol/server-time --id time</code>
+        <button class="copy-btn">Copy</button>
+      </div>
+      <div class="install-command">
+        <code>pfscan scan start --id time</code>
+        <button class="copy-btn">Copy</button>
+      </div>
+      
+      <div style="text-align: center; margin-top: 32px;">
+        <a href="/docs/" class="btn btn-primary">詳細ドキュメントを見る</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-section">
+        <h4>Documentation</h4>
+        <ul class="footer-links">
+          <li><a href="/docs/guide.html">ユーザーガイド</a></li>
+          <li><a href="/docs/shell.html">シェルモード</a></li>
+          <li><a href="/docs/proxy.html">プロキシガイド</a></li>
+          <li><a href="/docs/popl.html">POPLガイド</a></li>
+        </ul>
+      </div>
+      
+      <div class="footer-section">
+        <h4>Commands</h4>
+        <ul class="footer-links">
+          <li><a href="/commands/observation.html">観測コマンド</a></li>
+          <li><a href="/commands/execution.html">実行コマンド</a></li>
+          <li><a href="/commands/management.html">管理コマンド</a></li>
+          <li><a href="/commands/catalog.html">カタログ</a></li>
+        </ul>
+      </div>
+      
+      <div class="footer-section">
+        <h4>Community</h4>
+        <ul class="footer-links">
+          <li><a href="https://github.com/proofofprotocol/proofscan">GitHub</a></li>
+          <li><a href="https://github.com/proofofprotocol/proofscan/issues">Issues</a></li>
+          <li><a href="https://github.com/proofofprotocol/proofscan/discussions">Discussions</a></li>
+          <li><a href="https://www.npmjs.com/package/proofscan">npm</a></li>
+        </ul>
+      </div>
+      
+      <div class="footer-section">
+        <h4>More</h4>
+        <ul class="footer-links">
+          <li><a href="https://modelcontextprotocol.io">MCP Protocol</a></li>
+          <li><a href="https://github.com/modelcontextprotocol/servers">MCP Servers</a></li>
+          <li><a href="/examples/">Examples</a></li>
+          <li><a href="https://popatai.com">popatai.com</a></li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="footer-bottom">
+      <p>&copy; 2024-2026 Proof of Protocol. MIT License.</p>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>設定コマンド – ProofScan</title>
+    <meta name="description" content="ProofScanの設定管理とシークレット管理コマンドのリファレンス">
+    <link rel="stylesheet" href="../css/docs.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container">
+            <a href="../index.html" class="logo">
+                <span class="logo-icon">🔍</span>
+                <span>ProofScan</span>
+            </a>
+            <nav class="main-nav">
+                <a href="../index.html">ホーム</a>
+                <a href="../docs/index.html">ドキュメント</a>
+                <a href="index.html" class="active">コマンド</a>
+                <a href="../examples/index.html">実行例</a>
+                <a href="https://github.com/proofofprotocol/proofscan" target="_blank">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="page-layout">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-title">コマンドカテゴリ</div>
+                    <a href="index.html">概要</a>
+                    <a href="execution.html">実行コマンド</a>
+                    <a href="observation.html">観測コマンド</a>
+                    <a href="config.html" class="active">設定コマンド</a>
+                    <a href="catalog.html">カタログ</a>
+                    <a href="agent.html">A2Aエージェント</a>
+                    <a href="popl.html">POPL</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <nav class="breadcrumb">
+                <a href="../index.html">ホーム</a>
+                <span class="separator">/</span>
+                <a href="index.html">コマンド</a>
+                <span class="separator">/</span>
+                <span>設定コマンド</span>
+            </nav>
+
+            <article>
+                <h1>設定コマンド</h1>
+                <p class="lead">ProofScanの設定管理とシークレット管理</p>
+
+                <!-- config コマンド -->
+                <section id="config">
+                    <h2><code>config</code> - 設定管理</h2>
+                    <p>ProofScanの設定ファイルを管理します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="config-init"><code>config init</code></h4>
+                    <p>設定ファイルを初期化します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan config init</code></pre>
+                    </div>
+
+                    <h4 id="config-path"><code>config path</code></h4>
+                    <p>設定ファイルのパスを表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan config path</code></pre>
+                    </div>
+                    <p><strong>出力例：</strong></p>
+                    <ul>
+                        <li><strong>Linux:</strong> <code>~/.config/proofscan/config.json</code></li>
+                        <li><strong>macOS:</strong> <code>~/Library/Application Support/proofscan/config.json</code></li>
+                        <li><strong>Windows:</strong> <code>%APPDATA%\proofscan\config.json</code></li>
+                    </ul>
+
+                    <h4 id="config-show"><code>config show</code></h4>
+                    <p>現在の設定を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 人間が読みやすい形式
+pfscan config show
+
+# JSON形式
+pfscan config show --json</code></pre>
+                    </div>
+
+                    <h4 id="config-edit"><code>config edit</code></h4>
+                    <p>デフォルトエディタで設定ファイルを編集します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan config edit</code></pre>
+                    </div>
+
+                    <h3>設定ファイルの構造</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>{
+  "version": 1,
+  "connectors": [
+    {
+      "id": "time",
+      "enabled": true,
+      "transport": {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-time"]
+      }
+    }
+  ],
+  "retention": {
+    "keep_last_sessions": 50,
+    "raw_days": 7,
+    "max_db_mb": 500
+  }
+}</code></pre>
+                    </div>
+
+                    <h3>設定項目</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>項目</th>
+                                <th>説明</th>
+                                <th>デフォルト</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>version</code></td>
+                                <td>設定ファイルのバージョン</td>
+                                <td>1</td>
+                            </tr>
+                            <tr>
+                                <td><code>connectors</code></td>
+                                <td>MCPサーバー接続設定の配列</td>
+                                <td>[]</td>
+                            </tr>
+                            <tr>
+                                <td><code>retention.keep_last_sessions</code></td>
+                                <td>コネクタごとに保持するセッション数</td>
+                                <td>50</td>
+                            </tr>
+                            <tr>
+                                <td><code>retention.raw_days</code></td>
+                                <td>生のJSONデータを保持する日数</td>
+                                <td>7</td>
+                            </tr>
+                            <tr>
+                                <td><code>retention.max_db_mb</code></td>
+                                <td>データベースの最大サイズ (MB)</td>
+                                <td>500</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- secrets コマンド -->
+                <section id="secrets">
+                    <h2><code>secrets</code> - シークレット管理</h2>
+                    <p>APIキーやトークンなどの秘密情報を管理します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="secrets-list"><code>secrets list</code></h4>
+                    <p>登録されているシークレットの一覧を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan secrets list
+pfscan secrets list --json</code></pre>
+                    </div>
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>Secrets:
+  OPENAI_API_KEY       (set)
+  GITHUB_TOKEN         (set)
+  DATABASE_URL         (not set)</code></pre>
+                    </div>
+
+                    <h4 id="secrets-set"><code>secrets set</code></h4>
+                    <p>シークレットを設定します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 対話式入力（推奨）
+pfscan secrets set OPENAI_API_KEY
+
+# 直接指定（スクリプト向け）
+pfscan secrets set GITHUB_TOKEN --value "ghp_xxxxxxxxxxxx"</code></pre>
+                    </div>
+
+                    <h4 id="secrets-edit"><code>secrets edit</code></h4>
+                    <p>デフォルトエディタでシークレットファイルを編集します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan secrets edit</code></pre>
+                    </div>
+
+                    <h4 id="secrets-prune"><code>secrets prune</code></h4>
+                    <p>使用されていないシークレットを削除します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ドライラン（削除するものを表示）
+pfscan secrets prune
+
+# 実際に削除
+pfscan secrets prune --yes</code></pre>
+                    </div>
+
+                    <h4 id="secrets-export"><code>secrets export</code></h4>
+                    <p>シークレットをエクスポートします。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 暗号化してエクスポート（推奨）
+pfscan secrets export --file secrets.enc --password
+
+# プレーンテキストでエクスポート（注意）
+pfscan secrets export --file secrets.json</code></pre>
+                    </div>
+
+                    <h4 id="secrets-import"><code>secrets import</code></h4>
+                    <p>シークレットをインポートします。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 暗号化ファイルからインポート
+pfscan secrets import --file secrets.enc --password
+
+# プレーンテキストからインポート
+pfscan secrets import --file secrets.json</code></pre>
+                    </div>
+
+                    <h3>セキュリティのベストプラクティス</h3>
+                    <div class="note-box">
+                        <strong>💡 推奨事項：</strong>
+                        <ul>
+                            <li>対話式入力（<code>secrets set</code> のみ）を使用する</li>
+                            <li>エクスポート時は必ず暗号化する</li>
+                            <li>シークレットファイルをバージョン管理に含めない</li>
+                            <li>定期的に <code>secrets prune</code> で未使用のシークレットを削除する</li>
+                            <li>環境変数として設定し、コードにハードコードしない</li>
+                        </ul>
+                    </div>
+                </section>
+
+                <!-- doctor コマンド -->
+                <section id="doctor">
+                    <h2><code>doctor</code> - 診断・修復</h2>
+                    <p>データベースとシステムの問題を診断・修復します。</p>
+
+                    <h3>基本的な使い方</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 診断のみ
+pfscan doctor
+
+# 診断と修復
+pfscan doctor --fix
+
+# 詳細出力
+pfscan doctor --verbose</code></pre>
+                    </div>
+
+                    <h3>チェック項目</h3>
+                    <ul>
+                        <li>データベースファイルの整合性</li>
+                        <li>スキーマバージョンの確認</li>
+                        <li>インデックスの整合性</li>
+                        <li>外部キー制約の検証</li>
+                        <li>孤立レコードの検出</li>
+                        <li>破損したJSONデータの検出</li>
+                    </ul>
+
+                    <h3>トラブルシューティング</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 問題の確認
+pfscan doctor
+
+# 自動修復を試みる
+pfscan doctor --fix
+
+# 最終手段：データベース再初期化（データが失われます）
+rm ~/.config/proofscan/events.db
+pfscan config init</code></pre>
+                    </div>
+                </section>
+
+                <!-- グローバルオプション -->
+                <section id="global-options">
+                    <h2>グローバルオプション</h2>
+                    <p>すべてのコマンドで使用可能なオプションです。</p>
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>オプション</th>
+                                <th>説明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>-c, --config &lt;path&gt;</code></td>
+                                <td>カスタム設定ファイルのパスを指定</td>
+                            </tr>
+                            <tr>
+                                <td><code>--json</code></td>
+                                <td>JSON形式で出力</td>
+                            </tr>
+                            <tr>
+                                <td><code>-v, --verbose</code></td>
+                                <td>詳細な出力を表示</td>
+                            </tr>
+                            <tr>
+                                <td><code>-h, --help</code></td>
+                                <td>ヘルプを表示</td>
+                            </tr>
+                            <tr>
+                                <td><code>-V, --version</code></td>
+                                <td>バージョンを表示</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <h3>使用例</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># カスタム設定ファイルを使用
+pfscan -c ~/my-config.json status
+
+# JSON出力をjqでフィルタ
+pfscan view --limit 10 --json | jq '.[] | select(.status == "ERR")'
+
+# 詳細モード
+pfscan -v scan start --id time</code></pre>
+                    </div>
+                </section>
+
+                <!-- よくある質問 -->
+                <section id="faq">
+                    <h2>よくある質問</h2>
+
+                    <h3>Q. 設定ファイルの場所がわからない</h3>
+                    <p><strong>A.</strong> <code>pfscan config path</code> で確認できます。</p>
+
+                    <h3>Q. 設定ファイルを削除してしまった</h3>
+                    <p><strong>A.</strong> <code>pfscan config init</code> で再作成できます。コネクタ設定は再度追加する必要があります。</p>
+
+                    <h3>Q. シークレットが反映されない</h3>
+                    <p><strong>A.</strong> 以下を確認してください：</p>
+                    <ul>
+                        <li><code>pfscan secrets list</code> で設定済みか確認</li>
+                        <li>環境変数名が正しいか確認</li>
+                        <li>ProofScanまたはMCPサーバーを再起動</li>
+                    </ul>
+
+                    <h3>Q. データベースが破損した</h3>
+                    <p><strong>A.</strong> <code>pfscan doctor --fix</code> で修復を試みてください。それでもダメな場合は、<code>rm ~/.config/proofscan/events.db</code> でデータベースを削除し、再初期化してください。</p>
+                </section>
+
+                <!-- 関連リンク -->
+                <section id="related">
+                    <h2>関連情報</h2>
+                    <ul>
+                        <li><a href="../docs/guide.html">ユーザーガイド</a> - 完全なCLIリファレンス</li>
+                        <li><a href="catalog.html">カタログコマンド</a> - コネクタ管理</li>
+                        <li><a href="../docs/mcp-setup.html">MCPサーバーセットアップ</a> - サーバー設定方法</li>
+                    </ul>
+                </section>
+            </article>
+        </main>
+
+        <aside class="toc-sidebar">
+            <!-- 目次は main.js で自動生成されます -->
+        </aside>
+    </div>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>ProofScan</h3>
+                    <p>MCP通信の完全可視化ツール</p>
+                </div>
+                <div class="footer-section">
+                    <h3>ドキュメント</h3>
+                    <ul>
+                        <li><a href="../docs/guide.html">ユーザーガイド</a></li>
+                        <li><a href="../docs/shell.html">シェルモード</a></li>
+                        <li><a href="../docs/proxy.html">プロキシガイド</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>コミュニティ</h3>
+                    <ul>
+                        <li><a href="https://github.com/proofofprotocol/proofscan">GitHub</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/issues">Issues</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/discussions">Discussions</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Proof of Protocol. MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A2Aエージェントコマンド – ProofScan</title>
+    <meta name="description" content="ProofScanのAgent-to-Agent (A2A) エージェント管理コマンドのリファレンス">
+    <link rel="stylesheet" href="../css/docs.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container">
+            <a href="../index.html" class="logo">
+                <span class="logo-icon">🔍</span>
+                <span>ProofScan</span>
+            </a>
+            <nav class="main-nav">
+                <a href="../index.html">ホーム</a>
+                <a href="../docs/index.html">ドキュメント</a>
+                <a href="index.html" class="active">コマンド</a>
+                <a href="../examples/index.html">実行例</a>
+                <a href="https://github.com/proofofprotocol/proofscan" target="_blank">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="page-layout">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-title">コマンドカテゴリ</div>
+                    <a href="index.html">概要</a>
+                    <a href="execution.html">実行コマンド</a>
+                    <a href="observation.html">観測コマンド</a>
+                    <a href="config.html">設定コマンド</a>
+                    <a href="catalog.html">カタログ</a>
+                    <a href="agent.html" class="active">A2Aエージェント</a>
+                    <a href="popl.html">POPL</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <nav class="breadcrumb">
+                <a href="../index.html">ホーム</a>
+                <span class="separator">/</span>
+                <a href="index.html">コマンド</a>
+                <span class="separator">/</span>
+                <span>A2Aエージェント</span>
+            </nav>
+
+            <article>
+                <h1>A2Aエージェントコマンド</h1>
+                <p class="lead">Agent-to-Agent (A2A) エージェントとタスクの管理</p>
+
+                <div class="note-box">
+                    <strong>🚧 実験的機能</strong>
+                    <p>A2A機能は実験的な機能です。APIが変更される可能性があります。</p>
+                </div>
+
+                <!-- agent コマンド -->
+                <section id="agent">
+                    <h2><code>agent</code> - A2Aエージェント管理</h2>
+                    <p>Agent-to-Agent通信をサポートするエージェントを管理します。</p>
+
+                    <h3>A2Aとは？</h3>
+                    <p>Agent-to-Agent (A2A) は、複数のAIエージェント間での直接通信と協調動作を可能にするプロトコルです。ProofScanはA2A通信を監視し、記録することができます。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="agent-list"><code>agent ls</code></h4>
+                    <p>登録されているA2Aエージェントの一覧を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan agent ls
+pfscan agent ls --json</code></pre>
+                    </div>
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>A2A Agents:
+  researcher     ✓ active    Tasks: 3
+  summarizer     ✓ active    Tasks: 1
+  coordinator    ✗ idle      Tasks: 0</code></pre>
+                    </div>
+
+                    <h4 id="agent-add"><code>agent add</code></h4>
+                    <p>新しいA2Aエージェントを登録します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 基本的な追加
+pfscan agent add --id researcher --connector mcp-research
+
+# カスタム設定を指定
+pfscan agent add --id researcher \
+  --connector mcp-research \
+  --role "research" \
+  --capabilities "search,analyze"</code></pre>
+                    </div>
+
+                    <h4 id="agent-show"><code>agent show</code></h4>
+                    <p>エージェントの詳細情報を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan agent show --id researcher
+pfscan agent show --id researcher --json</code></pre>
+                    </div>
+
+                    <h4 id="agent-scan"><code>agent scan</code></h4>
+                    <p>A2Aエージェントの通信をスキャンします。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 特定のエージェントをスキャン
+pfscan agent scan --id researcher
+
+# 全エージェントをスキャン
+pfscan agent scan --all
+
+# タイムアウト指定
+pfscan agent scan --id researcher --timeout 60</code></pre>
+                    </div>
+
+                    <h4 id="agent-remove"><code>agent remove</code></h4>
+                    <p>A2Aエージェントを削除します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan agent remove --id researcher</code></pre>
+                    </div>
+
+                    <h3>エージェントの役割</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>役割</th>
+                                <th>説明</th>
+                                <th>用途</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>coordinator</code></td>
+                                <td>コーディネーター</td>
+                                <td>タスクの分配と調整</td>
+                            </tr>
+                            <tr>
+                                <td><code>researcher</code></td>
+                                <td>リサーチャー</td>
+                                <td>情報収集と分析</td>
+                            </tr>
+                            <tr>
+                                <td><code>summarizer</code></td>
+                                <td>要約者</td>
+                                <td>情報の要約と整理</td>
+                            </tr>
+                            <tr>
+                                <td><code>executor</code></td>
+                                <td>実行者</td>
+                                <td>アクションの実行</td>
+                            </tr>
+                            <tr>
+                                <td><code>validator</code></td>
+                                <td>検証者</td>
+                                <td>結果の検証と確認</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- task コマンド -->
+                <section id="task">
+                    <h2><code>task</code> - A2Aタスク管理</h2>
+                    <p>A2Aエージェント間のタスクを管理します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="task-list"><code>task ls</code></h4>
+                    <p>タスクの一覧を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 全タスク
+pfscan task ls
+
+# エージェントでフィルタ
+pfscan task ls --agent researcher
+
+# ステータスでフィルタ
+pfscan task ls --status pending
+pfscan task ls --status running
+pfscan task ls --status completed
+
+# JSON形式
+pfscan task ls --json</code></pre>
+                    </div>
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>Tasks:
+  task-001  researcher  ✓ completed  "Search for MCP documentation"
+  task-002  summarizer  ⏳ running    "Summarize search results"
+  task-003  coordinator ⏸ pending     "Distribute next batch"</code></pre>
+                    </div>
+
+                    <h4 id="task-show"><code>task show</code></h4>
+                    <p>タスクの詳細を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan task show --id task-001
+pfscan task show --id task-001 --json</code></pre>
+                    </div>
+
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>Task: task-001
+Agent:        researcher
+Status:       completed
+Created:      2026-01-04T12:00:00Z
+Started:      2026-01-04T12:00:05Z
+Completed:    2026-01-04T12:01:23Z
+Duration:     78s
+
+Description:
+  Search for MCP documentation
+
+Input:
+  query: "Model Context Protocol specification"
+  sources: ["official", "github"]
+
+Output:
+  results: 15 documents found
+  summary: "MCP is a protocol for..."
+
+Dependencies:
+  None
+
+Dependents:
+  task-002 (summarizer)</code></pre>
+                    </div>
+
+                    <h4 id="task-cancel"><code>task cancel</code></h4>
+                    <p>実行中のタスクをキャンセルします。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan task cancel --id task-002</code></pre>
+                    </div>
+
+                    <h3>タスクステータス</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ステータス</th>
+                                <th>説明</th>
+                                <th>記号</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>pending</code></td>
+                                <td>実行待ち</td>
+                                <td>⏸</td>
+                            </tr>
+                            <tr>
+                                <td><code>running</code></td>
+                                <td>実行中</td>
+                                <td>⏳</td>
+                            </tr>
+                            <tr>
+                                <td><code>completed</code></td>
+                                <td>完了</td>
+                                <td>✓</td>
+                            </tr>
+                            <tr>
+                                <td><code>failed</code></td>
+                                <td>失敗</td>
+                                <td>✗</td>
+                            </tr>
+                            <tr>
+                                <td><code>cancelled</code></td>
+                                <td>キャンセル</td>
+                                <td>⊗</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- ワークフロー例 -->
+                <section id="workflows">
+                    <h2>A2Aワークフロー例</h2>
+
+                    <h3>基本的なマルチエージェント協調</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 1. エージェントを登録
+pfscan agent add --id researcher --connector mcp-research
+pfscan agent add --id summarizer --connector mcp-summarize
+pfscan agent add --id coordinator --connector mcp-coord
+
+# 2. エージェント一覧を確認
+pfscan agent ls
+
+# 3. 通信をスキャン（別ターミナル）
+pfscan agent scan --all
+
+# 4. タスクを監視
+pfscan task ls --status running
+
+# 5. 結果を確認
+pfscan task show --id task-001</code></pre>
+                    </div>
+
+                    <h3>リサーチ→要約→検証のパイプライン</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># リサーチエージェントがタスク実行
+# → task-001: "Search for documentation"
+
+# 要約エージェントが依存タスク実行
+# → task-002: "Summarize results" (depends on task-001)
+
+# 検証エージェントが最終確認
+# → task-003: "Validate summary" (depends on task-002)
+
+# プロセス全体を監視
+pfscan task ls
+pfscan view --connector coordinator</code></pre>
+                    </div>
+
+                    <h3>タスクのデバッグ</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 失敗したタスクを特定
+pfscan task ls --status failed
+
+# タスクの詳細を確認
+pfscan task show --id task-005
+
+# 関連するRPC通信を確認
+pfscan rpc list --session <session-id>
+
+# エラーイベントを確認
+pfscan view --errors --connector researcher</code></pre>
+                    </div>
+                </section>
+
+                <!-- A2A通信の監視 -->
+                <section id="monitoring">
+                    <h2>A2A通信の監視</h2>
+
+                    <h3>リアルタイム監視</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ターミナル1: エージェントスキャン
+pfscan agent scan --all
+
+# ターミナル2: タスク監視
+watch -n 2 'pfscan task ls'
+
+# ターミナル3: イベントモニタリング
+pfscan view -f --connector coordinator</code></pre>
+                    </div>
+
+                    <h3>通信パターンの分析</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># エージェント間の通信頻度
+pfscan analyze --connector coordinator
+
+# タスク依存関係の可視化
+pfscan tree coordinator
+
+# パフォーマンス分析
+pfscan view --connector researcher --limit 100 | grep "lat="</code></pre>
+                    </div>
+
+                    <h3>POPL生成</h3>
+                    <p>A2A通信の監査証跡を作成：</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># セッションからPOPLエントリを作成
+pfscan popl session --session <session-id> \
+  --title "A2A Multi-Agent Research Pipeline"
+
+# 公開安全な監査証跡が生成されます
+pfscan popl list</code></pre>
+                    </div>
+                </section>
+
+                <!-- ベストプラクティス -->
+                <section id="best-practices">
+                    <h2>ベストプラクティス</h2>
+
+                    <h3>エージェント設計</h3>
+                    <ul>
+                        <li><strong>単一責任:</strong> 各エージェントは1つの明確な役割を持つ</li>
+                        <li><strong>疎結合:</strong> エージェント間の依存関係を最小限に</li>
+                        <li><strong>冪等性:</strong> タスクは再実行可能に設計</li>
+                        <li><strong>エラーハンドリング:</strong> 失敗時の代替戦略を用意</li>
+                    </ul>
+
+                    <h3>タスク管理</h3>
+                    <ul>
+                        <li><strong>タイムアウト設定:</strong> 長時間実行タスクにはタイムアウトを</li>
+                        <li><strong>進捗報告:</strong> 定期的にステータスを更新</li>
+                        <li><strong>依存関係管理:</strong> タスクの依存関係を明示的に</li>
+                        <li><strong>ログ記録:</strong> 重要な決定とエラーをログに残す</li>
+                    </ul>
+
+                    <h3>監視とデバッグ</h3>
+                    <ul>
+                        <li><strong>リアルタイム監視:</strong> 本番環境では常時監視</li>
+                        <li><strong>POPL記録:</strong> 重要なワークフローはPOPL化</li>
+                        <li><strong>パフォーマンス追跡:</strong> レイテンシとスループットを監視</li>
+                        <li><strong>異常検知:</strong> エラー率の急上昇に注意</li>
+                    </ul>
+                </section>
+
+                <!-- トラブルシューティング -->
+                <section id="troubleshooting">
+                    <h2>トラブルシューティング</h2>
+
+                    <h3>Q. エージェントが応答しない</h3>
+                    <p><strong>A.</strong> 以下を確認：</p>
+                    <ul>
+                        <li>エージェントのステータス: <code>pfscan agent show --id &lt;id&gt;</code></li>
+                        <li>コネクタが有効: <code>pfscan connectors list</code></li>
+                        <li>ネットワーク接続</li>
+                        <li>エージェントログ: <code>pfscan view --connector &lt;connector&gt; --errors</code></li>
+                    </ul>
+
+                    <h3>Q. タスクが pending のまま動かない</h3>
+                    <p><strong>A.</strong> 依存関係を確認：</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># タスク詳細で依存関係確認
+pfscan task show --id &lt;task-id&gt;
+
+# 依存するタスクのステータス確認
+pfscan task ls --status running
+pfscan task ls --status failed</code></pre>
+                    </div>
+
+                    <h3>Q. A2A通信が記録されない</h3>
+                    <p><strong>A.</strong> スキャンが実行中か確認：</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># エージェントスキャンを開始
+pfscan agent scan --all
+
+# ステータス確認
+pfscan status</code></pre>
+                    </div>
+                </section>
+
+                <!-- 関連リンク -->
+                <section id="related">
+                    <h2>関連情報</h2>
+                    <ul>
+                        <li><a href="../docs/a2a-agent.html">A2Aエージェントガイド</a> - 詳細なドキュメント</li>
+                        <li><a href="execution.html">実行コマンド</a> - scan, tool</li>
+                        <li><a href="popl.html">POPLコマンド</a> - 監査証跡の作成</li>
+                        <li><a href="observation.html">観測コマンド</a> - view, tree</li>
+                    </ul>
+                </section>
+            </article>
+        </main>
+
+        <aside class="toc-sidebar">
+            <!-- 目次は main.js で自動生成されます -->
+        </aside>
+    </div>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>ProofScan</h3>
+                    <p>MCP通信の完全可視化ツール</p>
+                </div>
+                <div class="footer-section">
+                    <h3>ドキュメント</h3>
+                    <ul>
+                        <li><a href="../docs/guide.html">ユーザーガイド</a></li>
+                        <li><a href="../docs/shell.html">シェルモード</a></li>
+                        <li><a href="../docs/proxy.html">プロキシガイド</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>コミュニティ</h3>
+                    <ul>
+                        <li><a href="https://github.com/proofofprotocol/proofscan">GitHub</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/issues">Issues</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/discussions">Discussions</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Proof of Protocol. MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../js/main.js"></script>
+</body>
+</html>

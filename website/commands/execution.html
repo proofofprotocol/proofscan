@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>実行コマンド - ProofScan</title>
+  <link rel="stylesheet" href="/css/docs.css">
+</head>
+<body>
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo"><span>🔍</span><span>ProofScan</span></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/" class="active">Commands</a>
+          <a href="/docs/">Docs</a>
+          <a href="/examples/">Examples</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link"><span>⭐</span><span>GitHub</span></a>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">コマンドカテゴリ</div>
+        <a href="/commands/" class="sidebar-item">すべて</a>
+        <a href="/commands/observation.html" class="sidebar-item">📊 観測</a>
+        <a href="/commands/execution.html" class="sidebar-item active">⚡ 実行</a>
+        <a href="/commands/interactive.html" class="sidebar-item">🐚 対話</a>
+        <a href="/commands/management.html" class="sidebar-item">🔧 管理</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <a href="/commands/">Commands</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">実行コマンド</span>
+      </nav>
+
+      <h1>⚡ 実行コマンド</h1>
+      <p class="lead">MCPサーバーのスキャン、ツール実行、プロキシ起動など5つの実行コマンド</p>
+
+      <h2 id="scan">scan (s) - MCPサーバースキャン</h2>
+      <p><strong>用途</strong>: MCPサーバーをスキャンしてJSON-RPCトラフィックをキャプチャ</p>
+
+      <h3>基本使用法</h3>
+      <pre><code>pfscan scan start --id time    # 特定コネクター
+pfscan s start --all           # 全コネクター</code></pre>
+
+      <h3>主なオプション</h3>
+      <table>
+        <thead><tr><th>オプション</th><th>説明</th></tr></thead>
+        <tbody>
+          <tr><td><code>--id &lt;connector&gt;</code></td><td>コネクターID指定</td></tr>
+          <tr><td><code>--all</code></td><td>全コネクターをスキャン</td></tr>
+          <tr><td><code>--method &lt;name&gt;</code></td><td>特定メソッドのみ実行</td></tr>
+          <tr><td><code>--session &lt;id&gt;</code></td><td>セッションID指定</td></tr>
+          <tr><td><code>--timeout &lt;sec&gt;</code></td><td>タイムアウト秒数</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="tool">tool - ツール操作</h2>
+      <p><strong>用途</strong>: MCPツールの一覧表示・詳細確認・実行</p>
+
+      <h3>サブコマンド</h3>
+      <pre><code># ツール一覧
+pfscan tool ls &lt;connector&gt;
+
+# ツール詳細（スキーマ表示）
+pfscan tool show &lt;connector&gt; &lt;tool-name&gt;
+
+# ツール実行
+pfscan tool call &lt;connector&gt; &lt;tool&gt; --args '{}'</code></pre>
+
+      <h3>実行例</h3>
+      <pre><code># 時刻取得
+pfscan tool call time get_current_time --args '{}'
+
+# 天気予報取得
+pfscan tool call weather get_forecast --args '{"location":"Tokyo"}'</code></pre>
+
+      <h2 id="proxy">proxy - MCPプロキシサーバー</h2>
+      <p><strong>用途</strong>: 複数MCPサーバーを統合プロキシとして起動</p>
+
+      <h3>基本使用法</h3>
+      <pre><code>pfscan proxy start --all                      # 全コネクター
+pfscan proxy start --connectors time,weather  # 特定コネクター
+pfscan proxy start --port 3000                # ポート指定</code></pre>
+
+      <h3>Claude Desktop連携</h3>
+      <pre><code>{
+  "mcpServers": {
+    "proofscan-proxy": {
+      "command": "pfscan",
+      "args": ["proxy", "start", "--all"]
+    }
+  }
+}</code></pre>
+
+      <h2 id="serve">serve - HTTPゲートウェイ</h2>
+      <p><strong>用途</strong>: Protocol Gateway HTTPサーバー起動</p>
+      <pre><code>pfscan serve --port 8080
+pfscan serve --host 0.0.0.0</code></pre>
+
+      <h2 id="monitor">monitor - Web監視UI</h2>
+      <p><strong>用途</strong>: ブラウザベースの監視UI起動</p>
+      <pre><code>pfscan monitor
+pfscan monitor --port 3001</code></pre>
+
+      <style>
+        .lead {
+          font-size: 18px;
+          color: var(--text-secondary);
+          margin-bottom: 32px;
+        }
+      </style>
+    </main>
+
+    <aside class="docs-toc"></aside>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ProofScan観測コマンド - view, tree, rpc, status, summary, analyze の完全ガイド">
+  <title>観測コマンド - ProofScan</title>
+  <link rel="stylesheet" href="/css/docs.css">
+</head>
+<body>
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo"><span>🔍</span><span>ProofScan</span></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/" class="active">Commands</a>
+          <a href="/docs/">Docs</a>
+          <a href="/examples/">Examples</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search commands...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link"><span>⭐</span><span>GitHub</span></a>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">コマンドカテゴリ</div>
+        <a href="/commands/" class="sidebar-item">すべて</a>
+        <a href="/commands/observation.html" class="sidebar-item active">📊 観測</a>
+        <a href="/commands/execution.html" class="sidebar-item">⚡ 実行</a>
+        <a href="/commands/interactive.html" class="sidebar-item">🐚 対話</a>
+        <a href="/commands/management.html" class="sidebar-item">🔧 管理</a>
+        <a href="/commands/catalog.html" class="sidebar-item">📦 カタログ</a>
+        <a href="/commands/popl.html" class="sidebar-item">📊 POPL</a>
+        <a href="/commands/plans.html" class="sidebar-item">📝 プラン</a>
+        <a href="/commands/a2a.html" class="sidebar-item">🤖 A2A</a>
+        <a href="/commands/diagnostics.html" class="sidebar-item">🩺 診断</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <a href="/commands/">Commands</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">観測コマンド</span>
+      </nav>
+
+      <h1>📊 観測コマンド</h1>
+      <p class="lead">JSON-RPCイベントとシステム状態を確認するための6つのコマンド</p>
+
+      <h2 id="view">view (v) - イベントタイムライン</h2>
+      <p><strong>用途</strong>: JSON-RPCイベントを時系列で表示</p>
+
+      <h3>基本使用法</h3>
+      <pre><code>pfscan view              # 最新20件のイベント表示
+pfscan v                 # 短縮形
+pfscan                   # デフォルトコマンド（viewと同じ）</code></pre>
+
+      <h3>主なオプション</h3>
+      <table>
+        <thead>
+          <tr><th>オプション</th><th>説明</th><th>例</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>--limit N</code></td>
+            <td>表示件数を指定</td>
+            <td><code>pfscan view --limit 50</code></td>
+          </tr>
+          <tr>
+            <td><code>--since &lt;time&gt;</code></td>
+            <td>指定時間以降のイベント</td>
+            <td><code>pfscan view --since 24h</code><br><code>pfscan view --since 7d</code></td>
+          </tr>
+          <tr>
+            <td><code>--errors</code></td>
+            <td>エラーのみ表示</td>
+            <td><code>pfscan view --errors</code></td>
+          </tr>
+          <tr>
+            <td><code>--method &lt;name&gt;</code></td>
+            <td>メソッド名でフィルタ</td>
+            <td><code>pfscan view --method tools</code></td>
+          </tr>
+          <tr>
+            <td><code>--connector &lt;id&gt;</code></td>
+            <td>コネクターでフィルタ</td>
+            <td><code>pfscan view --connector time</code></td>
+          </tr>
+          <tr>
+            <td><code>--session &lt;id&gt;</code></td>
+            <td>セッションでフィルタ</td>
+            <td><code>pfscan view --session abc123</code></td>
+          </tr>
+          <tr>
+            <td><code>-f, --follow</code></td>
+            <td>リアルタイム監視</td>
+            <td><code>pfscan view -f</code></td>
+          </tr>
+          <tr>
+            <td><code>--fulltime</code></td>
+            <td>完全なタイムスタンプ表示</td>
+            <td><code>pfscan view --fulltime</code></td>
+          </tr>
+          <tr>
+            <td><code>--pairs</code></td>
+            <td>リクエスト/レスポンスペア表示</td>
+            <td><code>pfscan view --pairs</code></td>
+          </tr>
+          <tr>
+            <td><code>--export &lt;file&gt;</code></td>
+            <td>CSV出力</td>
+            <td><code>pfscan view --export events.csv</code></td>
+          </tr>
+          <tr>
+            <td><code>--json</code></td>
+            <td>JSON形式出力</td>
+            <td><code>pfscan view --json</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>出力形式</h3>
+      <pre><code>Time         Sym Dir St Method              Session      Extra
+-------------------------------------------------------------------
+21:01:58.743 → → ✓ initialize            f2442c... lat=269ms
+21:01:59.018 ← ← ✓ initialize            f2442c...
+21:01:59.025 • →   notifications/init... f2442c...
+21:01:59.037 → → ✓ tools/list            f2442c...
+21:01:59.049 ← ← ✓ tools/list            f2442c... lat=12ms size=1.0KB</code></pre>
+
+      <h3>イベントシンボル</h3>
+      <table>
+        <thead><tr><th>シンボル</th><th>意味</th></tr></thead>
+        <tbody>
+          <tr><td>▶</td><td>セッション開始</td></tr>
+          <tr><td>■</td><td>セッション終了</td></tr>
+          <tr><td>→</td><td>リクエスト（Client → Server）</td></tr>
+          <tr><td>←</td><td>レスポンス（Server → Client）</td></tr>
+          <tr><td>•</td><td>通知（Notification）</td></tr>
+          <tr><td>✖</td><td>エラー</td></tr>
+        </tbody>
+      </table>
+
+      <h3>実践例</h3>
+      <pre><code># 過去1時間のイベントを100件表示
+pfscan view --since 1h --limit 100
+
+# エラーのみを詳細タイムスタンプ付きで表示
+pfscan view --errors --fulltime
+
+# 特定コネクターの最新30件
+pfscan view --connector time --limit 30
+
+# リアルタイム監視（特定コネクターのみ）
+pfscan view -f --connector time
+
+# JSON形式でエクスポート
+pfscan view --limit 1000 --json > events.json</code></pre>
+
+      <h2 id="tree">tree (t) - 階層構造表示</h2>
+      <p><strong>用途</strong>: コネクター → セッション → RPC の階層を視覚化</p>
+
+      <h3>基本使用法</h3>
+      <pre><code>pfscan tree              # 全コネクターのツリー表示
+pfscan tree time         # 特定コネクターのみ
+pfscan t                 # 短縮形</code></pre>
+
+      <h3>主なオプション</h3>
+      <table>
+        <thead><tr><th>オプション</th><th>説明</th><th>例</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>--sessions N</code></td>
+            <td>表示セッション数</td>
+            <td><code>pfscan tree --sessions 10</code></td>
+          </tr>
+          <tr>
+            <td><code>--rpc N</code></td>
+            <td>表示RPC数</td>
+            <td><code>pfscan tree --rpc 20</code></td>
+          </tr>
+          <tr>
+            <td><code>--rpc-all</code></td>
+            <td>全RPC表示</td>
+            <td><code>pfscan tree --rpc-all</code></td>
+          </tr>
+          <tr>
+            <td><code>--method &lt;name&gt;</code></td>
+            <td>メソッドでフィルタ</td>
+            <td><code>pfscan tree --method init</code></td>
+          </tr>
+          <tr>
+            <td><code>--status &lt;type&gt;</code></td>
+            <td>ステータスでフィルタ (ok/err/all)</td>
+            <td><code>pfscan tree --status ok</code></td>
+          </tr>
+          <tr>
+            <td><code>--compact</code></td>
+            <td>コンパクト表示（アイコンなし）</td>
+            <td><code>pfscan tree --compact</code></td>
+          </tr>
+          <tr>
+            <td><code>--since &lt;time&gt;</code></td>
+            <td>時間でフィルタ</td>
+            <td><code>pfscan tree --since 24h</code></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>出力例</h3>
+      <pre><code>└── 📦 time
+    ├── 📋 f2442c9b... (2 rpcs, 8 events)
+    │   ├── ↔️ ✓ tools/list (id=2, 12ms)
+    │   └── ↔️ ✓ initialize (id=1, 269ms)
+    └── 📋 3cf5a66e... (2 rpcs, 8 events)
+        ├── ↔️ ✓ tools/list (id=2, 13ms)
+        └── ↔️ ✓ initialize (id=1, 271ms)
+
+1 connector(s), 2 session(s), 4 rpc(s)</code></pre>
+
+      <h2 id="rpc">rpc - RPC詳細表示</h2>
+      <p><strong>用途</strong>: 特定のRPC呼び出しの詳細情報を表示</p>
+
+      <h3>基本使用法</h3>
+      <pre><code>pfscan rpc &lt;rpc-id&gt;                    # RPC ID指定
+pfscan rpc --session abc123 --id 2    # セッション+ID指定
+pfscan rpc --raw                       # 生データ表示</code></pre>
+
+      <h2 id="status">status (st) - システムステータス</h2>
+      <p><strong>用途</strong>: データベースとシステムの状態を確認</p>
+
+      <h3>基本使用法</h3>
+      <pre><code>pfscan status            # システム概要
+pfscan st                # 短縮形
+pfscan status --detailed # 詳細情報
+pfscan status --db       # DB統計のみ</code></pre>
+
+      <h3>表示情報</h3>
+      <ul>
+        <li>データベースサイズとレコード数</li>
+        <li>コネクター数（有効/無効）</li>
+        <li>セッション数</li>
+        <li>RPC呼び出し数</li>
+        <li>イベント総数</li>
+        <li>最終スキャン時刻</li>
+      </ul>
+
+      <h2 id="summary">summary - セッションサマリー</h2>
+      <p><strong>用途</strong>: セッションの要約と能力を表示</p>
+
+      <h3>基本使用法</h3>
+      <pre><code>pfscan summary &lt;session-id&gt;        # セッション要約
+pfscan summary --connector time    # コネクター指定</code></pre>
+
+      <h3>表示情報</h3>
+      <ul>
+        <li>セッション基本情報（ID、開始時刻、継続時間）</li>
+        <li>サーバー情報（名前、バージョン）</li>
+        <li>利用可能なツール一覧</li>
+        <li>プロンプト一覧</li>
+        <li>リソース一覧</li>
+        <li>RPC統計（成功/失敗、レイテンシ）</li>
+      </ul>
+
+      <h2 id="analyze">analyze - ツール使用分析</h2>
+      <p><strong>用途</strong>: ツールの使用状況を分析</p>
+
+      <h3>基本使用法</h3>
+      <pre><code>pfscan analyze                     # 全ツール分析
+pfscan analyze --connector time    # 特定コネクター
+pfscan analyze --verbose           # 詳細統計</code></pre>
+
+      <h3>分析内容</h3>
+      <ul>
+        <li>ツール別呼び出し回数</li>
+        <li>平均レイテンシ</li>
+        <li>成功率</li>
+        <li>最頻使用時間帯</li>
+        <li>引数パターン分析</li>
+      </ul>
+
+      <h2 id="tips">使用のヒント</h2>
+
+      <div class="note tip">
+        <div class="note-title">💡 パフォーマンス監視</div>
+        <p>レイテンシが高いRPCを特定：</p>
+        <pre><code>pfscan view --since 24h | grep "lat=[0-9]\{3,\}ms"</code></pre>
+      </div>
+
+      <div class="note tip">
+        <div class="note-title">💡 エラー追跡</div>
+        <p>エラーをリアルタイムで監視：</p>
+        <pre><code>pfscan view -f --errors --fulltime</code></pre>
+      </div>
+
+      <div class="note tip">
+        <div class="note-title">💡 セッション比較</div>
+        <p>複数セッションのRPC数を比較：</p>
+        <pre><code>pfscan tree --rpc-all | grep "rpcs"</code></pre>
+      </div>
+
+      <style>
+        .lead {
+          font-size: 18px;
+          color: var(--text-secondary);
+          margin-bottom: 32px;
+        }
+      </style>
+    </main>
+
+    <aside class="docs-toc">
+      <div class="toc-title">On This Page</div>
+      <a href="#view" class="toc-link">view - イベントタイムライン</a>
+      <a href="#tree" class="toc-link">tree - 階層構造</a>
+      <a href="#rpc" class="toc-link">rpc - RPC詳細</a>
+      <a href="#status" class="toc-link">status - システム状態</a>
+      <a href="#summary" class="toc-link">summary - セッション要約</a>
+      <a href="#analyze" class="toc-link">analyze - ツール分析</a>
+      <a href="#tips" class="toc-link">使用のヒント</a>
+    </aside>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

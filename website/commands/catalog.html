@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>カタログ・レジストリコマンド – ProofScan</title>
+    <meta name="description" content="ProofScanのMCPサーバーカタログとコネクタ管理コマンドのリファレンス">
+    <link rel="stylesheet" href="../css/docs.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container">
+            <a href="../index.html" class="logo">
+                <span class="logo-icon">🔍</span>
+                <span>ProofScan</span>
+            </a>
+            <nav class="main-nav">
+                <a href="../index.html">ホーム</a>
+                <a href="../docs/index.html">ドキュメント</a>
+                <a href="index.html" class="active">コマンド</a>
+                <a href="../examples/index.html">実行例</a>
+                <a href="https://github.com/proofofprotocol/proofscan" target="_blank">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="page-layout">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-title">コマンドカテゴリ</div>
+                    <a href="index.html">概要</a>
+                    <a href="execution.html">実行コマンド</a>
+                    <a href="observation.html">観測コマンド</a>
+                    <a href="config.html">設定コマンド</a>
+                    <a href="catalog.html" class="active">カタログ</a>
+                    <a href="agent.html">A2Aエージェント</a>
+                    <a href="popl.html">POPL</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <nav class="breadcrumb">
+                <a href="../index.html">ホーム</a>
+                <span class="separator">/</span>
+                <a href="index.html">コマンド</a>
+                <span class="separator">/</span>
+                <span>カタログ</span>
+            </nav>
+
+            <article>
+                <h1>カタログ・レジストリコマンド</h1>
+                <p class="lead">MCPサーバーの検索、インストール、コネクタ管理</p>
+
+                <!-- catalog コマンド -->
+                <section id="catalog">
+                    <h2><code>catalog</code> - MCPサーバーカタログ</h2>
+                    <p>公開されているMCPサーバーを検索・インストールします。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="catalog-search"><code>catalog search</code></h4>
+                    <p>MCPサーバーを検索します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan catalog search time
+pfscan catalog search weather
+pfscan catalog search filesystem</code></pre>
+                    </div>
+
+                    <h4 id="catalog-view"><code>catalog view</code></h4>
+                    <p>MCPサーバーの詳細を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan catalog view @modelcontextprotocol/server-time
+pfscan catalog view @modelcontextprotocol/server-time --json</code></pre>
+                    </div>
+
+                    <h4 id="catalog-install"><code>catalog install</code></h4>
+                    <p>MCPサーバーをインストールして設定に追加します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># npmパッケージをインストール
+pfscan catalog install @modelcontextprotocol/server-time --id time
+
+# カスタムID指定
+pfscan catalog install mcp-server-weather --id my-weather</code></pre>
+                    </div>
+
+                    <h4 id="catalog-sources"><code>catalog sources</code></h4>
+                    <p>カタログソースを管理します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ソース一覧
+pfscan catalog sources
+
+# ソース追加
+pfscan catalog sources add --url https://registry.example.com/catalog.json
+
+# ソース削除
+pfscan catalog sources remove --url https://registry.example.com/catalog.json</code></pre>
+                    </div>
+
+                    <h3>使用例</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 1. 検索
+pfscan catalog search time
+
+# 2. 詳細確認
+pfscan catalog view @modelcontextprotocol/server-time
+
+# 3. インストール
+pfscan catalog install @modelcontextprotocol/server-time --id time
+
+# 4. 動作確認
+pfscan scan start --id time</code></pre>
+                    </div>
+                </section>
+
+                <!-- connectors コマンド -->
+                <section id="connectors">
+                    <h2><code>connectors</code> - コネクタ管理</h2>
+                    <p>MCPサーバー接続設定（コネクタ）を管理します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="connectors-list"><code>connectors list</code></h4>
+                    <p>登録されているコネクタの一覧を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan connectors list
+pfscan connectors list --json</code></pre>
+                    </div>
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>Connectors:
+  time       ✓ enabled   stdio  npx -y @modelcontextprotocol/server-time
+  weather    ✓ enabled   stdio  npx -y mcp-server-weather
+  inscribe   ✗ disabled  stdio  npx -y @proofofprotocol/inscribe-mcp-server</code></pre>
+                    </div>
+
+                    <h4 id="connectors-show"><code>connectors show</code></h4>
+                    <p>コネクタの詳細情報を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan connectors show --id time
+pfscan connectors show --id time --json</code></pre>
+                    </div>
+
+                    <h4 id="connectors-add"><code>connectors add</code></h4>
+                    <p>新しいコネクタを追加します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># stdio トランスポート
+pfscan connectors add --id myserver --stdio "npx -y mcp-server"
+
+# カスタム引数付き
+pfscan connectors add --id myserver --stdio "uvx mcp-server --port 3000"</code></pre>
+                    </div>
+
+                    <h4 id="connectors-enable"><code>connectors enable/disable</code></h4>
+                    <p>コネクタの有効/無効を切り替えます。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan connectors enable --id time
+pfscan connectors disable --id time</code></pre>
+                    </div>
+
+                    <h4 id="connectors-remove"><code>connectors remove</code></h4>
+                    <p>コネクタを削除します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan connectors remove --id time</code></pre>
+                    </div>
+
+                    <h4 id="connectors-import"><code>connectors import</code></h4>
+                    <p>Claude Desktopやmcp.soの設定からコネクタをインポートします。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ファイルからインポート
+pfscan connectors import --from mcpServers --file config.json
+
+# 標準入力からインポート
+cat claude_desktop_config.json | pfscan connectors import --from mcpServers --stdin
+
+# 特定のJSONキーを指定
+cat config.json | pfscan connectors import --from mcpServers --stdin --key mcpServers</code></pre>
+                    </div>
+
+                    <p><strong>インポート形式：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>{
+  "mcpServers": {
+    "time": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-time"]
+    },
+    "weather": {
+      "command": "uvx",
+      "args": ["mcp-server-weather"]
+    }
+  }
+}</code></pre>
+                    </div>
+                </section>
+
+                <!-- registry コマンド -->
+                <section id="registry">
+                    <h2><code>registry</code> - ローカルコネクタ探索</h2>
+                    <p>ローカルにインストール済みのMCPサーバーを探索します。</p>
+
+                    <h3>基本的な使い方</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ローカルレジストリをスキャン
+pfscan registry scan
+
+# 検出されたサーバーを表示
+pfscan registry list
+
+# JSON形式で出力
+pfscan registry list --json</code></pre>
+                    </div>
+
+                    <h3>検出対象</h3>
+                    <ul>
+                        <li>グローバルにインストールされたnpmパッケージ</li>
+                        <li>ユーザーディレクトリのPythonパッケージ</li>
+                        <li>Claude Desktop設定ファイル</li>
+                        <li>mcp.so設定ファイル</li>
+                    </ul>
+                </section>
+
+                <!-- runners コマンド -->
+                <section id="runners">
+                    <h2><code>runners</code> - パッケージランナー管理</h2>
+                    <p>npx、uvxなどのパッケージランナーを管理します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="runners-list"><code>runners list</code></h4>
+                    <p>使用可能なランナーの一覧を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan runners list</code></pre>
+                    </div>
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>Package Runners:
+  npx    ✓ available    /usr/local/bin/npx    (npm 9.6.7)
+  uvx    ✓ available    /usr/local/bin/uvx    (uv 0.1.2)
+  bunx   ✗ not found</code></pre>
+                    </div>
+
+                    <h4 id="runners-check"><code>runners check</code></h4>
+                    <p>特定のランナーの詳細を確認します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan runners check npx
+pfscan runners check uvx --json</code></pre>
+                    </div>
+
+                    <h3>サポートされるランナー</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ランナー</th>
+                                <th>説明</th>
+                                <th>インストール方法</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>npx</code></td>
+                                <td>Node.js パッケージランナー</td>
+                                <td>Node.jsに付属</td>
+                            </tr>
+                            <tr>
+                                <td><code>uvx</code></td>
+                                <td>Python パッケージランナー</td>
+                                <td><code>pip install uv</code></td>
+                            </tr>
+                            <tr>
+                                <td><code>bunx</code></td>
+                                <td>Bun パッケージランナー</td>
+                                <td><a href="https://bun.sh">bun.sh</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- sessions コマンド -->
+                <section id="sessions">
+                    <h2><code>sessions</code> - セッション管理</h2>
+                    <p>スキャンセッションを管理します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="sessions-list"><code>sessions list</code></h4>
+                    <p>セッションの一覧を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 全セッション
+pfscan sessions list
+
+# コネクタでフィルタ
+pfscan sessions list --connector time
+
+# 最新N件
+pfscan sessions list --last 10
+
+# JSON形式
+pfscan sessions list --json</code></pre>
+                    </div>
+
+                    <h4 id="sessions-show"><code>sessions show</code></h4>
+                    <p>セッションの詳細を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan sessions show --id f2442c9b
+pfscan sessions show --id abc --json  # 部分IDも使用可能</code></pre>
+                    </div>
+
+                    <h4 id="sessions-prune"><code>sessions prune</code></h4>
+                    <p>古いセッションを削除します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 日付より前のセッションを削除
+pfscan sessions prune --before 2026-01-01
+
+# 各コネクタで最新N件を保持
+pfscan sessions prune --keep-last 50
+
+# 実際に削除（デフォルトはドライラン）
+pfscan sessions prune --keep-last 50 --yes</code></pre>
+                    </div>
+                </section>
+
+                <!-- ワークフロー例 -->
+                <section id="workflows">
+                    <h2>よくあるワークフロー</h2>
+
+                    <h3>初回セットアップ</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 1. 設定を初期化
+pfscan config init
+
+# 2. Claude Desktop設定をインポート
+cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | \
+  pfscan connectors import --from mcpServers --stdin
+
+# 3. 確認
+pfscan connectors list
+pfscan status</code></pre>
+                    </div>
+
+                    <h3>新しいMCPサーバーの追加</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># オプション A: カタログから検索してインストール
+pfscan catalog search weather
+pfscan catalog install mcp-server-weather --id weather
+
+# オプション B: 手動で追加
+pfscan connectors add --id weather --stdio "npx -y mcp-server-weather"
+
+# オプション C: Catalog経由で自動セットアップ
+pfscan catalog install @modelcontextprotocol/server-time --id time</code></pre>
+                    </div>
+
+                    <h3>メンテナンス</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># コネクタ一覧を確認
+pfscan connectors list
+
+# 使っていないコネクタを無効化
+pfscan connectors disable --id old-server
+
+# 古いセッションを削除
+pfscan sessions prune --keep-last 30 --yes
+
+# システムステータス確認
+pfscan status</code></pre>
+                    </div>
+                </section>
+
+                <!-- よくある質問 -->
+                <section id="faq">
+                    <h2>よくある質問</h2>
+
+                    <h3>Q. カタログでサーバーが見つからない</h3>
+                    <p><strong>A.</strong> カタログソースを追加するか、手動でコネクタを追加してください：</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan connectors add --id myserver --stdio "npx -y my-mcp-server"</code></pre>
+                    </div>
+
+                    <h3>Q. コネクタが動作しない</h3>
+                    <p><strong>A.</strong> 以下を確認してください：</p>
+                    <ul>
+                        <li>コネクタが有効になっているか: <code>pfscan connectors list</code></li>
+                        <li>コマンドが正しいか: <code>pfscan connectors show --id &lt;id&gt;</code></li>
+                        <li>ランナーが利用可能か: <code>pfscan runners list</code></li>
+                        <li>手動でテスト: <code>pfscan scan start --id &lt;id&gt;</code></li>
+                    </ul>
+
+                    <h3>Q. Claude Desktop設定をインポートできない</h3>
+                    <p><strong>A.</strong> 設定ファイルのパスと形式を確認してください：</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># macOS
+cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | \
+  pfscan connectors import --from mcpServers --stdin
+
+# Windows
+type %APPDATA%\Claude\claude_desktop_config.json | \
+  pfscan connectors import --from mcpServers --stdin</code></pre>
+                    </div>
+                </section>
+
+                <!-- 関連リンク -->
+                <section id="related">
+                    <h2>関連情報</h2>
+                    <ul>
+                        <li><a href="../docs/mcp-setup.html">MCPサーバーセットアップガイド</a></li>
+                        <li><a href="execution.html">実行コマンド</a> - scan, tool</li>
+                        <li><a href="config.html">設定コマンド</a> - config, secrets</li>
+                        <li><a href="https://github.com/modelcontextprotocol/servers">公式MCPサーバー一覧</a></li>
+                    </ul>
+                </section>
+            </article>
+        </main>
+
+        <aside class="toc-sidebar">
+            <!-- 目次は main.js で自動生成されます -->
+        </aside>
+    </div>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>ProofScan</h3>
+                    <p>MCP通信の完全可視化ツール</p>
+                </div>
+                <div class="footer-section">
+                    <h3>ドキュメント</h3>
+                    <ul>
+                        <li><a href="../docs/guide.html">ユーザーガイド</a></li>
+                        <li><a href="../docs/shell.html">シェルモード</a></li>
+                        <li><a href="../docs/proxy.html">プロキシガイド</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>コミュニティ</h3>
+                    <ul>
+                        <li><a href="https://github.com/proofofprotocol/proofscan">GitHub</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/issues">Issues</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/discussions">Discussions</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Proof of Protocol. MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../js/main.js"></script>
+</body>
+</html>

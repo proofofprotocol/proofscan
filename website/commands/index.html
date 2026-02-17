@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ProofScan全コマンドリファレンス - 27メインコマンド、100+サブコマンドの完全ガイド">
+  <title>コマンドリファレンス - ProofScan</title>
+  <link rel="stylesheet" href="/css/docs.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo">
+          <span>🔍</span>
+          <span>ProofScan</span>
+        </a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/" class="active">Commands</a>
+          <a href="/docs/">Docs</a>
+          <a href="/examples/">Examples</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search commands...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
+          <span>⭐</span>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="docs-layout">
+    <!-- Sidebar -->
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">コマンドカテゴリ</div>
+        <a href="/commands/" class="sidebar-item active">すべて</a>
+        <a href="/commands/observation.html" class="sidebar-item">📊 観測</a>
+        <a href="/commands/execution.html" class="sidebar-item">⚡ 実行</a>
+        <a href="/commands/interactive.html" class="sidebar-item">🐚 対話</a>
+        <a href="/commands/management.html" class="sidebar-item">🔧 管理</a>
+        <a href="/commands/catalog.html" class="sidebar-item">📦 カタログ</a>
+        <a href="/commands/popl.html" class="sidebar-item">📊 POPL</a>
+        <a href="/commands/plans.html" class="sidebar-item">📝 プラン</a>
+        <a href="/commands/a2a.html" class="sidebar-item">🤖 A2A</a>
+        <a href="/commands/diagnostics.html" class="sidebar-item">🩺 診断</a>
+        
+        <div class="sidebar-category">リソース</div>
+        <a href="/docs/guide.html" class="sidebar-item">ユーザーガイド</a>
+        <a href="/examples/" class="sidebar-item">実行例</a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">Commands</span>
+      </nav>
+
+      <h1>コマンドリファレンス</h1>
+      <p class="lead">ProofScanの全27メインコマンドと100以上のサブコマンド・オプションの完全リファレンス</p>
+
+      <div class="note info">
+        <div class="note-title">💡 ヒント</div>
+        <p>各コマンドの詳細ヘルプは <code>pfscan help &lt;command&gt;</code> で確認できます。</p>
+      </div>
+
+      <h2 id="quick-reference">クイックリファレンス</h2>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>カテゴリ</th>
+            <th>コマンド数</th>
+            <th>主な用途</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="/commands/observation.html">📊 観測</a></td>
+            <td>6</td>
+            <td>イベント表示、ツリー構造、ステータス確認</td>
+          </tr>
+          <tr>
+            <td><a href="/commands/execution.html">⚡ 実行</a></td>
+            <td>5</td>
+            <td>スキャン、ツール実行、プロキシ起動</td>
+          </tr>
+          <tr>
+            <td><a href="/commands/interactive.html">🐚 対話</a></td>
+            <td>1</td>
+            <td>インタラクティブシェル（REPL）</td>
+          </tr>
+          <tr>
+            <td><a href="/commands/management.html">🔧 管理</a></td>
+            <td>5</td>
+            <td>設定、コネクター、セッション管理</td>
+          </tr>
+          <tr>
+            <td><a href="/commands/catalog.html">📦 カタログ</a></td>
+            <td>3</td>
+            <td>MCPサーバー検索・インストール</td>
+          </tr>
+          <tr>
+            <td><a href="/commands/popl.html">📊 POPL</a></td>
+            <td>1</td>
+            <td>監査証跡管理</td>
+          </tr>
+          <tr>
+            <td><a href="/commands/plans.html">📝 プラン</a></td>
+            <td>1</td>
+            <td>自動テストプラン</td>
+          </tr>
+          <tr>
+            <td><a href="/commands/a2a.html">🤖 A2A</a></td>
+            <td>2</td>
+            <td>エージェント管理</td>
+          </tr>
+          <tr>
+            <td><a href="/commands/diagnostics.html">🩺 診断</a></td>
+            <td>3</td>
+            <td>問題診断・ログ表示</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="common-patterns">よく使うパターン</h2>
+
+      <h3>基本的なワークフロー</h3>
+      <pre><code># 1. 設定初期化
+pfscan config init
+
+# 2. MCPサーバー追加
+pfscan catalog install @modelcontextprotocol/server-time --id time
+
+# 3. スキャン実行
+pfscan scan start --id time
+
+# 4. 結果確認
+pfscan view          # イベントタイムライン
+pfscan tree          # 階層構造
+pfscan status        # システム状態</code></pre>
+
+      <h3>リアルタイム監視</h3>
+      <pre><code># イベントをリアルタイム表示
+pfscan view -f
+
+# 特定コネクターのみ監視
+pfscan view -f --connector time
+
+# エラーのみ監視
+pfscan view -f --errors</code></pre>
+
+      <h3>プロキシモード</h3>
+      <pre><code># 全コネクターでプロキシ起動
+pfscan proxy start --all
+
+# 特定コネクターのみ
+pfscan proxy start --connectors time,weather
+
+# Claude Desktopから利用
+# claude_desktop_config.json に追加:
+{
+  "mcpServers": {
+    "proofscan-proxy": {
+      "command": "pfscan",
+      "args": ["proxy", "start", "--all"]
+    }
+  }
+}</code></pre>
+
+      <h2 id="global-options">グローバルオプション</h2>
+      
+      <p>全コマンドで使用可能なオプション：</p>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>オプション</th>
+            <th>説明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>-c, --config &lt;path&gt;</code></td>
+            <td>設定ファイルパスを指定</td>
+          </tr>
+          <tr>
+            <td><code>--json</code></td>
+            <td>JSON形式で出力</td>
+          </tr>
+          <tr>
+            <td><code>-v, --verbose</code></td>
+            <td>詳細出力を有効化</td>
+          </tr>
+          <tr>
+            <td><code>-h, --help</code></td>
+            <td>ヘルプを表示</td>
+          </tr>
+          <tr>
+            <td><code>-V, --version</code></td>
+            <td>バージョンを表示</td>
+          </tr>
+          <tr>
+            <td><code>--no-color</code></td>
+            <td>色を無効化</td>
+          </tr>
+          <tr>
+            <td><code>--lang &lt;code&gt;</code></td>
+            <td>言語を指定 (en/ja)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="command-aliases">コマンドエイリアス</h2>
+      
+      <p>ProofScanには複数のコマンドエイリアスがあります：</p>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>フルネーム</th>
+            <th>エイリアス</th>
+            <th>説明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>proofscan</code></td>
+            <td><code>pfscan</code>, <code>pfs</code></td>
+            <td>メインコマンド</td>
+          </tr>
+          <tr>
+            <td><code>pfscan shell</code></td>
+            <td><code>psh</code></td>
+            <td>シェル起動</td>
+          </tr>
+          <tr>
+            <td><code>pfscan view</code></td>
+            <td><code>pfscan v</code></td>
+            <td>イベント表示</td>
+          </tr>
+          <tr>
+            <td><code>pfscan tree</code></td>
+            <td><code>pfscan t</code></td>
+            <td>ツリー表示</td>
+          </tr>
+          <tr>
+            <td><code>pfscan scan</code></td>
+            <td><code>pfscan s</code></td>
+            <td>スキャン実行</td>
+          </tr>
+          <tr>
+            <td><code>pfscan status</code></td>
+            <td><code>pfscan st</code></td>
+            <td>ステータス表示</td>
+          </tr>
+          <tr>
+            <td><code>pfscan config</code></td>
+            <td><code>pfscan c</code></td>
+            <td>設定管理</td>
+          </tr>
+          <tr>
+            <td><code>pfscan archive</code></td>
+            <td><code>pfscan a</code></td>
+            <td>アーカイブ管理</td>
+          </tr>
+          <tr>
+            <td><code>pfscan catalog</code></td>
+            <td><code>pfscan cat</code></td>
+            <td>カタログ操作</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 id="next-steps">次のステップ</h2>
+      
+      <div class="features-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; margin-top: 24px;">
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3 class="feature-title"><a href="/commands/observation.html">観測コマンド</a></h3>
+          <p class="feature-description">view, tree, rpc, status, summary, analyze</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3 class="feature-title"><a href="/commands/execution.html">実行コマンド</a></h3>
+          <p class="feature-description">scan, tool, proxy, serve, monitor</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🐚</div>
+          <h3 class="feature-title"><a href="/commands/interactive.html">対話モード</a></h3>
+          <p class="feature-description">shell (psh) - インタラクティブREPL</p>
+        </div>
+        
+        <div class="feature-card">
+          <div class="feature-icon">🔧</div>
+          <h3 class="feature-title"><a href="/commands/management.html">管理コマンド</a></h3>
+          <p class="feature-description">config, connectors, sessions, secrets, archive</p>
+        </div>
+      </div>
+
+      <style>
+        .lead {
+          font-size: 18px;
+          color: var(--text-secondary);
+          margin-bottom: 32px;
+        }
+        .feature-card {
+          background: white;
+          padding: 24px;
+          border-radius: 12px;
+          border: 1px solid var(--border-light);
+          transition: all 0.3s;
+        }
+        .feature-card:hover {
+          transform: translateY(-4px);
+          box-shadow: var(--shadow-lg);
+          border-color: var(--primary);
+        }
+        .feature-icon {
+          font-size: 32px;
+          margin-bottom: 12px;
+        }
+        .feature-title {
+          font-size: 18px;
+          font-weight: 600;
+          margin-bottom: 8px;
+          color: var(--text-primary);
+        }
+        .feature-title a {
+          color: inherit;
+          text-decoration: none;
+        }
+        .feature-title a:hover {
+          color: var(--primary);
+        }
+        .feature-description {
+          color: var(--text-secondary);
+          font-size: 14px;
+          line-height: 1.6;
+        }
+      </style>
+    </main>
+
+    <!-- TOC -->
+    <aside class="docs-toc">
+      <div class="toc-title">On This Page</div>
+      <a href="#quick-reference" class="toc-link">クイックリファレンス</a>
+      <a href="#common-patterns" class="toc-link">よく使うパターン</a>
+      <a href="#global-options" class="toc-link">グローバルオプション</a>
+      <a href="#command-aliases" class="toc-link">コマンドエイリアス</a>
+      <a href="#next-steps" class="toc-link">次のステップ</a>
+    </aside>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

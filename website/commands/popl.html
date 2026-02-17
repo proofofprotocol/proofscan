@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POPL・プルーフコマンド – ProofScan</title>
+    <meta name="description" content="ProofScanのPOPL（Public Observable Proof Ledger）とバリデーションプラン管理コマンドのリファレンス">
+    <link rel="stylesheet" href="../css/docs.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container">
+            <a href="../index.html" class="logo">
+                <span class="logo-icon">🔍</span>
+                <span>ProofScan</span>
+            </a>
+            <nav class="main-nav">
+                <a href="../index.html">ホーム</a>
+                <a href="../docs/index.html">ドキュメント</a>
+                <a href="index.html" class="active">コマンド</a>
+                <a href="../examples/index.html">実行例</a>
+                <a href="https://github.com/proofofprotocol/proofscan" target="_blank">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="page-layout">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-title">コマンドカテゴリ</div>
+                    <a href="index.html">概要</a>
+                    <a href="execution.html">実行コマンド</a>
+                    <a href="observation.html">観測コマンド</a>
+                    <a href="config.html">設定コマンド</a>
+                    <a href="catalog.html">カタログ</a>
+                    <a href="agent.html">A2Aエージェント</a>
+                    <a href="popl.html" class="active">POPL</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <nav class="breadcrumb">
+                <a href="../index.html">ホーム</a>
+                <span class="separator">/</span>
+                <a href="index.html">コマンド</a>
+                <span class="separator">/</span>
+                <span>POPL</span>
+            </nav>
+
+            <article>
+                <h1>POPL・プルーフコマンド</h1>
+                <p class="lead">公開安全な監査証跡とバリデーションプラン管理</p>
+
+                <!-- POPL概要 -->
+                <section id="overview">
+                    <h2>POPLとは？</h2>
+                    <p><strong>POPL (Public Observable Proof Ledger)</strong> は、MCPセッションから公開安全な監査証跡を生成します。すべての機密情報（パス、シークレット、PII）は自動的にサニタイズされます。</p>
+
+                    <h3>主な特徴</h3>
+                    <ul>
+                        <li>🔒 <strong>自動サニタイズ:</strong> シークレット、パス、PIIを削除</li>
+                        <li>📊 <strong>セッションメタデータ:</strong> セッション構造、タイミング、ステータスを保持</li>
+                        <li>🔐 <strong>コンテンツハッシュ:</strong> RPCペイロードをSHA-256ハッシュに置換</li>
+                        <li>📝 <strong>再現可能:</strong> 生成ログを含む</li>
+                        <li>🌐 <strong>公開安全:</strong> バグレポートや公開共有に安全</li>
+                    </ul>
+
+                    <h3>用途</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>用途</th>
+                                <th>説明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>バグレポート</strong></td>
+                                <td>シークレットを露出せずに実行証拠を含める</td>
+                            </tr>
+                            <tr>
+                                <td><strong>監査</strong></td>
+                                <td>ツール使用と権限を追跡</td>
+                            </tr>
+                            <tr>
+                                <td><strong>ドキュメント</strong></td>
+                                <td>再現可能な例を生成</td>
+                            </tr>
+                            <tr>
+                                <td><strong>コンプライアンス</strong></td>
+                                <td>規制環境向けの監査証跡を作成</td>
+                            </tr>
+                            <tr>
+                                <td><strong>デバッグ</strong></td>
+                                <td>セキュリティリスクなしでセッション詳細を共有</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
+
+                <!-- popl コマンド -->
+                <section id="popl">
+                    <h2><code>popl</code> - POPL管理</h2>
+                    <p>公開安全な監査証跡を作成・管理します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="popl-init"><code>popl init</code></h4>
+                    <p>POPLディレクトリを初期化します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>cd /path/to/project
+pfscan popl init</code></pre>
+                    </div>
+                    <p>これにより以下が作成されます：</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>.popl/
+├── README.md         # POPLドキュメント
+└── entries/          # POPLエントリの保存場所</code></pre>
+                    </div>
+
+                    <h4 id="popl-session"><code>popl session</code></h4>
+                    <p>セッションからPOPLエントリを作成します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 基本的な使用
+pfscan popl session --session &lt;session-id&gt;
+
+# タイトル付き
+pfscan popl session --session abc123 --title "Time Server Test"
+
+# 説明付き
+pfscan popl session --session abc123 \
+  --title "Weather API Integration" \
+  --description "Testing weather forecast tool"</code></pre>
+                    </div>
+
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>✓ POPL entry created: 20260104-abc123
+
+Entry location:
+  .popl/entries/20260104-abc123/
+
+Files created:
+  POPL.yml              # エントリメタデータ
+  status.json           # セッションサマリー
+  rpc.sanitized.jsonl   # サニタイズ済みRPCイベント
+  validation-run.log    # 生成ログ</code></pre>
+                    </div>
+
+                    <h4 id="popl-list"><code>popl list</code></h4>
+                    <p>POPLエントリの一覧を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan popl list
+pfscan popl list --json</code></pre>
+                    </div>
+
+                    <h4 id="popl-show"><code>popl show</code></h4>
+                    <p>POPLエントリの詳細を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># エントリ詳細
+pfscan popl show 20260104-abc123
+
+# 特定のアーティファクト
+pfscan popl show 20260104-abc123 status
+pfscan popl show 20260104-abc123 popl
+pfscan popl show 20260104-abc123 log</code></pre>
+                    </div>
+
+                    <h3>POPLエントリの構造</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>.popl/entries/20260104-abc123/
+├── POPL.yml              # エントリメタデータと証拠サマリー
+├── status.json           # セッションサマリー（公開安全）
+├── rpc.sanitized.jsonl   # サニタイズ済みRPCイベント
+└── validation-run.log    # 生成ログ</code></pre>
+                    </div>
+
+                    <h3>サニタイゼーション</h3>
+                    <p>POPLは機密データを保護するために自動サニタイゼーションを適用します。</p>
+
+                    <h4>削除される情報</h4>
+                    <ul>
+                        <li><strong>シークレット:</strong> APIキー、トークン、パスワード</li>
+                        <li><strong>ファイルパス:</strong> 絶対パス、ホームディレクトリ、一時ディレクトリ</li>
+                        <li><strong>PII:</strong> 個人を特定できる情報</li>
+                        <li><strong>RPCペイロード:</strong> SHA-256ハッシュに置換</li>
+                    </ul>
+
+                    <h4>保持される情報</h4>
+                    <ul>
+                        <li>セッション構造（コネクタ、タイミング、ステータス）</li>
+                        <li>RPC メソッド名とID</li>
+                        <li>ツール名と呼び出し回数</li>
+                        <li>エラーステータス（詳細メッセージはサニタイズ）</li>
+                        <li>機能（tools、resources、prompts）</li>
+                    </ul>
+                </section>
+
+                <!-- plans コマンド -->
+                <section id="plans">
+                    <h2><code>plans</code> - バリデーションプラン</h2>
+                    <p>MCPサーバーのバリデーションプランを管理・実行します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="plans-list"><code>plans ls</code></h4>
+                    <p>プランの一覧を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan plans ls
+pfscan plans list</code></pre>
+                    </div>
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>Name           Source   Description                Created
+----------------------------------------------------------------
+basic-mcp      manual   Basic MCP validation       2026-01-04
+full-scan      import   Full server scan           2026-01-03</code></pre>
+                    </div>
+
+                    <h4 id="plans-show"><code>plans show</code></h4>
+                    <p>プランの詳細を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan plans show basic-mcp
+pfscan plans show basic-mcp --raw     # 生のYAML
+pfscan plans show basic-mcp --json    # JSON形式</code></pre>
+                    </div>
+
+                    <h4 id="plans-add"><code>plans add</code></h4>
+                    <p>新しいプランを追加します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ファイルから追加
+pfscan plans add myplan --file plan.yaml
+
+# 標準入力から追加
+cat plan.yaml | pfscan plans add myplan --stdin</code></pre>
+                    </div>
+
+                    <p><strong>プランYAML形式：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>version: 1
+name: basic-mcp-validation
+description: Basic MCP server validation
+steps:
+  - mcp: initialize
+  - mcp: tools/list
+  - when: capabilities.resources
+    mcp: resources/list
+  - when: capabilities.prompts
+    mcp: prompts/list</code></pre>
+                    </div>
+
+                    <h4 id="plans-run"><code>plans run</code></h4>
+                    <p>プランを実行します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># コネクタに対して実行
+pfscan plans run basic-mcp --connector time
+
+# オプション付き
+pfscan plans run basic-mcp --connector time --timeout 60
+pfscan plans run basic-mcp --connector time --out ./results
+
+# ドライラン（実行せずにステップを表示）
+pfscan plans run basic-mcp --connector time --dry-run</code></pre>
+                    </div>
+
+                    <p><strong>出力例：</strong></p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>Running plan 'basic-mcp' against connector 'time'...
+
+Run ID: 01KE4ABCD1234
+Status: completed
+Duration: 523ms
+
+Steps:
+  1. [OK] initialize (269ms)
+  2. [OK] tools/list (12ms)
+  3. [SKIP] resources/list (when: capabilities.resources)
+  4. [SKIP] prompts/list (when: capabilities.prompts)
+
+Inventory:
+  Capabilities: tools
+  Tools: 2
+
+Artifacts: ~/.config/proofscan/artifacts/01KE4ABCD1234</code></pre>
+                    </div>
+
+                    <h4 id="plans-runs"><code>plans runs</code></h4>
+                    <p>実行履歴を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan plans runs
+pfscan plans runs --plan basic-mcp    # プランでフィルタ
+pfscan plans runs --limit 50</code></pre>
+                    </div>
+
+                    <h4 id="plans-run-show"><code>plans run-show</code></h4>
+                    <p>実行の詳細を表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan plans run-show 01KE4ABCD1234
+pfscan plans run-show 01KE4 --json    # 部分IDも使用可能</code></pre>
+                    </div>
+
+                    <h4 id="plans-delete"><code>plans delete</code></h4>
+                    <p>プランを削除します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan plans delete myplan
+pfscan plans delete myplan --force    # 関連する実行も削除</code></pre>
+                    </div>
+
+                    <h4 id="plans-import"><code>plans import</code></h4>
+                    <p>プランをインポートします。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ファイルからインポート（複数ドキュメントYAML対応）
+pfscan plans import --file plans.yaml</code></pre>
+                    </div>
+
+                    <h4 id="plans-export"><code>plans export</code></h4>
+                    <p>プランをエクスポートします。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ファイルにエクスポート
+pfscan plans export myplan --file myplan.yaml
+
+# 標準出力にエクスポート
+pfscan plans export myplan --stdout</code></pre>
+                    </div>
+
+                    <h3>実行アーティファクト</h3>
+                    <p>各プラン実行は <code>~/.config/proofscan/artifacts/&lt;run-id&gt;/</code> にアーティファクトを作成します：</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>meta.json          # 実行メタデータ
+plan.yaml          # 正規化されたプラン定義
+plan.original.yaml # 元のYAML
+run.log            # 人間が読める実行ログ
+results.json       # ステップごとの結果
+inventory.json     # 発見された機能/ツール/リソース/プロンプト</code></pre>
+                    </div>
+                </section>
+
+                <!-- archive コマンド -->
+                <section id="archive">
+                    <h2><code>archive</code> - データ保持管理</h2>
+                    <p>データ保持とクリーンアップを管理します。</p>
+
+                    <h3>サブコマンド</h3>
+
+                    <h4 id="archive-status"><code>archive status</code></h4>
+                    <p>アーカイブステータスを表示します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan archive status</code></pre>
+                    </div>
+
+                    <h4 id="archive-plan"><code>archive plan</code></h4>
+                    <p>アーカイブ/削除される内容を表示します（実際には実行しません）。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>pfscan archive plan</code></pre>
+                    </div>
+
+                    <h4 id="archive-run"><code>archive run</code></h4>
+                    <p>アーカイブを実行します。</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># ドライラン（何が起こるか表示）
+pfscan archive run
+
+# 実際に実行
+pfscan archive run --yes
+
+# 実行してディスク領域を回収
+pfscan archive run --yes --vacuum</code></pre>
+                    </div>
+                </section>
+
+                <!-- ワークフロー例 -->
+                <section id="workflows">
+                    <h2>よくあるワークフロー</h2>
+
+                    <h3>POPL生成ワークフロー</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 1. POPLディレクトリを初期化
+cd /path/to/project
+pfscan popl init
+
+# 2. スキャンを実行
+pfscan scan start --id time
+
+# 3. セッションIDを取得
+pfscan tree
+
+# 4. POPLエントリを作成
+pfscan popl session --session abc123 \
+  --title "Time Server Validation" \
+  --description "Testing time server tools"
+
+# 5. エントリを確認
+pfscan popl list
+pfscan popl show 20260104-abc123</code></pre>
+                    </div>
+
+                    <h3>バリデーションプランワークフロー</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 1. プランを作成
+cat > validation.yaml << 'EOF'
+version: 1
+name: mcp-validation
+description: MCP server validation
+steps:
+  - mcp: initialize
+  - mcp: tools/list
+  - mcp: tools/call
+    tool: get_current_time
+    args: {}
+EOF
+
+# 2. プランを追加
+pfscan plans add mcp-validation --file validation.yaml
+
+# 3. プランを実行
+pfscan plans run mcp-validation --connector time
+
+# 4. 結果を確認
+pfscan plans runs
+pfscan plans run-show &lt;run-id&gt;
+
+# 5. POPLエントリを作成
+pfscan popl session --session &lt;session-id&gt; \
+  --title "MCP Validation Run"</code></pre>
+                    </div>
+
+                    <h3>メンテナンスワークフロー</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 1. ステータス確認
+pfscan status
+pfscan archive status
+
+# 2. アーカイブプランを表示
+pfscan archive plan
+
+# 3. 古いデータをクリーンアップ
+pfscan archive run --yes --vacuum
+
+# 4. ステータス再確認
+pfscan status</code></pre>
+                    </div>
+                </section>
+
+                <!-- ベストプラクティス -->
+                <section id="best-practices">
+                    <h2>ベストプラクティス</h2>
+
+                    <h3>POPL使用時</h3>
+                    <ul>
+                        <li><strong>わかりやすいタイトル:</strong> エントリに説明的なタイトルを付ける</li>
+                        <li><strong>バグレポートに含める:</strong> POPLエントリをバグレポートに添付</li>
+                        <li><strong>定期的なレビュー:</strong> POPLエントリを定期的にレビューして古いものを削除</li>
+                        <li><strong>バージョン管理:</strong> 重要なPOPLエントリをGitで管理</li>
+                    </ul>
+
+                    <h3>バリデーションプラン</h3>
+                    <ul>
+                        <li><strong>段階的なテスト:</strong> 基本的なステップから始めて徐々に拡張</li>
+                        <li><strong>条件付きステップ:</strong> <code>when</code> を使って機能に応じた実行</li>
+                        <li><strong>再利用可能なプラン:</strong> 汎用的なプランを作成して複数のコネクタで使用</li>
+                        <li><strong>CI/CD統合:</strong> プランを自動テストパイプラインに組み込む</li>
+                    </ul>
+
+                    <h3>データ管理</h3>
+                    <ul>
+                        <li><strong>定期的なアーカイブ:</strong> 週次または月次でアーカイブを実行</li>
+                        <li><strong>保持ポリシー:</strong> 適切な保持設定を config.json で設定</li>
+                        <li><strong>ディスク容量監視:</strong> データベースサイズを定期的に確認</li>
+                        <li><strong>重要なセッションをPOPL化:</strong> 削除前に重要なセッションをPOPLエントリとして保存</li>
+                    </ul>
+                </section>
+
+                <!-- よくある質問 -->
+                <section id="faq">
+                    <h2>よくある質問</h2>
+
+                    <h3>Q. POPLエントリは本当に公開安全ですか？</h3>
+                    <p><strong>A.</strong> はい。POPLは以下をすべて削除/ハッシュ化します：</p>
+                    <ul>
+                        <li>APIキー、トークン、パスワード</li>
+                        <li>ファイルパス（絶対パス、ホームディレクトリ）</li>
+                        <li>個人を特定できる情報（PII）</li>
+                        <li>RPCペイロードの内容（SHA-256ハッシュに置換）</li>
+                    </ul>
+                    <p>ただし、念のため公開前にエントリを確認することをお勧めします。</p>
+
+                    <h3>Q. バリデーションプランの実行が失敗する</h3>
+                    <p><strong>A.</strong> 以下を確認してください：</p>
+                    <ul>
+                        <li>コネクタが有効で動作しているか</li>
+                        <li>プランのYAML形式が正しいか</li>
+                        <li>タイムアウト設定が十分か</li>
+                        <li>実行ログ（<code>run.log</code>）を確認</li>
+                    </ul>
+
+                    <h3>Q. アーカイブでデータが失われないか心配</h3>
+                    <p><strong>A.</strong> まずドライランで確認してください：</p>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code># 何が削除されるか確認
+pfscan archive plan
+
+# 重要なセッションをPOPL化
+pfscan popl session --session &lt;important-session-id&gt;
+
+# 安全に実行
+pfscan archive run --yes</code></pre>
+                    </div>
+                </section>
+
+                <!-- 関連リンク -->
+                <section id="related">
+                    <h2>関連情報</h2>
+                    <ul>
+                        <li><a href="../docs/popl.html">POPLガイド</a> - 詳細なドキュメント</li>
+                        <li><a href="../docs/shell.html">シェルモード</a> - @reference でPOPL操作</li>
+                        <li><a href="observation.html">観測コマンド</a> - セッションの確認</li>
+                        <li><a href="execution.html">実行コマンド</a> - scan, tool</li>
+                    </ul>
+                </section>
+            </article>
+        </main>
+
+        <aside class="toc-sidebar">
+            <!-- 目次は main.js で自動生成されます -->
+        </aside>
+    </div>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>ProofScan</h3>
+                    <p>MCP通信の完全可視化ツール</p>
+                </div>
+                <div class="footer-section">
+                    <h3>ドキュメント</h3>
+                    <ul>
+                        <li><a href="../docs/guide.html">ユーザーガイド</a></li>
+                        <li><a href="../docs/shell.html">シェルモード</a></li>
+                        <li><a href="../docs/proxy.html">プロキシガイド</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>コミュニティ</h3>
+                    <ul>
+                        <li><a href="https://github.com/proofofprotocol/proofscan">GitHub</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/issues">Issues</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/discussions">Discussions</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Proof of Protocol. MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../js/main.js"></script>
+</body>
+</html>

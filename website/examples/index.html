@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>実行例 – ProofScan</title>
+    <meta name="description" content="ProofScanの実行例とコマンドデモ">
+    <link rel="stylesheet" href="../css/docs.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="container">
+            <a href="../index.html" class="logo">
+                <span class="logo-icon">🔍</span>
+                <span>ProofScan</span>
+            </a>
+            <nav class="main-nav">
+                <a href="../index.html">ホーム</a>
+                <a href="../docs/index.html">ドキュメント</a>
+                <a href="../commands/index.html">コマンド</a>
+                <a href="index.html" class="active">実行例</a>
+                <a href="https://github.com/proofofprotocol/proofscan" target="_blank">GitHub</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="page-layout">
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-title">実行例</div>
+                    <a href="#quickstart">クイックスタート</a>
+                    <a href="#view">イベント表示</a>
+                    <a href="#tree">階層表示</a>
+                    <a href="#scan">スキャン実行</a>
+                    <a href="#tool">ツール実行</a>
+                    <a href="#proxy">プロキシモード</a>
+                    <a href="#popl">POPL生成</a>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <nav class="breadcrumb">
+                <a href="../index.html">ホーム</a>
+                <span class="separator">/</span>
+                <span>実行例</span>
+            </nav>
+
+            <article>
+                <h1>ProofScan 実行例</h1>
+                <p class="lead">実際のコマンド実行例とその出力</p>
+
+                <!-- クイックスタート -->
+                <section id="quickstart">
+                    <h2>クイックスタート</h2>
+                    <p>ProofScanの基本的な使い方を4ステップで紹介します。</p>
+
+                    <h3>1. 設定の初期化</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan config init
+✓ Configuration initialized at ~/.config/proofscan/config.json</code></pre>
+                    </div>
+
+                    <h3>2. MCPサーバーの追加</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan connectors add --id time --stdio "npx -y @modelcontextprotocol/server-time"
+✓ Connector 'time' added successfully</code></pre>
+                    </div>
+
+                    <h3>3. スキャンの実行</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan scan start --id time
+Starting scan for connector 'time'...
+✓ Scan completed successfully (session: f2442c9b)</code></pre>
+                    </div>
+
+                    <h3>4. 結果の確認</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan tree
+└── 📦 time
+    └── 📋 f2442c9b... (2 rpcs, 8 events)
+        ├── ↔️ ✓ tools/list (id=2, 12ms)
+        └── ↔️ ✓ initialize (id=1, 269ms)</code></pre>
+                    </div>
+                </section>
+
+                <!-- イベント表示 -->
+                <section id="view">
+                    <h2>イベント表示 (<code>view</code>)</h2>
+                    <p>最近のイベントをタイムラインで表示します。</p>
+
+                    <h3>基本的な使用</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan view --limit 5
+Time         Sym Dir St Method              Session      Extra
+-------------------------------------------------------------------
+21:01:58.743 → → ✓ initialize            f2442c... lat=269ms
+21:01:59.018 ← ← ✓ initialize            f2442c...
+21:01:59.025 • →   notifications/initi... f2442c...
+21:01:59.037 → → ✓ tools/list            f2442c...
+21:01:59.049 ← ← ✓ tools/list            f2442c... lat=12ms size=1.0KB</code></pre>
+                    </div>
+
+                    <h3>エラーのみを表示</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan view --errors --fulltime
+Time                      Sym Dir St Method         Session      Extra
+--------------------------------------------------------------------------
+2026-01-04T12:05:23.456Z  ✖ → ✗ tools/call      abc123... err="timeout"
+2026-01-04T12:10:15.789Z  ✖ → ✗ resources/list  def456... err="not_found"</code></pre>
+                    </div>
+
+                    <h3>特定のコネクタをフィルタ</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan view --connector time --limit 10
+Time         Sym Dir St Method              Session      Extra
+-------------------------------------------------------------------
+21:01:58.743 → → ✓ initialize            f2442c... lat=269ms
+21:01:59.018 ← ← ✓ initialize            f2442c...
+21:01:59.037 → → ✓ tools/list            f2442c...
+21:01:59.049 ← ← ✓ tools/list            f2442c... lat=12ms</code></pre>
+                    </div>
+                </section>
+
+                <!-- 階層表示 -->
+                <section id="tree">
+                    <h2>階層表示 (<code>tree</code>)</h2>
+                    <p>コネクタ → セッション → RPCの階層構造を表示します。</p>
+
+                    <h3>全コネクタの表示</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan tree
+└── 📦 time
+    ├── 📋 f2442c9b... (2 rpcs, 8 events)
+    │   ├── ↔️ ✓ tools/list (id=2, 12ms)
+    │   └── ↔️ ✓ initialize (id=1, 269ms)
+    └── 📋 3cf5a66e... (2 rpcs, 8 events)
+        ├── ↔️ ✓ tools/list (id=2, 13ms)
+        └── ↔️ ✓ initialize (id=1, 271ms)
+
+1 connector(s), 2 session(s), 4 rpc(s)</code></pre>
+                    </div>
+
+                    <h3>特定のコネクタの詳細</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan tree time --rpc-all
+└── 📦 time
+    └── 📋 f2442c9b... (2 rpcs, 8 events)
+        Started:  2026-01-04T12:01:58.610Z
+        Ended:    2026-01-04T12:01:59.150Z
+        Duration: 540ms
+        
+        RPCs:
+        ├── ↔️ ✓ initialize (id=1, 269ms)
+        │     Request:  2026-01-04T12:01:58.743Z
+        │     Response: 2026-01-04T12:01:59.012Z
+        │     Size:     58B → 1.2KB
+        │
+        └── ↔️ ✓ tools/list (id=2, 12ms)
+              Request:  2026-01-04T12:01:59.037Z
+              Response: 2026-01-04T12:01:59.049Z
+              Size:     58B → 1.0KB</code></pre>
+                    </div>
+                </section>
+
+                <!-- スキャン実行 -->
+                <section id="scan">
+                    <h2>スキャン実行 (<code>scan</code>)</h2>
+                    <p>MCPサーバーに対してスキャンを実行します。</p>
+
+                    <h3>基本的なスキャン</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan scan start --id time
+Starting scan for connector 'time'...
+→ Connecting to MCP server...
+✓ Connected (269ms)
+→ Requesting tools/list...
+✓ Received 2 tools (12ms)
+→ Closing connection...
+✓ Scan completed successfully
+
+Session ID: f2442c9b
+Duration:   540ms
+Events:     8
+RPCs:       2 (2 OK, 0 ERR)</code></pre>
+                    </div>
+
+                    <h3>タイムアウト指定</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan scan start --id weather --timeout 60
+Starting scan for connector 'weather' (timeout: 60s)...
+→ Connecting to MCP server...
+✓ Connected (1.2s)
+→ Requesting tools/list...
+✓ Received 3 tools (245ms)
+→ Closing connection...
+✓ Scan completed successfully
+
+Session ID: abc123de
+Duration:   1.5s
+Events:     10
+RPCs:       2 (2 OK, 0 ERR)</code></pre>
+                    </div>
+                </section>
+
+                <!-- ツール実行 -->
+                <section id="tool">
+                    <h2>ツール実行 (<code>tool</code>)</h2>
+                    <p>MCPツールを直接実行します。</p>
+
+                    <h3>ツール一覧</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan tool ls time
+Found 2 tools:
+
+  get_current_time
+    Get the current time in a specific timezone
+    
+  get_timezone
+    Get timezone information</code></pre>
+                    </div>
+
+                    <h3>ツールの詳細</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan tool show time get_current_time
+Tool: get_current_time
+Description: Get the current time in a specific timezone
+
+Required arguments:
+  timezone    string    IANA timezone (e.g., America/New_York)
+
+Optional arguments:
+  format      string    Time format (iso, unix, human)</code></pre>
+                    </div>
+
+                    <h3>ツールの実行</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan tool call time get_current_time --args '{"timezone":"Asia/Tokyo"}'
+Calling tool 'get_current_time' on connector 'time'...
+
+Result:
+{
+  "time": "2026-01-04T21:30:45+09:00",
+  "timezone": "Asia/Tokyo",
+  "formatted": "21:30:45 JST",
+  "offset": "+09:00"
+}</code></pre>
+                    </div>
+                </section>
+
+                <!-- プロキシモード -->
+                <section id="proxy">
+                    <h2>プロキシモード (<code>proxy</code>)</h2>
+                    <p>複数のMCPサーバーを統合プロキシとして実行します。</p>
+
+                    <h3>プロキシの起動</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan proxy start --all
+Starting MCP proxy server...
+→ Loading connectors...
+  ✓ time (2 tools)
+  ✓ weather (3 tools)
+  ✓ filesystem (5 tools)
+→ Starting proxy...
+✓ Proxy running (3 connectors, 10 tools)
+
+Mode:     stdio
+Tools:    10 (namespaced)
+Logging:  ~/.config/proofscan/proxy-logs.jsonl
+
+Press Ctrl+C to stop</code></pre>
+                    </div>
+
+                    <h3>プロキシのステータス</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan proxy status
+Proxy Status
+═══════════════════════════════════════════════════
+
+State:        RUNNING
+Mode:         stdio
+PID:          12345
+Started:      2026-01-04T12:00:00.000Z
+Uptime:       5m 30s
+Heartbeat:    just now
+
+Connectors:
+  ● time: 2 tools
+  ● weather: 3 tools
+  ● filesystem: 5 tools
+
+Clients:
+  ● claude-desktop (active)
+      Last seen: 2s ago
+      Sessions: 1, Tool calls: 5
+
+Logging:
+  Level:      INFO
+  Buffered:   45/1000 lines</code></pre>
+                    </div>
+
+                    <h3>プロキシログの確認</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan log --tail 10
+[12:00:05.123] INFO  [server] Proxy started with 3 connector(s)
+[12:00:07.456] INFO  Request: initialize
+[12:00:07.457] INFO  [init] Client: claude-desktop (protocol=2024-11-05)
+[12:00:09.234] INFO  Request: tools/list
+[12:00:11.567] INFO  Listed 2 tool(s) from time (session=abc123)
+[12:00:11.568] INFO  Listed 3 tool(s) from weather (session=def456)
+[12:00:11.569] INFO  Returning 10 tool(s)
+[12:00:15.890] INFO  Request: tools/call
+[12:00:15.891] INFO  tools/call name=time__get_current_time
+[12:00:16.123] INFO  Result: success sessionId=abc123</code></pre>
+                    </div>
+                </section>
+
+                <!-- POPL生成 -->
+                <section id="popl">
+                    <h2>POPL生成 (<code>popl</code>)</h2>
+                    <p>公開安全な監査証跡を生成します。</p>
+
+                    <h3>POPLの初期化</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ cd /path/to/project
+$ pfscan popl init
+✓ POPL directory initialized at: /path/to/project/.popl
+
+Created:
+  .popl/README.md
+  .popl/entries/</code></pre>
+                    </div>
+
+                    <h3>POPLエントリの作成</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan popl session --session f2442c9b --title "Time Server Test"
+Creating POPL entry...
+→ Loading session data...
+  ✓ Loaded 2 RPCs
+  ✓ Loaded 8 events
+→ Sanitizing data...
+  ✓ Redacted 0 secrets
+  ✓ Redacted 3 file paths
+  ✓ Hashed 2 RPC payloads
+→ Generating artifacts...
+  ✓ Created POPL.yml
+  ✓ Created status.json
+  ✓ Created rpc.sanitized.jsonl
+  ✓ Created validation-run.log
+
+✓ POPL entry created: 20260104-f2442c9b
+
+Entry location:
+  .popl/entries/20260104-f2442c9b/
+
+Files created:
+  POPL.yml              (1.2KB)
+  status.json           (856B)
+  rpc.sanitized.jsonl   (2.4KB)
+  validation-run.log    (1.1KB)</code></pre>
+                    </div>
+
+                    <h3>POPLエントリの確認</h3>
+                    <div class="code-block">
+                        <button class="copy-button">コピー</button>
+                        <pre><code>$ pfscan popl show 20260104-f2442c9b
+Entry: 20260104-f2442c9b
+Title: Time Server Test
+Created: 2026-01-04T12:05:30Z
+
+Session:
+  ID:         f2442c9b...
+  Connector:  time
+  Started:    2026-01-04T12:01:58Z
+  Ended:      2026-01-04T12:01:59Z
+  Duration:   540ms
+
+Summary:
+  RPCs:       2 (2 OK, 0 ERR)
+  Events:     8
+  Tool calls: 0
+  Errors:     0
+
+Sanitization:
+  Ruleset:    v1
+  Secrets:    redacted
+  Paths:      redacted
+  Payloads:   hashed (SHA-256)
+
+Files:
+  POPL.yml              (sha256:abc...)
+  status.json           (sha256:def...)
+  rpc.sanitized.jsonl   (sha256:ghi...)
+  validation-run.log    (sha256:jkl...)</code></pre>
+                    </div>
+                </section>
+
+                <!-- 関連リンク -->
+                <section id="related">
+                    <h2>関連情報</h2>
+                    <ul>
+                        <li><a href="../docs/guide.html">ユーザーガイド</a> - 完全なCLIリファレンス</li>
+                        <li><a href="../commands/index.html">コマンドリファレンス</a> - 全コマンドの詳細</li>
+                        <li><a href="../docs/shell.html">シェルモード</a> - 対話的な使用方法</li>
+                        <li><a href="../docs/proxy.html">プロキシガイド</a> - プロキシモードの詳細</li>
+                    </ul>
+                </section>
+            </article>
+        </main>
+
+        <aside class="toc-sidebar">
+            <!-- 目次は main.js で自動生成されます -->
+        </aside>
+    </div>
+
+    <footer class="site-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>ProofScan</h3>
+                    <p>MCP通信の完全可視化ツール</p>
+                </div>
+                <div class="footer-section">
+                    <h3>ドキュメント</h3>
+                    <ul>
+                        <li><a href="../docs/guide.html">ユーザーガイド</a></li>
+                        <li><a href="../docs/shell.html">シェルモード</a></li>
+                        <li><a href="../docs/proxy.html">プロキシガイド</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>コミュニティ</h3>
+                    <ul>
+                        <li><a href="https://github.com/proofofprotocol/proofscan">GitHub</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/issues">Issues</a></li>
+                        <li><a href="https://github.com/proofofprotocol/proofscan/discussions">Discussions</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Proof of Protocol. MIT License.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="../js/main.js"></script>
+</body>
+</html>
