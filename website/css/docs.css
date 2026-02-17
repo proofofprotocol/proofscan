@@ -311,7 +311,8 @@ a:hover {
 }
 
 /* TOC (Right) */
-.docs-toc {
+.docs-toc,
+.toc-sidebar {
   width: var(--toc-width);
   position: sticky;
   top: calc(var(--header-height) + var(--space-lg));
@@ -502,7 +503,8 @@ li {
 
 /* Responsive */
 @media (max-width: 1024px) {
-  .docs-toc {
+  .docs-toc,
+.toc-sidebar {
     display: none;
   }
 }
