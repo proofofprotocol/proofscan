@@ -68,6 +68,16 @@ for file in examples/*.html; do
   fi
 done
 
+# Upload docs
+echo "📤 Uploading docs pages..."
+for file in docs/*.html; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    echo "  → $filename"
+    curl -T "$file" -u "$FTP_USER:$FTP_PASS" "$FTP_HOST${FTP_DIR}docs/$filename" --ftp-create-dirs
+  fi
+done
+
 echo ""
 echo "✅ Deployment completed!"
 echo "🌐 Your site is now live at: https://proofofprotocol.online/"
