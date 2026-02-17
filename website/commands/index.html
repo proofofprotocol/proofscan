@@ -20,7 +20,7 @@
         <nav class="main-nav">
           <a href="/">Home</a>
           <a href="/commands/" class="active">Commands</a>
-          <a href="/docs/">Docs</a>
+          <a href="https://github.com/proofofprotocol/proofscan/tree/main/docs">Docs</a>
           <a href="/examples/">Examples</a>
         </nav>
       </div>
@@ -42,21 +42,18 @@
     <!-- Sidebar -->
     <aside class="docs-sidebar">
       <nav>
-        <div class="sidebar-category">コマンドカテゴリ</div>
-        <a href="/commands/" class="sidebar-item active">すべて</a>
-        <a href="/commands/observation.html" class="sidebar-item">📊 観測</a>
-        <a href="/commands/execution.html" class="sidebar-item">⚡ 実行</a>
-        <a href="/commands/interactive.html" class="sidebar-item">🐚 対話</a>
-        <a href="/commands/management.html" class="sidebar-item">🔧 管理</a>
-        <a href="/commands/catalog.html" class="sidebar-item">📦 カタログ</a>
+        <div class="sidebar-category">Command Categories</div>
+        <a href="/commands/" class="sidebar-item active">Overview</a>
+        <a href="/commands/observation.html" class="sidebar-item">📊 Observation</a>
+        <a href="/commands/execution.html" class="sidebar-item">⚡ Execution</a>
+        <a href="/commands/config.html" class="sidebar-item">🔧 Configuration</a>
+        <a href="/commands/catalog.html" class="sidebar-item">📦 Catalog</a>
+        <a href="/commands/agent.html" class="sidebar-item">🤖 A2A Agent</a>
         <a href="/commands/popl.html" class="sidebar-item">📊 POPL</a>
-        <a href="/commands/plans.html" class="sidebar-item">📝 プラン</a>
-        <a href="/commands/a2a.html" class="sidebar-item">🤖 A2A</a>
-        <a href="/commands/diagnostics.html" class="sidebar-item">🩺 診断</a>
         
-        <div class="sidebar-category">リソース</div>
-        <a href="/docs/guide.html" class="sidebar-item">ユーザーガイド</a>
-        <a href="/examples/" class="sidebar-item">実行例</a>
+        <div class="sidebar-category">Resources</div>
+        <a href="/examples/" class="sidebar-item">Examples</a>
+        <a href="https://github.com/proofofprotocol/proofscan" class="sidebar-item">GitHub</a>
       </nav>
     </aside>
 
@@ -98,12 +95,10 @@
             <td>スキャン、ツール実行、プロキシ起動</td>
           </tr>
           <tr>
-            <td><a href="/commands/interactive.html">🐚 対話</a></td>
             <td>1</td>
             <td>インタラクティブシェル（REPL）</td>
           </tr>
           <tr>
-            <td><a href="/commands/management.html">🔧 管理</a></td>
             <td>5</td>
             <td>設定、コネクター、セッション管理</td>
           </tr>
@@ -118,17 +113,14 @@
             <td>監査証跡管理</td>
           </tr>
           <tr>
-            <td><a href="/commands/plans.html">📝 プラン</a></td>
             <td>1</td>
             <td>自動テストプラン</td>
           </tr>
           <tr>
-            <td><a href="/commands/a2a.html">🤖 A2A</a></td>
             <td>2</td>
             <td>エージェント管理</td>
           </tr>
           <tr>
-            <td><a href="/commands/diagnostics.html">🩺 診断</a></td>
             <td>3</td>
             <td>問題診断・ログ表示</td>
           </tr>
@@ -289,25 +281,23 @@ pfscan proxy start --connectors time,weather
       <div class="features-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; margin-top: 24px;">
         <div class="feature-card">
           <div class="feature-icon">📊</div>
-          <h3 class="feature-title"><a href="/commands/observation.html">観測コマンド</a></h3>
+          <h3 class="feature-title"><a href="/commands/observation.html">Observation</a></h3>
           <p class="feature-description">view, tree, rpc, status, summary, analyze</p>
         </div>
         
         <div class="feature-card">
           <div class="feature-icon">⚡</div>
-          <h3 class="feature-title"><a href="/commands/execution.html">実行コマンド</a></h3>
+          <h3 class="feature-title"><a href="/commands/execution.html">Execution</a></h3>
           <p class="feature-description">scan, tool, proxy, serve, monitor</p>
         </div>
         
         <div class="feature-card">
           <div class="feature-icon">🐚</div>
-          <h3 class="feature-title"><a href="/commands/interactive.html">対話モード</a></h3>
           <p class="feature-description">shell (psh) - インタラクティブREPL</p>
         </div>
         
         <div class="feature-card">
           <div class="feature-icon">🔧</div>
-          <h3 class="feature-title"><a href="/commands/management.html">管理コマンド</a></h3>
           <p class="feature-description">config, connectors, sessions, secrets, archive</p>
         </div>
       </div>

@@ -1,0 +1,10 @@
+                <div class="nav-section">
+                    <div class="nav-title">Command Categories</div>
+                    <a href="index.html">Overview</a>
+                    <a href="execution.html">Execution</a>
+                    <a href="observation.html">Observation</a>
+                    <a href="config.html">Configuration</a>
+                    <a href="catalog.html">Catalog</a>
+                    <a href="agent.html">A2A Agent</a>
+                    <a href="popl.html">POPL</a>
+                </div>
