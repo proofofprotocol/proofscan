@@ -15,6 +15,7 @@ import { createMCPProxyHandler, MCPProxyRequest } from './mcpProxy.js';
 import { createA2AProxyHandler, A2AProxyRequest } from './a2aProxy.js';
 import { createAuditLogger, AuditLogger } from './audit.js';
 import { sseStreamHandler, getSseManager } from './sse.js';
+import { registerProofCommRoutes } from './proofcommProxy.js';
 
 export interface GatewayServer {
   /** Fastify instance */
@@ -178,6 +179,16 @@ export function createGatewayServer(
     });
 
     log.info({ event: 'a2a_proxy_enabled', configDir });
+
+    // ProofComm Management Routes (Phase 9.0)
+    const auditLogger = createAuditLogger(configDir);
+    registerProofCommRoutes(server, {
+      configDir,
+      auditLogger,
+      // allowedDocumentRoot can be set via config in future
+    });
+
+    log.info({ event: 'proofcomm_routes_enabled', configDir });
   }
 
   // Graceful shutdown handlers

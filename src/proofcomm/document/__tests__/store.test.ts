@@ -147,9 +147,9 @@ describe('Document Store (file operations)', () => {
       expect(changed).toBe(true);
     });
 
-    it('should return true for non-existent file', async () => {
-      const changed = await hasDocumentChanged('/non/existent.txt', 'abc123');
-      expect(changed).toBe(true);
+    it('should throw for non-existent file', async () => {
+      await expect(hasDocumentChanged('/non/existent.txt', 'abc123'))
+        .rejects.toThrow('not found');
     });
   });
 

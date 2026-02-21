@@ -322,11 +322,21 @@ export class DocumentResponder {
 
   /**
    * Check if document content has changed
+   *
+   * @returns true if changed, false if unchanged
+   * @throws Error if document not found or file cannot be read
    */
   async hasContentChanged(docId: string): Promise<boolean> {
     const doc = this.store.get(docId);
-    if (!doc || !doc.documentHash) return true;
+    if (!doc) {
+      throw new Error(`Document not found: ${docId}`);
+    }
+    if (!doc.documentHash) {
+      // No previous hash, consider it changed
+      return true;
+    }
 
+    // Let errors propagate - caller handles read failures
     return hasDocumentChanged(doc.documentPath, doc.documentHash);
   }
 

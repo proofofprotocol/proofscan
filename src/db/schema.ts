@@ -238,7 +238,6 @@ CREATE TABLE IF NOT EXISTS resident_documents (
   config_json TEXT
 );
 
--- Note: idx_resident_docs_path is redundant with UNIQUE constraint but kept for explicit documentation
 CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
 `;
 

@@ -19,7 +19,7 @@ import { DocumentsStore } from '../db/documents-store.js';
 import { createA2AClient } from '../a2a/client.js';
 import type { A2AMessage, TaskState } from '../a2a/types.js';
 import { ErrorCodes } from './mcpProxy.js';
-import { parseAgentField, isDocumentTarget, VALID_ID_PATTERN } from '../proofcomm/routing.js';
+import { parseAgentField, isDocumentTarget, isSpaceTarget, VALID_ID_PATTERN } from '../proofcomm/routing.js';
 import { DocumentResponder, extractText, type DocumentMessage } from '../proofcomm/document/index.js';
 
 /**
@@ -305,12 +305,11 @@ async function handleDocumentRequest(
   docId: string,
   method: string,
   params: unknown,
-  configDir: string,
+  documentsStore: DocumentsStore,
   requestId: string,
   clientId: string,
   reply: FastifyReply
 ): Promise<A2AProxyResponse> {
-  const documentsStore = new DocumentsStore(configDir);
 
   // Check document exists
   const doc = documentsStore.get(docId);
@@ -399,6 +398,7 @@ export interface A2AProxyHandlerResult {
 export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandlerResult {
   const { configDir, limits, hideNotFound = true } = options;
   const targetsStore = new TargetsStore(configDir);
+  const documentsStore = new DocumentsStore(configDir);
   const queueManager = new ConnectorQueueManager<
     { method: string; params: unknown; agentId: string },
     { result?: unknown; error?: { code: number; message: string } }
@@ -488,14 +488,25 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
         routingTarget.id,
         method,
         params,
-        configDir,
+        documentsStore,
         requestId,
         auth.client_id,
         reply
       );
     }
 
-    // 2b. Get agent from registry (targets store) - O(1) lookup by ID
+    // 2b. Handle space targets (G2: space/ prefix routing) - Not yet implemented
+    if (isSpaceTarget(routingTarget)) {
+      return reply.code(501).send(
+        createErrorResponse(
+          ErrorCodes.NOT_IMPLEMENTED,
+          `Space routing is not yet implemented: ${routingTarget.original}`,
+          requestId
+        )
+      );
+    }
+
+    // 2c. Get agent from registry (targets store) - O(1) lookup by ID
     const target = targetsStore.get(agentId);
     // Validate it's an A2A agent (not an MCP connector)
     const agent = target?.type === 'agent' && target?.protocol === 'a2a' ? target : undefined;

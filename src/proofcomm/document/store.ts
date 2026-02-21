@@ -167,18 +167,20 @@ export async function readDocument(
 
 /**
  * Check if document has changed (compare hash)
+ *
+ * Note: This function throws on read errors (file not found, permissions, etc.)
+ * instead of returning true/false. Callers should handle errors explicitly
+ * to avoid treating transient errors as "document changed".
+ *
+ * @throws DocumentStoreError if file cannot be read
  */
 export async function hasDocumentChanged(
   filePath: string,
   previousHash: string
 ): Promise<boolean> {
-  try {
-    const content = await readDocument(filePath);
-    return content.hash !== previousHash;
-  } catch {
-    // If we can't read the file, consider it changed
-    return true;
-  }
+  // Let errors propagate - caller should handle read failures explicitly
+  const content = await readDocument(filePath);
+  return content.hash !== previousHash;
 }
 
 /**
