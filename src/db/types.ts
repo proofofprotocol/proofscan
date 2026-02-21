@@ -94,7 +94,12 @@ export type GatewayEventKind =
   | 'gateway_mcp_response'    // MCP proxy response
   | 'gateway_a2a_request'     // A2A proxy request
   | 'gateway_a2a_response'    // A2A proxy response
-  | 'gateway_error';          // Gateway error
+  | 'gateway_error'           // Gateway error
+  // ProofComm events (Phase 9.0)
+  | 'proofcomm_space'         // Space: created/joined/left/message/delivery_failed
+  | 'proofcomm_skill'         // Skill: search/match
+  | 'proofcomm_document'      // Document: activated/context_updated
+  | 'proofcomm_route';        // Route: resolved/dispatched
 
 /** Gateway audit event record */
 export interface GatewayEvent {
