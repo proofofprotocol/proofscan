@@ -159,10 +159,15 @@ export function registerProofCommRoutes(
     // Generate document ID first (shared between both tables)
     const docId = ulid();
 
-    // Register in targets table FIRST for atomicity.
-    // If this fails, no orphaned resident_documents row is created.
-    // Type: 'agent', Protocol: 'a2a', with document_type in config
-    targetsStore.add(
+    // Atomically register in both targets and resident_documents tables.
+    // Uses a SQLite transaction to ensure both inserts succeed or both fail.
+    const doc = documentsStore.addWithTarget(
+      {
+        name: docName,
+        documentPath: document_path,
+        documentHash: docContent.hash,
+        config: docConfig,
+      },
       {
         type: 'agent',
         protocol: 'a2a',
@@ -174,16 +179,8 @@ export function registerProofCommRoutes(
           document_type: 'resident',
         },
       },
-      { id: docId }
+      docId
     );
-
-    // Now add to resident_documents (uses same docId)
-    const doc = documentsStore.add({
-      name: docName,
-      documentPath: document_path,
-      documentHash: docContent.hash,
-      config: docConfig,
-    }, docId);
 
     // Emit document activated event
     emitDocumentEvent(options.auditLogger, 'activated', {
@@ -366,11 +363,12 @@ export function registerProofCommRoutes(
   }>('/proofcomm/documents/:doc_id', {
     preHandler: requireAuth,
   }, async (request, reply) => {
+    const auth = request.auth as AuthInfo;
     const { doc_id } = request.params;
 
-    // Remove from documents store
-    const docRemoved = documentsStore.remove(doc_id);
-    if (!docRemoved) {
+    // Get document info before deletion for audit event
+    const doc = documentsStore.get(doc_id);
+    if (!doc) {
       return reply.code(404).send({
         error: {
           code: 'NOT_FOUND',
@@ -379,8 +377,21 @@ export function registerProofCommRoutes(
       });
     }
 
+    // Remove from documents store
+    documentsStore.remove(doc_id);
+
     // Also remove from targets store
     targetsStore.remove(doc_id);
+
+    // Emit document deactivated event
+    emitDocumentEvent(options.auditLogger, 'deactivated', {
+      doc_target_id: doc_id,
+      doc_path: doc.documentPath,
+    }, {
+      requestId: request.requestId,
+      traceId: request.headers['x-trace-id'] as string | undefined,
+      clientId: auth.client_id,
+    });
 
     return reply.code(204).send();
   });

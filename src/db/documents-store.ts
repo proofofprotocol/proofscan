@@ -1,6 +1,7 @@
 /**
  * Documents database store - manages resident documents
  * Phase 9.0: ProofComm Resident Documents
+ * Phase 9.1: Added atomic registration with transaction support
  *
  * Resident documents are documents that act as agents in the ProofComm system.
  * They can receive messages and respond based on their content and memory.
@@ -12,7 +13,7 @@
 
 import { ulid } from 'ulid';
 import { getEventsDb } from './connection.js';
-import type { ResidentDocument } from './types.js';
+import type { ResidentDocument, TargetType, TargetProtocol } from './types.js';
 
 /**
  * Document memory structure
@@ -66,6 +67,17 @@ export interface CreateDocumentOptions {
   memory?: DocumentMemory;
   /** Optional config */
   config?: DocumentConfig;
+}
+
+/**
+ * Target registration info for atomic document registration
+ */
+export interface TargetRegistrationInfo {
+  type: TargetType;
+  protocol: TargetProtocol;
+  name?: string;
+  enabled: boolean;
+  config: unknown;
 }
 
 export class DocumentsStore {
@@ -123,6 +135,82 @@ export class DocumentsStore {
   }
 
   /**
+   * Atomically register a document with its target entry
+   * Uses a SQLite transaction to ensure both tables are updated together.
+   * If either insert fails, both are rolled back.
+   *
+   * @param docOptions - Document creation options
+   * @param targetInfo - Target registration info
+   * @param overrideId - Optional explicit ID (for testing)
+   * @returns The created document
+   * @throws Error if registration fails (transaction is rolled back)
+   */
+  addWithTarget(
+    docOptions: CreateDocumentOptions,
+    targetInfo: TargetRegistrationInfo,
+    overrideId?: string
+  ): ResidentDocumentWithParsed {
+    const now = new Date().toISOString();
+    const docId = overrideId || ulid();
+
+    // Prepare statements outside transaction for better performance
+    const insertTarget = this.db.prepare(`
+      INSERT INTO targets (id, type, protocol, name, enabled, created_at, updated_at, config_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const insertDoc = this.db.prepare(`
+      INSERT INTO resident_documents (
+        doc_id, name, document_path, document_hash,
+        memory_json, created_at, updated_at, config_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    // Create atomic transaction
+    const registerAtomic = this.db.transaction(() => {
+      // Insert target first
+      insertTarget.run(
+        docId,
+        targetInfo.type,
+        targetInfo.protocol,
+        targetInfo.name || null,
+        targetInfo.enabled ? 1 : 0,
+        now,
+        now,
+        JSON.stringify(targetInfo.config)
+      );
+
+      // Insert document
+      insertDoc.run(
+        docId,
+        docOptions.name,
+        docOptions.documentPath,
+        docOptions.documentHash || null,
+        docOptions.memory ? JSON.stringify(docOptions.memory) : null,
+        now,
+        now,
+        docOptions.config ? JSON.stringify(docOptions.config) : null
+      );
+    });
+
+    // Execute transaction (automatically rolls back on error)
+    registerAtomic();
+
+    // Return the created document
+    return {
+      docId,
+      name: docOptions.name,
+      documentPath: docOptions.documentPath,
+      documentHash: docOptions.documentHash,
+      memory: docOptions.memory,
+      createdAt: now,
+      updatedAt: now,
+      config: docOptions.config,
+    };
+  }
+
+  /**
    * Get a document by ID
    * @param docId - Document ID
    * @returns The document with parsed JSON fields, or undefined if not found
@@ -173,6 +261,8 @@ export class DocumentsStore {
 
   /**
    * Update a document's memory
+   * Uses a transaction to prevent race conditions between read and write.
+   *
    * @param docId - Document ID
    * @param memory - New memory object (will be merged with existing)
    * @returns true if document was found and updated
@@ -180,20 +270,33 @@ export class DocumentsStore {
   updateMemory(docId: string, memory: DocumentMemory): boolean {
     const now = new Date().toISOString();
 
-    // Get existing memory and merge
-    const existing = this.get(docId);
-    if (!existing) return false;
+    // Prepare statements
+    const selectStmt = this.db.prepare(
+      `SELECT memory_json FROM resident_documents WHERE doc_id = ?`
+    );
+    const updateStmt = this.db.prepare(
+      `UPDATE resident_documents SET memory_json = ?, updated_at = ? WHERE doc_id = ?`
+    );
 
-    const mergedMemory: DocumentMemory = {
-      ...(existing.memory || {}),
-      ...memory,
-    };
+    // Use transaction to prevent race conditions
+    const updateAtomic = this.db.transaction(() => {
+      const row = selectStmt.get(docId) as { memory_json: string | null } | undefined;
+      if (!row) return false;
 
-    const stmt = this.db.prepare(`
-      UPDATE resident_documents SET memory_json = ?, updated_at = ? WHERE doc_id = ?
-    `);
-    const result = stmt.run(JSON.stringify(mergedMemory), now, docId);
-    return result.changes > 0;
+      const existingMemory: DocumentMemory = row.memory_json
+        ? JSON.parse(row.memory_json)
+        : {};
+
+      const mergedMemory: DocumentMemory = {
+        ...existingMemory,
+        ...memory,
+      };
+
+      const result = updateStmt.run(JSON.stringify(mergedMemory), now, docId);
+      return result.changes > 0;
+    });
+
+    return updateAtomic();
   }
 
   /**

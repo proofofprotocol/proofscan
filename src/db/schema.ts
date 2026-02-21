@@ -11,7 +11,7 @@
  * Phase 9.0: Schema version 10 with ProofComm events and resident_documents table
  */
 
-export const EVENTS_DB_VERSION = 10;
+export const EVENTS_DB_VERSION = 11;
 export const PROOFS_DB_VERSION = 2;
 
 // events.db schema
@@ -226,10 +226,11 @@ CREATE INDEX IF NOT EXISTS idx_gateway_events_ts ON gateway_events(ts);
 
 -- Resident documents table (Phase 9.0: ProofComm Resident Documents)
 -- doc_id == targets.id for unified identification
+-- document_path is UNIQUE to prevent duplicate registrations
 CREATE TABLE IF NOT EXISTS resident_documents (
   doc_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  document_path TEXT NOT NULL,
+  document_path TEXT NOT NULL UNIQUE,
   document_hash TEXT,
   memory_json TEXT,
   created_at TEXT NOT NULL,
@@ -237,7 +238,7 @@ CREATE TABLE IF NOT EXISTS resident_documents (
   config_json TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_resident_docs_path ON resident_documents(document_path);
+-- Note: idx_resident_docs_path is redundant with UNIQUE constraint but kept for explicit documentation
 CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
 `;
 
@@ -566,6 +567,7 @@ CREATE INDEX IF NOT EXISTS idx_gateway_events_target ON gateway_events(target_id
 CREATE INDEX IF NOT EXISTS idx_gateway_events_ts ON gateway_events(ts);
 
 -- Create resident_documents table
+-- Note: document_path UNIQUE added in version 11
 CREATE TABLE IF NOT EXISTS resident_documents (
   doc_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -578,6 +580,39 @@ CREATE TABLE IF NOT EXISTS resident_documents (
 );
 
 CREATE INDEX IF NOT EXISTS idx_resident_docs_path ON resident_documents(document_path);
+CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
+`;
+
+/**
+ * Migration from version 10 to version 11
+ * Phase 9.1: Add UNIQUE constraint on document_path in resident_documents
+ */
+export const EVENTS_DB_MIGRATION_10_TO_11 = `
+-- Recreate resident_documents table with UNIQUE constraint on document_path
+-- SQLite doesn't support ALTER CONSTRAINT, so we recreate the table
+
+-- Create new table with UNIQUE constraint
+CREATE TABLE resident_documents_new (
+  doc_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  document_path TEXT NOT NULL UNIQUE,
+  document_hash TEXT,
+  memory_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  config_json TEXT
+);
+
+-- Copy data from old table (will fail if duplicates exist)
+INSERT INTO resident_documents_new SELECT * FROM resident_documents;
+
+-- Drop old table
+DROP TABLE resident_documents;
+
+-- Rename new table
+ALTER TABLE resident_documents_new RENAME TO resident_documents;
+
+-- Recreate indexes (name index only, path is covered by UNIQUE)
 CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
 `;
 

@@ -46,6 +46,7 @@ export type ProofCommAction =
   | 'match'
   // document
   | 'activated'
+  | 'deactivated'
   | 'context_updated'
   // route
   | 'resolved'
@@ -203,7 +204,7 @@ export function emitSkillEvent(
  */
 export function emitDocumentEvent(
   auditLogger: AuditLogger,
-  action: 'activated' | 'context_updated',
+  action: 'activated' | 'deactivated' | 'context_updated',
   metadata: Omit<ProofCommMetadata, 'action'> & { doc_target_id: string },
   baseOptions: ProofCommEventBaseOptions
 ): string {
@@ -286,7 +287,7 @@ export function isValidAction(kind: ProofCommEventKind, action: string): boolean
   const validActions: Record<ProofCommEventKind, string[]> = {
     proofcomm_space: ['created', 'joined', 'left', 'message', 'delivery_failed'],
     proofcomm_skill: ['search', 'match'],
-    proofcomm_document: ['activated', 'context_updated'],
+    proofcomm_document: ['activated', 'deactivated', 'context_updated'],
     proofcomm_route: ['resolved', 'dispatched'],
   };
   return validActions[kind]?.includes(action) ?? false;
