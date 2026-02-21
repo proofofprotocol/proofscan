@@ -13,7 +13,6 @@ import type { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { ulid } from 'ulid';
 import type { AuthInfo } from './authMiddleware.js';
 import { DocumentsStore, type DocumentConfig } from '../db/documents-store.js';
-import { TargetsStore } from '../db/targets-store.js';
 import {
   validateDocumentPath,
   getDocumentName,
@@ -94,7 +93,6 @@ export function registerProofCommRoutes(
   options: ProofCommProxyOptions
 ): void {
   const documentsStore = new DocumentsStore(options.configDir);
-  const targetsStore = new TargetsStore(options.configDir);
 
   // POST /proofcomm/documents/register - Register a new document
   fastify.post<{
@@ -377,11 +375,8 @@ export function registerProofCommRoutes(
       });
     }
 
-    // Remove from documents store
-    documentsStore.remove(doc_id);
-
-    // Also remove from targets store
-    targetsStore.remove(doc_id);
+    // Atomically remove from both documents and targets stores
+    documentsStore.removeWithTarget(doc_id);
 
     // Emit document deactivated event
     emitDocumentEvent(options.auditLogger, 'deactivated', {
@@ -412,6 +407,19 @@ export function registerProofCommRoutes(
         error: {
           code: 'NOT_FOUND',
           message: `Document not found: ${doc_id}`,
+        },
+      });
+    }
+
+    // Re-validate path before reading (security: prevent symlink escape after registration)
+    const pathValidation = validateDocumentPath(doc.documentPath, {
+      allowedRoot: options.allowedDocumentRoot,
+    });
+    if (!pathValidation.valid) {
+      return reply.code(400).send({
+        error: {
+          code: 'INVALID_PATH',
+          message: pathValidation.error || 'Document path is no longer valid',
         },
       });
     }

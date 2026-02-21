@@ -330,7 +330,11 @@ export class DocumentsStore {
   }
 
   /**
-   * Remove a document by ID
+   * Remove a document by ID (document only, not target)
+   *
+   * NOTE: This only removes from resident_documents table.
+   * Use removeWithTarget() to remove both document and target atomically.
+   *
    * @param docId - Document ID
    * @returns true if document was found and removed
    */
@@ -338,6 +342,35 @@ export class DocumentsStore {
     const stmt = this.db.prepare(`DELETE FROM resident_documents WHERE doc_id = ?`);
     const result = stmt.run(docId);
     return result.changes > 0;
+  }
+
+  /**
+   * Atomically remove a document and its target entry
+   * Uses a SQLite transaction to ensure both deletes succeed or both fail.
+   *
+   * @param docId - Document ID (same as target ID)
+   * @returns true if document was found and removed
+   */
+  removeWithTarget(docId: string): boolean {
+    const deleteDoc = this.db.prepare(
+      `DELETE FROM resident_documents WHERE doc_id = ?`
+    );
+    const deleteTarget = this.db.prepare(
+      `DELETE FROM targets WHERE id = ?`
+    );
+
+    let docRemoved = false;
+
+    const removeAtomic = this.db.transaction(() => {
+      const docResult = deleteDoc.run(docId);
+      docRemoved = docResult.changes > 0;
+
+      // Always try to remove target (cleanup orphans if any)
+      deleteTarget.run(docId);
+    });
+
+    removeAtomic();
+    return docRemoved;
   }
 
   /**

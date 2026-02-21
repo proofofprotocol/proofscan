@@ -416,6 +416,10 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
               !err.message.includes('already exists')) {
             throw err;
           }
+          // Log warning for swallowed errors to help detect schema drift
+          if (err instanceof Error) {
+            console.warn(`[db] Migration 10→11 skipped statement (already exists): ${err.message}`);
+          }
         }
       }
 
