@@ -307,6 +307,7 @@ async function handleDocumentRequest(
   params: unknown,
   configDir: string,
   requestId: string,
+  clientId: string,
   reply: FastifyReply
 ): Promise<A2AProxyResponse> {
   const documentsStore = new DocumentsStore(configDir);
@@ -344,12 +345,12 @@ async function handleDocumentRequest(
   let docMessage: DocumentMessage;
   if (typeof message === 'string') {
     docMessage = {
-      from: 'unknown',
+      from: clientId,
       parts: [{ text: message }],
     };
   } else {
     docMessage = {
-      from: 'unknown',
+      from: clientId,
       parts: message.parts as Array<{ text: string } | { data: string; mimeType: string }>,
       messageId: message.messageId,
       metadata: message.metadata,
@@ -489,6 +490,7 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
         params,
         configDir,
         requestId,
+        auth.client_id,
         reply
       );
     }

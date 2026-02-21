@@ -20,12 +20,15 @@ import {
 
 describe('Document Store (file operations)', () => {
   let testDir: string;
+  let otherDir: string;  // Separate directory for testing allowedRoot
   let testFilePath: string;
   const testContent = '# Test Document\n\nThis is test content.';
 
   beforeEach(() => {
     testDir = join(tmpdir(), `proofscan-doc-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    otherDir = join(tmpdir(), `proofscan-other-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(testDir, { recursive: true });
+    mkdirSync(otherDir, { recursive: true });
 
     testFilePath = join(testDir, 'test.md');
     writeFileSync(testFilePath, testContent);
@@ -33,6 +36,7 @@ describe('Document Store (file operations)', () => {
 
   afterEach(() => {
     rmSync(testDir, { recursive: true, force: true });
+    rmSync(otherDir, { recursive: true, force: true });
   });
 
   describe('computeHash', () => {
@@ -190,7 +194,8 @@ describe('Document Store (file operations)', () => {
     });
 
     it('should reject path outside allowedRoot', () => {
-      const result = validateDocumentPath(testFilePath, { allowedRoot: '/some/other/root' });
+      // testFilePath is in testDir, but allowedRoot is otherDir (a different existing directory)
+      const result = validateDocumentPath(testFilePath, { allowedRoot: otherDir });
       expect(result.valid).toBe(false);
       expect(result.error).toContain('allowed root');
     });

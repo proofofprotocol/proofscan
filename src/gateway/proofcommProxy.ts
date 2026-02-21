@@ -10,6 +10,7 @@
  */
 
 import type { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
+import { ulid } from 'ulid';
 import type { AuthInfo } from './authMiddleware.js';
 import { DocumentsStore, type DocumentConfig } from '../db/documents-store.js';
 import { TargetsStore } from '../db/targets-store.js';
@@ -156,7 +157,6 @@ export function registerProofCommRoutes(
     };
 
     // Generate document ID first (shared between both tables)
-    const { ulid } = await import('ulid');
     const docId = ulid();
 
     // Register in targets table FIRST for atomicity.

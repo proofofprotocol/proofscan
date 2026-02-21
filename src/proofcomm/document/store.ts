@@ -11,7 +11,7 @@
 
 import { createHash } from 'crypto';
 import { readFile, stat } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, realpathSync } from 'fs';
 import { basename, extname, resolve } from 'path';
 import type { DocumentContent } from './types.js';
 
@@ -204,8 +204,9 @@ export interface ValidateDocumentPathOptions {
  * Validate document path with security checks
  *
  * Security considerations:
- * - Paths are resolved to absolute form to handle symlinks and relative paths
- * - If allowedRoot is specified, paths must reside within it
+ * - Paths are resolved using realpathSync to follow symlinks
+ * - If allowedRoot is specified, the real path must reside within it
+ * - This prevents symlink escape attacks (e.g., symlink inside allowedRoot pointing outside)
  * - This prevents arbitrary file access (e.g., /etc/passwd, private keys)
  */
 export function validateDocumentPath(
@@ -217,23 +218,35 @@ export function validateDocumentPath(
     return { valid: false, error: 'Document path cannot be empty' };
   }
 
-  // Resolve to absolute path (handles .., symlinks, etc.)
+  // Resolve to absolute path first (handles ..)
   const resolvedPath = resolve(filePath);
 
-  // If allowedRoot is specified, check that resolved path is within it
-  if (options?.allowedRoot) {
-    const resolvedRoot = resolve(options.allowedRoot);
-    if (!resolvedPath.startsWith(resolvedRoot + '/') && resolvedPath !== resolvedRoot) {
-      return {
-        valid: false,
-        error: `Document path must be within allowed root: ${options.allowedRoot}`,
-      };
-    }
-  }
-
-  // Check if file exists
+  // Check if file exists before trying to resolve symlinks
   if (!fileExists(resolvedPath)) {
     return { valid: false, error: `Document file not found: ${filePath}` };
+  }
+
+  // If allowedRoot is specified, check that the REAL path is within it
+  // This prevents symlink escape attacks
+  if (options?.allowedRoot) {
+    try {
+      // Resolve symlinks to get the real path
+      const realPath = realpathSync(resolvedPath);
+      const realRoot = realpathSync(options.allowedRoot);
+
+      if (!realPath.startsWith(realRoot + '/') && realPath !== realRoot) {
+        return {
+          valid: false,
+          error: `Document path must be within allowed root: ${options.allowedRoot}`,
+        };
+      }
+    } catch (err) {
+      // realpathSync throws if path doesn't exist or can't be resolved
+      return {
+        valid: false,
+        error: `Failed to resolve document path: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
   }
 
   return { valid: true };
