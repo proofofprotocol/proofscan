@@ -19,10 +19,7 @@ import {
   readDocument,
   DocumentStoreError,
 } from '../proofcomm/document/index.js';
-import {
-  validateTargetIdForRegistration,
-  buildDocumentRoute,
-} from '../proofcomm/routing.js';
+import { buildDocumentRoute } from '../proofcomm/routing.js';
 import { emitDocumentEvent } from '../proofcomm/events.js';
 import type { AuditLogger } from './audit.js';
 

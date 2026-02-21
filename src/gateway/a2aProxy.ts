@@ -20,7 +20,7 @@ import { createA2AClient } from '../a2a/client.js';
 import type { A2AMessage, TaskState } from '../a2a/types.js';
 import { ErrorCodes } from './mcpProxy.js';
 import { parseAgentField, isDocumentTarget, isSpaceTarget, VALID_ID_PATTERN } from '../proofcomm/routing.js';
-import { DocumentResponder, extractText, type DocumentMessage } from '../proofcomm/document/index.js';
+import { DocumentResponder, type DocumentMessage } from '../proofcomm/document/index.js';
 
 /**
  * A2A Proxy request body
