@@ -300,6 +300,63 @@ export class DocumentsStore {
   }
 
   /**
+   * Atomically transform a document's memory using a callback function.
+   * The entire read-transform-write operation runs within a single transaction,
+   * preventing race conditions when multiple callers modify the same document.
+   *
+   * @param docId - Document ID
+   * @param transform - Function that receives current memory and returns new memory.
+   *                    Return `null` to indicate no change is needed (operation will be skipped).
+   * @returns Object with:
+   *   - success: true if transform was applied (memory was updated)
+   *   - changed: true if a meaningful change was made (transform returned non-null)
+   *   - memory: the new memory state (if changed)
+   */
+  transformMemory(
+    docId: string,
+    transform: (current: DocumentMemory | undefined) => DocumentMemory | null
+  ): { success: boolean; changed: boolean; memory?: DocumentMemory } {
+    const now = new Date().toISOString();
+
+    const selectStmt = this.db.prepare(
+      `SELECT memory_json FROM resident_documents WHERE doc_id = ?`
+    );
+    const updateStmt = this.db.prepare(
+      `UPDATE resident_documents SET memory_json = ?, updated_at = ? WHERE doc_id = ?`
+    );
+
+    let resultMemory: DocumentMemory | null = null;
+    let docFound = false;
+
+    const transformAtomic = this.db.transaction(() => {
+      const row = selectStmt.get(docId) as { memory_json: string | null } | undefined;
+      if (!row) return;
+      docFound = true;
+
+      const currentMemory: DocumentMemory | undefined = row.memory_json
+        ? JSON.parse(row.memory_json)
+        : undefined;
+
+      // Apply transformation
+      resultMemory = transform(currentMemory);
+
+      // If transform returns null, skip the update
+      if (resultMemory === null) return;
+
+      updateStmt.run(JSON.stringify(resultMemory), now, docId);
+    });
+
+    transformAtomic();
+
+    const changed = resultMemory !== null;
+    return {
+      success: docFound,
+      changed,
+      memory: changed ? resultMemory : undefined,
+    };
+  }
+
+  /**
    * Replace a document's memory entirely
    * @param docId - Document ID
    * @param memory - New memory object

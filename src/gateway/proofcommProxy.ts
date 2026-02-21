@@ -96,8 +96,30 @@ export function registerProofCommRoutes(
     Body: RegisterDocumentBody;
   }>('/proofcomm/documents/register', {
     preHandler: requireAuth,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['document_path'],
+        properties: {
+          document_path: { type: 'string', minLength: 1 },
+          name: { type: 'string' },
+          description: { type: 'string' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const auth = request.auth as AuthInfo;
+
+    // Security: Refuse registration if allowedDocumentRoot is not configured
+    // Without this constraint, any authenticated client can read arbitrary files
+    if (!options.allowedDocumentRoot) {
+      return reply.code(503).send({
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Document registration is disabled: allowedDocumentRoot not configured',
+        },
+      });
+    }
 
     const { document_path, name, description } = request.body;
 
@@ -279,6 +301,15 @@ export function registerProofCommRoutes(
     Body: UpdateMemoryBody;
   }>('/proofcomm/documents/:doc_id/memory', {
     preHandler: requireAuth,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['memory'],
+        properties: {
+          memory: { type: 'object' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const auth = request.auth as AuthInfo;
 

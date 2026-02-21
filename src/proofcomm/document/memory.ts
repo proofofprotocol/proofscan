@@ -40,131 +40,125 @@ export class DocumentMemoryManager {
   }
 
   /**
-   * Update memory after an interaction
+   * Update memory after an interaction (atomic operation)
+   * Uses transformMemory to prevent race conditions when concurrent
+   * messages are processed for the same document.
    */
   updateMemory(
     docId: string,
     message: DocumentMessage,
     responseText: string
   ): DocumentMemoryState | undefined {
-    // Check if document exists
-    const doc = this.store.get(docId);
-    if (!doc) return undefined;
-
-    const currentMemory = doc.memory as DocumentMemoryState || {};
-
-    // Extract message text
+    // Extract message text before transaction (pure computation)
     const messageText = extractText(message.parts);
 
-    // Update interaction count
-    const interactionCount = (currentMemory.interactionCount || 0) + 1;
+    const result = this.store.transformMemory(docId, (current) => {
+      const currentMemory = (current || {}) as DocumentMemoryState;
 
-    // Update last interaction time
-    const lastInteractionAt = new Date().toISOString();
+      // Update interaction count
+      const interactionCount = (currentMemory.interactionCount || 0) + 1;
 
-    // Update conversation summary (simple append for now)
-    const summaryPart = `[${interactionCount}] Q: ${truncate(messageText, 100)} A: ${truncate(responseText, 100)}`;
-    const conversationSummary = appendToSummary(
-      currentMemory.conversationSummary || '',
-      summaryPart,
-      MAX_SUMMARY_LENGTH
-    );
+      // Update last interaction time
+      const lastInteractionAt = new Date().toISOString();
 
-    const updatedMemory: DocumentMemoryState = {
-      ...currentMemory,
-      conversationSummary,
-      interactionCount,
-      lastInteractionAt,
-    };
+      // Update conversation summary (simple append for now)
+      const summaryPart = `[${interactionCount}] Q: ${truncate(messageText, 100)} A: ${truncate(responseText, 100)}`;
+      const conversationSummary = appendToSummary(
+        currentMemory.conversationSummary || '',
+        summaryPart,
+        MAX_SUMMARY_LENGTH
+      );
 
-    // Persist to database (include all fields)
-    const dbMemory: DocumentMemory = {
-      conversationSummary: updatedMemory.conversationSummary,
-      facts: updatedMemory.facts,
-      interactionCount: updatedMemory.interactionCount,
-      lastInteractionAt: updatedMemory.lastInteractionAt,
-    };
+      return {
+        ...currentMemory,
+        conversationSummary,
+        interactionCount,
+        lastInteractionAt,
+      };
+    });
 
-    this.store.updateMemory(docId, dbMemory);
-
-    return updatedMemory;
+    return result.success ? result.memory as DocumentMemoryState : undefined;
   }
 
   /**
-   * Add a fact to document memory
+   * Add a fact to document memory (atomic operation)
+   * Uses transformMemory to prevent race conditions when multiple callers
+   * add facts concurrently.
+   *
+   * @returns false if duplicate, doc not found, or error; true if fact was added
    */
   addFact(docId: string, fact: string): boolean {
-    const currentMemory = this.getMemory(docId) || {};
-    const facts = currentMemory.facts || [];
+    const result = this.store.transformMemory(docId, (current) => {
+      const facts = current?.facts || [];
 
-    // Check for duplicates
-    if (facts.includes(fact)) {
-      return false;
-    }
+      // Check for duplicates - return null to skip update
+      if (facts.includes(fact)) {
+        return null;
+      }
 
-    // Add fact (FIFO if at max)
-    const newFacts = [...facts, fact];
-    if (newFacts.length > MAX_FACTS) {
-      newFacts.shift();
-    }
+      // Add fact (FIFO if at max)
+      const newFacts = [...facts, fact];
+      if (newFacts.length > MAX_FACTS) {
+        newFacts.shift();
+      }
 
-    const dbMemory: DocumentMemory = {
-      conversationSummary: currentMemory.conversationSummary,
-      facts: newFacts,
-    };
+      return {
+        ...current,
+        facts: newFacts,
+      };
+    });
 
-    return this.store.updateMemory(docId, dbMemory);
+    return result.changed;
   }
 
   /**
-   * Remove a fact from document memory
+   * Remove a fact from document memory (atomic operation)
+   *
+   * @returns false if fact not found, doc not found, or error; true if fact was removed
    */
   removeFact(docId: string, fact: string): boolean {
-    const currentMemory = this.getMemory(docId) || {};
-    const facts = currentMemory.facts || [];
+    const result = this.store.transformMemory(docId, (current) => {
+      const facts = current?.facts || [];
 
-    const index = facts.indexOf(fact);
-    if (index === -1) {
-      return false;
-    }
+      const index = facts.indexOf(fact);
+      if (index === -1) {
+        return null; // Fact not found, skip update
+      }
 
-    const newFacts = [...facts];
-    newFacts.splice(index, 1);
+      const newFacts = [...facts];
+      newFacts.splice(index, 1);
 
-    const dbMemory: DocumentMemory = {
-      conversationSummary: currentMemory.conversationSummary,
-      facts: newFacts,
-    };
+      return {
+        ...current,
+        facts: newFacts,
+      };
+    });
 
-    return this.store.updateMemory(docId, dbMemory);
+    return result.changed;
   }
 
   /**
-   * Clear all facts from document memory
+   * Clear all facts from document memory (atomic operation)
    */
   clearFacts(docId: string): boolean {
-    const currentMemory = this.getMemory(docId) || {};
-
-    const dbMemory: DocumentMemory = {
-      conversationSummary: currentMemory.conversationSummary,
+    const result = this.store.transformMemory(docId, (current) => ({
+      ...current,
       facts: [],
-    };
+    }));
 
-    return this.store.updateMemory(docId, dbMemory);
+    return result.success;
   }
 
   /**
-   * Clear conversation summary
+   * Clear conversation summary (atomic operation)
    */
   clearSummary(docId: string): boolean {
-    const currentMemory = this.getMemory(docId) || {};
-
-    const dbMemory: DocumentMemory = {
+    const result = this.store.transformMemory(docId, (current) => ({
+      ...current,
       conversationSummary: '',
-      facts: currentMemory.facts,
-    };
+    }));
 
-    return this.store.updateMemory(docId, dbMemory);
+    return result.success;
   }
 
   /**
