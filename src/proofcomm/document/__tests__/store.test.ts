@@ -170,16 +170,40 @@ describe('Document Store (file operations)', () => {
       expect(result.error).toContain('empty');
     });
 
-    it('should reject path with ..', () => {
-      const result = validateDocumentPath('/path/../etc/passwd');
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('..');
-    });
-
     it('should reject non-existent file', () => {
       const result = validateDocumentPath('/non/existent/file.txt');
       expect(result.valid).toBe(false);
       expect(result.error).toContain('not found');
+    });
+
+    it('should resolve paths with .. before validation', () => {
+      // Paths with .. are resolved before checking existence
+      // /nonexistent/../also/nonexistent resolves to /also/nonexistent which doesn't exist
+      const result = validateDocumentPath('/nonexistent_path_12345/../also/nonexistent_abc');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('not found');
+    });
+
+    it('should accept path within allowedRoot', () => {
+      const result = validateDocumentPath(testFilePath, { allowedRoot: testDir });
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject path outside allowedRoot', () => {
+      const result = validateDocumentPath(testFilePath, { allowedRoot: '/some/other/root' });
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('allowed root');
+    });
+
+    it('should prevent traversal outside allowedRoot', () => {
+      // Even with .., the resolved path is checked against allowedRoot
+      const result = validateDocumentPath(
+        join(testDir, '..', 'escape', 'file.txt'),
+        { allowedRoot: testDir }
+      );
+      expect(result.valid).toBe(false);
+      // Either outside root or file not found
+      expect(result.error).toBeDefined();
     });
   });
 });

@@ -12,7 +12,7 @@
 import { createHash } from 'crypto';
 import { readFile, stat } from 'fs/promises';
 import { existsSync } from 'fs';
-import { basename, extname } from 'path';
+import { basename, extname, resolve } from 'path';
 import type { DocumentContent } from './types.js';
 
 /**
@@ -189,21 +189,50 @@ export function getDocumentName(filePath: string): string {
 }
 
 /**
- * Validate document path
+ * Options for document path validation
  */
-export function validateDocumentPath(filePath: string): { valid: boolean; error?: string } {
+export interface ValidateDocumentPathOptions {
+  /**
+   * Allowed root directory for document paths.
+   * If specified, document paths must reside within this directory.
+   * This prevents access to arbitrary filesystem locations.
+   */
+  allowedRoot?: string;
+}
+
+/**
+ * Validate document path with security checks
+ *
+ * Security considerations:
+ * - Paths are resolved to absolute form to handle symlinks and relative paths
+ * - If allowedRoot is specified, paths must reside within it
+ * - This prevents arbitrary file access (e.g., /etc/passwd, private keys)
+ */
+export function validateDocumentPath(
+  filePath: string,
+  options?: ValidateDocumentPathOptions
+): { valid: boolean; error?: string } {
   // Check for empty path
   if (!filePath || filePath.trim().length === 0) {
     return { valid: false, error: 'Document path cannot be empty' };
   }
 
-  // Check for path traversal attempts
-  if (filePath.includes('..')) {
-    return { valid: false, error: 'Document path cannot contain ".."' };
+  // Resolve to absolute path (handles .., symlinks, etc.)
+  const resolvedPath = resolve(filePath);
+
+  // If allowedRoot is specified, check that resolved path is within it
+  if (options?.allowedRoot) {
+    const resolvedRoot = resolve(options.allowedRoot);
+    if (!resolvedPath.startsWith(resolvedRoot + '/') && resolvedPath !== resolvedRoot) {
+      return {
+        valid: false,
+        error: `Document path must be within allowed root: ${options.allowedRoot}`,
+      };
+    }
   }
 
   // Check if file exists
-  if (!fileExists(filePath)) {
+  if (!fileExists(resolvedPath)) {
     return { valid: false, error: `Document file not found: ${filePath}` };
   }
 

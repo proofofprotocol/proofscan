@@ -33,6 +33,13 @@ export interface ResponderOptions {
   includeMemory?: boolean;
   /** Update memory after response */
   updateMemory?: boolean;
+  /**
+   * Automatically update document hash when content changes.
+   * When enabled, if the document content has changed since last read,
+   * the stored hash will be updated as a side effect.
+   * Default: true
+   */
+  autoUpdateHash?: boolean;
 }
 
 const DEFAULT_MAX_RESPONSE_LENGTH = 4000;
@@ -58,6 +65,7 @@ export class DocumentResponder {
     const maxLength = options?.maxResponseLength ?? DEFAULT_MAX_RESPONSE_LENGTH;
     const includeMemory = options?.includeMemory ?? true;
     const updateMemory = options?.updateMemory ?? true;
+    const autoUpdateHash = options?.autoUpdateHash ?? true;
 
     // Get document from store
     const doc = this.store.get(docId);
@@ -70,8 +78,8 @@ export class DocumentResponder {
     try {
       const content = await readDocument(doc.documentPath);
 
-      // Check if hash changed and update if needed
-      if (doc.documentHash && content.hash !== doc.documentHash) {
+      // Check if hash changed and update if needed (side effect controlled by option)
+      if (autoUpdateHash && doc.documentHash && content.hash !== doc.documentHash) {
         this.store.updateHash(docId, content.hash);
       }
 
@@ -122,7 +130,6 @@ export class DocumentResponder {
 
     // Normalize for search
     const lowerMessage = messageText.toLowerCase().trim();
-    const lowerContent = docContent.toLowerCase();
 
     // Check for special commands
     if (lowerMessage === 'content' || lowerMessage === 'show content') {

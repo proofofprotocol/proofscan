@@ -125,15 +125,15 @@ export interface ProofCommEventBaseOptions {
 // ==================== G1: Emit Function ====================
 
 /**
- * Emit a ProofComm event with proper metadata stringification
+ * Emit a ProofComm event with proper metadata handling
  *
  * G1 Contract:
- * - metadata is ALWAYS JSON.stringify()'d before passing to auditLogger
- * - This ensures metadata_json in DB is always a valid JSON string
+ * - metadata is passed directly to auditLogger which handles stringification
+ * - ProofComm event kinds are part of GatewayEventKind union (defined in db/types.ts)
  *
  * @param auditLogger - AuditLogger instance
- * @param kind - ProofComm event kind
- * @param metadata - ProofComm metadata (will be stringified)
+ * @param kind - ProofComm event kind (subset of GatewayEventKind)
+ * @param metadata - ProofComm metadata
  * @param baseOptions - Base event options (without metadata)
  * @returns Event ID
  */
@@ -143,19 +143,13 @@ export function emitProofCommEvent(
   metadata: ProofCommMetadata,
   baseOptions: ProofCommEventBaseOptions
 ): string {
-  // G1: Always stringify metadata before passing
-  // This ensures consistency across all ProofComm events
-  const metadataStringified = JSON.stringify(metadata);
-
-  // Parse back to object for audit logger (which expects object)
-  // The audit logger will stringify again, but this ensures we validate JSON format
-  const metadataObject = JSON.parse(metadataStringified) as Record<string, unknown>;
-
+  // ProofCommEventKind is a subset of GatewayEventKind (both defined in db/types.ts)
+  // No cast needed - TypeScript verifies the literal types are valid
   return auditLogger.logEvent({
     requestId: baseOptions.requestId,
     traceId: baseOptions.traceId,
     clientId: baseOptions.clientId,
-    event: kind as unknown as GatewayEventKind, // Cast for compatibility
+    event: kind,
     target: baseOptions.target,
     method: baseOptions.method,
     latencyMs: baseOptions.latencyMs,
@@ -164,7 +158,7 @@ export function emitProofCommEvent(
     denyReason: baseOptions.denyReason,
     error: baseOptions.error,
     statusCode: baseOptions.statusCode,
-    metadata: metadataObject,
+    metadata: metadata as Record<string, unknown>,
   });
 }
 

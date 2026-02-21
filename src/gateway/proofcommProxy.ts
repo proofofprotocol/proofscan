@@ -58,6 +58,31 @@ export interface ProofCommProxyOptions {
   configDir: string;
   /** Audit logger */
   auditLogger: AuditLogger;
+  /**
+   * Allowed root directory for document paths.
+   * If specified, document registration will only accept paths within this directory.
+   * This is a security measure to prevent access to arbitrary filesystem locations.
+   */
+  allowedDocumentRoot?: string;
+}
+
+/**
+ * Authentication preHandler for ProofComm routes
+ * Centralizes auth check to avoid duplication across all endpoints
+ */
+async function requireAuth(
+  request: FastifyRequest,
+  reply: FastifyReply
+): Promise<void> {
+  const auth = request.auth as AuthInfo | undefined;
+  if (!auth) {
+    return reply.code(401).send({
+      error: {
+        code: 'UNAUTHORIZED',
+        message: 'Authentication required',
+      },
+    });
+  }
 }
 
 /**
@@ -73,21 +98,17 @@ export function registerProofCommRoutes(
   // POST /proofcomm/documents/register - Register a new document
   fastify.post<{
     Body: RegisterDocumentBody;
-  }>('/proofcomm/documents/register', async (request, reply) => {
-    const auth = request.auth as AuthInfo | undefined;
-    if (!auth) {
-      return reply.code(401).send({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-    }
+  }>('/proofcomm/documents/register', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
+    const auth = request.auth as AuthInfo;
 
     const { document_path, name, description } = request.body;
 
-    // Validate document path
-    const pathValidation = validateDocumentPath(document_path);
+    // Validate document path (with optional root restriction for security)
+    const pathValidation = validateDocumentPath(document_path, {
+      allowedRoot: options.allowedDocumentRoot,
+    });
     if (!pathValidation.valid) {
       return reply.code(400).send({
         error: {
@@ -134,14 +155,12 @@ export function registerProofCommRoutes(
       description,
     };
 
-    const doc = documentsStore.add({
-      name: docName,
-      documentPath: document_path,
-      documentHash: docContent.hash,
-      config: docConfig,
-    });
+    // Generate document ID first (shared between both tables)
+    const { ulid } = await import('ulid');
+    const docId = ulid();
 
-    // Also register in targets table for unified routing
+    // Register in targets table FIRST for atomicity.
+    // If this fails, no orphaned resident_documents row is created.
     // Type: 'agent', Protocol: 'a2a', with document_type in config
     targetsStore.add(
       {
@@ -151,12 +170,20 @@ export function registerProofCommRoutes(
         enabled: true,
         config: {
           schema_version: 1,
-          url: `internal://document/${doc.docId}`,
+          url: `internal://document/${docId}`,
           document_type: 'resident',
         },
       },
-      { id: doc.docId }
+      { id: docId }
     );
+
+    // Now add to resident_documents (uses same docId)
+    const doc = documentsStore.add({
+      name: docName,
+      documentPath: document_path,
+      documentHash: docContent.hash,
+      config: docConfig,
+    }, docId);
 
     // Emit document activated event
     emitDocumentEvent(options.auditLogger, 'activated', {
@@ -179,17 +206,9 @@ export function registerProofCommRoutes(
   });
 
   // GET /proofcomm/documents - List all documents
-  fastify.get('/proofcomm/documents', async (request, reply) => {
-    const auth = request.auth as AuthInfo | undefined;
-    if (!auth) {
-      return reply.code(401).send({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-    }
-
+  fastify.get('/proofcomm/documents', {
+    preHandler: requireAuth,
+  }, async (_request, reply) => {
     const docs = documentsStore.list();
 
     return reply.send({
@@ -210,17 +229,9 @@ export function registerProofCommRoutes(
   // GET /proofcomm/documents/:doc_id - Get document details
   fastify.get<{
     Params: { doc_id: string };
-  }>('/proofcomm/documents/:doc_id', async (request, reply) => {
-    const auth = request.auth as AuthInfo | undefined;
-    if (!auth) {
-      return reply.code(401).send({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-    }
-
+  }>('/proofcomm/documents/:doc_id', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
     const { doc_id } = request.params;
     const doc = documentsStore.get(doc_id);
 
@@ -249,17 +260,9 @@ export function registerProofCommRoutes(
   // GET /proofcomm/documents/:doc_id/memory - Get document memory
   fastify.get<{
     Params: { doc_id: string };
-  }>('/proofcomm/documents/:doc_id/memory', async (request, reply) => {
-    const auth = request.auth as AuthInfo | undefined;
-    if (!auth) {
-      return reply.code(401).send({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-    }
-
+  }>('/proofcomm/documents/:doc_id/memory', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
     const { doc_id } = request.params;
     const doc = documentsStore.get(doc_id);
 
@@ -282,16 +285,10 @@ export function registerProofCommRoutes(
   fastify.put<{
     Params: { doc_id: string };
     Body: UpdateMemoryBody;
-  }>('/proofcomm/documents/:doc_id/memory', async (request, reply) => {
-    const auth = request.auth as AuthInfo | undefined;
-    if (!auth) {
-      return reply.code(401).send({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-    }
+  }>('/proofcomm/documents/:doc_id/memory', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
+    const auth = request.auth as AuthInfo;
 
     const { doc_id } = request.params;
     const { memory } = request.body;
@@ -335,17 +332,9 @@ export function registerProofCommRoutes(
   // DELETE /proofcomm/documents/:doc_id/memory - Clear document memory
   fastify.delete<{
     Params: { doc_id: string };
-  }>('/proofcomm/documents/:doc_id/memory', async (request, reply) => {
-    const auth = request.auth as AuthInfo | undefined;
-    if (!auth) {
-      return reply.code(401).send({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-    }
-
+  }>('/proofcomm/documents/:doc_id/memory', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
     const { doc_id } = request.params;
 
     if (!documentsStore.exists(doc_id)) {
@@ -374,17 +363,9 @@ export function registerProofCommRoutes(
   // DELETE /proofcomm/documents/:doc_id - Remove document
   fastify.delete<{
     Params: { doc_id: string };
-  }>('/proofcomm/documents/:doc_id', async (request, reply) => {
-    const auth = request.auth as AuthInfo | undefined;
-    if (!auth) {
-      return reply.code(401).send({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-    }
-
+  }>('/proofcomm/documents/:doc_id', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
     const { doc_id } = request.params;
 
     // Remove from documents store
@@ -407,16 +388,10 @@ export function registerProofCommRoutes(
   // POST /proofcomm/documents/:doc_id/refresh - Refresh document hash
   fastify.post<{
     Params: { doc_id: string };
-  }>('/proofcomm/documents/:doc_id/refresh', async (request, reply) => {
-    const auth = request.auth as AuthInfo | undefined;
-    if (!auth) {
-      return reply.code(401).send({
-        error: {
-          code: 'UNAUTHORIZED',
-          message: 'Authentication required',
-        },
-      });
-    }
+  }>('/proofcomm/documents/:doc_id/refresh', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
+    const auth = request.auth as AuthInfo;
 
     const { doc_id } = request.params;
     const doc = documentsStore.get(doc_id);

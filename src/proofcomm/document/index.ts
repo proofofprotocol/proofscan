@@ -30,6 +30,7 @@ export {
 export {
   DocumentStoreError,
   type ReadDocumentOptions,
+  type ValidateDocumentPathOptions,
   computeHash,
   detectMimeType,
   fileExists,
