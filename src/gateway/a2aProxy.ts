@@ -15,9 +15,12 @@ import { hasPermission, buildA2APermission } from './permissions.js';
 import { ConnectorQueueManager, QueueFullError, QueueTimeoutError } from './queue.js';
 import { GatewayLimits } from './config.js';
 import { TargetsStore } from '../db/targets-store.js';
+import { DocumentsStore } from '../db/documents-store.js';
 import { createA2AClient } from '../a2a/client.js';
 import type { A2AMessage, TaskState } from '../a2a/types.js';
 import { ErrorCodes } from './mcpProxy.js';
+import { parseAgentField, isDocumentTarget, VALID_ID_PATTERN } from '../proofcomm/routing.js';
+import { DocumentResponder, extractText, type DocumentMessage } from '../proofcomm/document/index.js';
 
 /**
  * A2A Proxy request body
@@ -296,6 +299,92 @@ async function executeA2ARequest(
 }
 
 /**
+ * Handle document request (doc/ prefix routing)
+ */
+async function handleDocumentRequest(
+  docId: string,
+  method: string,
+  params: unknown,
+  configDir: string,
+  requestId: string,
+  reply: FastifyReply
+): Promise<A2AProxyResponse> {
+  const documentsStore = new DocumentsStore(configDir);
+
+  // Check document exists
+  const doc = documentsStore.get(docId);
+  if (!doc) {
+    return reply.code(404).send(
+      createErrorResponse(ErrorCodes.NOT_FOUND, `Document not found: ${docId}`, requestId)
+    );
+  }
+
+  // Only message/send is supported for documents
+  if (method !== 'message/send') {
+    return reply.code(400).send(
+      createErrorResponse(
+        ErrorCodes.BAD_REQUEST,
+        `Method not supported for documents: ${method}. Use message/send.`,
+        requestId
+      )
+    );
+  }
+
+  // Validate params
+  if (!params || typeof params !== 'object' || !('message' in params)) {
+    return reply.code(400).send(
+      createErrorResponse(ErrorCodes.BAD_REQUEST, 'Invalid params: message field required', requestId)
+    );
+  }
+
+  const messageParams = params as { message: string | A2AMessage };
+  const message = messageParams.message;
+
+  // Build DocumentMessage from A2A message
+  let docMessage: DocumentMessage;
+  if (typeof message === 'string') {
+    docMessage = {
+      from: 'unknown',
+      parts: [{ text: message }],
+    };
+  } else {
+    docMessage = {
+      from: 'unknown',
+      parts: message.parts as Array<{ text: string } | { data: string; mimeType: string }>,
+      messageId: message.messageId,
+      metadata: message.metadata,
+    };
+  }
+
+  // Process message with DocumentResponder
+  const responder = new DocumentResponder(documentsStore);
+
+  try {
+    const response = await responder.processMessage(docId, docMessage);
+
+    // Convert response to A2A format
+    return {
+      result: {
+        role: 'assistant',
+        parts: response.parts,
+        metadata: {
+          docId,
+          memoryUpdated: response.memoryUpdated,
+        },
+      },
+    };
+  } catch (error) {
+    return reply.code(500).send(
+      createErrorResponse(
+        ErrorCodes.INTERNAL_ERROR,
+        error instanceof Error ? error.message : 'Document processing error',
+        requestId
+      )
+    );
+  }
+}
+
+/**
  * A2A Proxy handler result
  */
 export interface A2AProxyHandlerResult {
@@ -338,8 +427,23 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
-    // Validate agent ID format (security: prevent path traversal, injection)
-    if (!/^[a-zA-Z0-9_-]+$/.test(agentId)) {
+    // Parse agent field to determine routing target (G2: Reserved Namespace)
+    let routingTarget;
+    try {
+      routingTarget = parseAgentField(agentId);
+    } catch (err) {
+      return reply.code(400).send(
+        createErrorResponse(
+          ErrorCodes.BAD_REQUEST,
+          err instanceof Error ? err.message : 'Invalid agent field',
+          requestId
+        )
+      );
+    }
+
+    // For regular agents, validate ID format (security: prevent path traversal, injection)
+    // doc/ and space/ targets are validated by parseAgentField
+    if (routingTarget.type === 'agent' && !VALID_ID_PATTERN.test(agentId)) {
       return reply.code(400).send(
         createErrorResponse(ErrorCodes.BAD_REQUEST, 'Invalid agent ID format', requestId)
       );
@@ -363,8 +467,10 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
     }
 
     // 1. Permission check (method is validated above, safe to cast)
+    // For document targets, use the doc ID for permission check
+    const permissionTargetId = routingTarget.type === 'document' ? routingTarget.id : agentId;
     const permissionType = getPermissionType(method as A2AMethod);
-    const requiredPermission = buildA2APermission(permissionType, agentId);
+    const requiredPermission = buildA2APermission(permissionType, permissionTargetId);
     if (!hasPermission(auth.permissions, requiredPermission)) {
       return reply.code(403).send(
         createErrorResponse(
@@ -375,7 +481,19 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
-    // 2. Get agent from registry (targets store) - O(1) lookup by ID
+    // 2a. Handle document targets (G2: doc/ prefix routing)
+    if (isDocumentTarget(routingTarget)) {
+      return handleDocumentRequest(
+        routingTarget.id,
+        method,
+        params,
+        configDir,
+        requestId,
+        reply
+      );
+    }
+
+    // 2b. Get agent from registry (targets store) - O(1) lookup by ID
     const target = targetsStore.get(agentId);
     // Validate it's an A2A agent (not an MCP connector)
     const agent = target?.type === 'agent' && target?.protocol === 'a2a' ? target : undefined;

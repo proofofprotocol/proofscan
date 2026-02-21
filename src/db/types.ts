@@ -263,3 +263,15 @@ export interface AgentCache {
   fetched_at: string | null;
   expires_at: string | null;
 }
+
+// Resident documents table (Phase 9.0: ProofComm)
+export interface ResidentDocument {
+  doc_id: string;
+  name: string;
+  document_path: string;
+  document_hash: string | null;
+  memory_json: string | null;
+  created_at: string;
+  updated_at: string | null;
+  config_json: string | null;
+}

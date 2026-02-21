@@ -9,8 +9,11 @@
  * - G1: metadata_json contract (events.ts)
  * - G2: Reserved Namespace (routing.ts)
  *
+ * Phase 1: Resident Documents
+ * - Document agent system (document/*.ts)
+ * - DB store for documents (db/documents-store.ts)
+ *
  * Future Phases:
- * - Phase 1: Resident Documents
  * - Phase 2: Skill Routing
  * - Phase 3: Autonomous Spaces
  */
@@ -70,3 +73,41 @@ export {
   isSpaceTarget,
   isAgentTarget,
 } from './routing.js';
+
+// ==================== Documents (Phase 1) ====================
+export {
+  // Types
+  type DocumentContent,
+  type DocumentContext,
+  type DocumentMemoryState,
+  type TextPart,
+  type DataPart,
+  type MessagePart,
+  type DocumentMessage,
+  type DocumentResponse,
+  type RegisterDocumentRequest,
+  type RegisterDocumentResult,
+  type DocumentRegistrationConfig,
+  type DocumentInfo,
+  type ReadDocumentOptions,
+  type ResponderOptions,
+  // Type guards
+  isTextPart,
+  isDataPart,
+  // Utilities
+  extractText,
+  a2aToDocumentMessage,
+  documentResponseToA2AParts,
+  // Store functions
+  DocumentStoreError,
+  computeHash,
+  detectMimeType,
+  fileExists,
+  readDocument,
+  hasDocumentChanged,
+  getDocumentName,
+  validateDocumentPath,
+  // Classes
+  DocumentMemoryManager,
+  DocumentResponder,
+} from './document/index.js';
