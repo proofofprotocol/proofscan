@@ -442,9 +442,11 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
-    // For regular agents, validate ID format (security: prevent path traversal, injection)
+    // For regular agents (non-URL), validate ID format (security: prevent path traversal, injection)
     // doc/ and space/ targets are validated by parseAgentField
-    if (routingTarget.type === 'agent' && !VALID_ID_PATTERN.test(agentId)) {
+    // URL-based agents (containing ://) are forwarded directly and don't need local ID validation
+    const isUrlAgent = agentId.includes('://');
+    if (routingTarget.type === 'agent' && !isUrlAgent && !VALID_ID_PATTERN.test(agentId)) {
       return reply.code(400).send(
         createErrorResponse(ErrorCodes.BAD_REQUEST, 'Invalid agent ID format', requestId)
       );

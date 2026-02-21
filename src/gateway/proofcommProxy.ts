@@ -316,22 +316,15 @@ export function registerProofCommRoutes(
     const { doc_id } = request.params;
     const { memory } = request.body;
 
-    if (!documentsStore.exists(doc_id)) {
+    // Atomic update - no separate exists check to avoid TOCTOU race
+    const success = documentsStore.updateMemory(doc_id, memory);
+
+    if (!success) {
+      // updateMemory returns false if document not found
       return reply.code(404).send({
         error: {
           code: 'NOT_FOUND',
           message: `Document not found: ${doc_id}`,
-        },
-      });
-    }
-
-    const success = documentsStore.updateMemory(doc_id, memory);
-
-    if (!success) {
-      return reply.code(500).send({
-        error: {
-          code: 'UPDATE_FAILED',
-          message: 'Failed to update memory',
         },
       });
     }

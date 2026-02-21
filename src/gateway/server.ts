@@ -183,18 +183,26 @@ export function createGatewayServer(
     // ProofComm Management Routes (Phase 9.0)
     const auditLogger = createAuditLogger(configDir);
 
-    // Security warning: allowedDocumentRoot not configured
-    // Without this, any authenticated client can register arbitrary files
-    log.warn({
-      event: 'proofcomm_security_warning',
-      message: 'allowedDocumentRoot not configured - document registration can access any file',
-      recommendation: 'Set allowedDocumentRoot to restrict document registration to a specific directory',
-    });
+    // Wire allowedDocumentRoot from GatewayConfig
+    const allowedDocumentRoot = fullConfig.allowedDocumentRoot;
+
+    // Log ProofComm status
+    if (allowedDocumentRoot) {
+      log.info({
+        event: 'proofcomm_document_registration_enabled',
+        allowedDocumentRoot,
+      });
+    } else {
+      log.info({
+        event: 'proofcomm_document_registration_disabled',
+        message: 'allowedDocumentRoot not configured - document registration returns 503',
+      });
+    }
 
     registerProofCommRoutes(server, {
       configDir,
       auditLogger,
-      // TODO: allowedDocumentRoot should be configurable via GatewayConfig
+      allowedDocumentRoot,
     });
 
     log.info({ event: 'proofcomm_routes_enabled', configDir });

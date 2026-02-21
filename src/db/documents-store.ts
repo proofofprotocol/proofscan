@@ -352,7 +352,7 @@ export class DocumentsStore {
     return {
       success: docFound,
       changed,
-      memory: changed ? resultMemory : undefined,
+      memory: resultMemory ?? undefined,
     };
   }
 

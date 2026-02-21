@@ -49,7 +49,7 @@ Keywords: testing, example, demonstration
     const dbPath = join(testDir, 'events.db');
     const db = new Database(dbPath);
     db.exec(EVENTS_DB_SCHEMA);
-    db.pragma('user_version = 10');
+    db.pragma('user_version = 11');
     db.close();
 
     store = new DocumentsStore(testDir);
