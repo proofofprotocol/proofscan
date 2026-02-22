@@ -385,8 +385,11 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
         try {
           db.exec(stmt + ';');
         } catch (err) {
-          // Only swallow "already exists" errors - rethrow everything else (including non-Error throws)
-          if (!(err instanceof Error) || !err.message.includes('already exists')) {
+          // Only swallow SQLite "already exists" errors - rethrow everything else
+          const isSqliteError = err instanceof Error &&
+            (err as { code?: string }).code === 'SQLITE_ERROR' &&
+            err.message.includes('already exists');
+          if (!isSqliteError) {
             throw err;
           }
           console.warn(`[db] Migration 9→10 skipped statement (already exists): ${err.message}`);
@@ -411,8 +414,11 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
         try {
           db.exec(stmt + ';');
         } catch (err) {
-          // Only swallow "already exists" errors - rethrow everything else (including non-Error throws)
-          if (!(err instanceof Error) || !err.message.includes('already exists')) {
+          // Only swallow SQLite "already exists" errors - rethrow everything else
+          const isSqliteError = err instanceof Error &&
+            (err as { code?: string }).code === 'SQLITE_ERROR' &&
+            err.message.includes('already exists');
+          if (!isSqliteError) {
             throw err;
           }
           console.warn(`[db] Migration 10→11 skipped statement (already exists): ${err.message}`);

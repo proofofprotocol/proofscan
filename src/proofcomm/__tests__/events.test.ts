@@ -57,6 +57,7 @@ describe('ProofComm Events - G1 Contract', () => {
         'search',
         'match',
         'activated',
+        'deactivated',
         'context_updated',
         'resolved',
         'dispatched',
@@ -148,6 +149,7 @@ describe('ProofComm Events - G1 Contract', () => {
 
     it('should validate document actions', () => {
       expect(isValidAction('proofcomm_document', 'activated')).toBe(true);
+      expect(isValidAction('proofcomm_document', 'deactivated')).toBe(true);
       expect(isValidAction('proofcomm_document', 'context_updated')).toBe(true);
       expect(isValidAction('proofcomm_document', 'message')).toBe(false);
     });
