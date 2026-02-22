@@ -154,7 +154,11 @@ export function registerProofCommRoutes(
       docContent = await readDocument(document_path);
     } catch (err) {
       if (err instanceof DocumentStoreError) {
-        return reply.code(400).send({
+        // Map error codes to appropriate HTTP status
+        const statusCode = err.code === 'FILE_NOT_FOUND' ? 404
+          : err.code === 'TOO_LARGE' ? 413
+          : 400;
+        return reply.code(statusCode).send({
           error: {
             code: err.code,
             message: err.message,
@@ -353,22 +357,15 @@ export function registerProofCommRoutes(
   }, async (request, reply) => {
     const { doc_id } = request.params;
 
-    if (!documentsStore.exists(doc_id)) {
+    // Atomic clear - no separate exists check to avoid TOCTOU race
+    const success = documentsStore.setMemory(doc_id, null);
+
+    if (!success) {
+      // setMemory returns false if document not found
       return reply.code(404).send({
         error: {
           code: 'NOT_FOUND',
           message: `Document not found: ${doc_id}`,
-        },
-      });
-    }
-
-    const success = documentsStore.setMemory(doc_id, null);
-
-    if (!success) {
-      return reply.code(500).send({
-        error: {
-          code: 'UPDATE_FAILED',
-          message: 'Failed to clear memory',
         },
       });
     }
@@ -451,7 +448,11 @@ export function registerProofCommRoutes(
       docContent = await readDocument(doc.documentPath);
     } catch (err) {
       if (err instanceof DocumentStoreError) {
-        return reply.code(400).send({
+        // Map error codes to appropriate HTTP status
+        const statusCode = err.code === 'FILE_NOT_FOUND' ? 404
+          : err.code === 'TOO_LARGE' ? 413
+          : 400;
+        return reply.code(statusCode).send({
           error: {
             code: err.code,
             message: err.message,

@@ -8,7 +8,7 @@
  * Phase 2.4: Schema version 7 with task_events table for Task lifecycle tracking
  * Phase 6.2: Schema version 8 with ui_events table for UI tool tracking
  * Phase 8.5: Schema version 9 with gateway_events table for audit logging
- * Phase 9.0: Schema version 10 with ProofComm events and resident_documents table
+ * Phase 9.0: Schema version 11 with ProofComm events, resident_documents table, and UNIQUE constraint on document_path
  */
 
 export const EVENTS_DB_VERSION = 11;
