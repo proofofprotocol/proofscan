@@ -382,6 +382,7 @@ export function registerProofCommRoutes(
   }>('/proofcomm/documents/:doc_id/memory', {
     preHandler: requireAuth,
   }, async (request, reply) => {
+    const auth = getAuth(request);
     const { doc_id } = request.params;
 
     // Atomic clear - no separate exists check to avoid TOCTOU race
@@ -396,6 +397,15 @@ export function registerProofCommRoutes(
         },
       });
     }
+
+    // Emit context updated event (memory cleared)
+    emitDocumentEvent(options.auditLogger, 'context_updated', {
+      doc_target_id: doc_id,
+    }, {
+      requestId: request.requestId,
+      traceId: request.headers['x-trace-id'] as string | undefined,
+      clientId: auth.client_id,
+    });
 
     return reply.code(204).send();
   });

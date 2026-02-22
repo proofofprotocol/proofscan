@@ -93,9 +93,16 @@ export class DocumentsStore {
 
   /**
    * Add a new resident document
+   *
+   * Note: This method does NOT handle UNIQUE constraint violations on document_path.
+   * If a duplicate path is inserted, a raw SQLite error will be thrown.
+   * For production use with user-facing endpoints, use addWithTarget() which handles
+   * the UNIQUE constraint properly, or check getByPath() before calling add().
+   *
    * @param options - Document creation options
    * @param overrideId - Optional explicit ID (for testing/migration)
    * @returns The created document with generated ID and timestamps
+   * @throws SQLite error if document_path already exists
    */
   add(options: CreateDocumentOptions, overrideId?: string): ResidentDocumentWithParsed {
     const now = new Date().toISOString();
@@ -454,15 +461,35 @@ export class DocumentsStore {
    * Convert internal record to external interface with parsed JSON
    */
   private toExternal(row: ResidentDocument): ResidentDocumentWithParsed {
+    // Safely parse JSON fields - return undefined if malformed
+    let memory: DocumentMemory | undefined;
+    let config: DocumentConfig | undefined;
+
+    if (row.memory_json) {
+      try {
+        memory = JSON.parse(row.memory_json);
+      } catch {
+        console.warn(`[documents-store] Malformed memory_json for doc ${row.doc_id}`);
+      }
+    }
+
+    if (row.config_json) {
+      try {
+        config = JSON.parse(row.config_json);
+      } catch {
+        console.warn(`[documents-store] Malformed config_json for doc ${row.doc_id}`);
+      }
+    }
+
     return {
       docId: row.doc_id,
       name: row.name,
       documentPath: row.document_path,
       documentHash: row.document_hash || undefined,
-      memory: row.memory_json ? JSON.parse(row.memory_json) : undefined,
+      memory,
       createdAt: row.created_at,
       updatedAt: row.updated_at || undefined,
-      config: row.config_json ? JSON.parse(row.config_json) : undefined,
+      config,
     };
   }
 }

@@ -385,14 +385,11 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
         try {
           db.exec(stmt + ';');
         } catch (err) {
-          // Ignore "table already exists" and "index already exists" errors
-          if (err instanceof Error &&
-              !err.message.includes('already exists')) {
+          // Only swallow "already exists" errors - rethrow everything else (including non-Error throws)
+          if (!(err instanceof Error) || !err.message.includes('already exists')) {
             throw err;
           }
-          if (err instanceof Error) {
-            console.warn(`[db] Migration 9→10 skipped statement (already exists): ${err.message}`);
-          }
+          console.warn(`[db] Migration 9→10 skipped statement (already exists): ${err.message}`);
         }
       }
 
@@ -414,15 +411,11 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
         try {
           db.exec(stmt + ';');
         } catch (err) {
-          // Ignore "table already exists" and "index already exists" errors
-          if (err instanceof Error &&
-              !err.message.includes('already exists')) {
+          // Only swallow "already exists" errors - rethrow everything else (including non-Error throws)
+          if (!(err instanceof Error) || !err.message.includes('already exists')) {
             throw err;
           }
-          // Log warning for swallowed errors to help detect schema drift
-          if (err instanceof Error) {
-            console.warn(`[db] Migration 10→11 skipped statement (already exists): ${err.message}`);
-          }
+          console.warn(`[db] Migration 10→11 skipped statement (already exists): ${err.message}`);
         }
       }
 
