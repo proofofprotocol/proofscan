@@ -83,6 +83,19 @@ async function requireAuth(
 }
 
 /**
+ * Get authenticated user info with runtime type guard
+ * Throws if auth is not present (should never happen after requireAuth preHandler)
+ */
+function getAuth(request: FastifyRequest): AuthInfo {
+  const auth = request.auth as AuthInfo | undefined;
+  if (!auth) {
+    // This should never happen as requireAuth preHandler should have blocked it
+    throw new Error('Authentication required but not present');
+  }
+  return auth;
+}
+
+/**
  * Register ProofComm routes on a Fastify instance
  */
 export function registerProofCommRoutes(
@@ -108,7 +121,7 @@ export function registerProofCommRoutes(
       },
     },
   }, async (request, reply) => {
-    const auth = request.auth as AuthInfo;
+    const auth = getAuth(request);
 
     // Security: Refuse registration if allowedDocumentRoot is not configured
     // Without this constraint, any authenticated client can read arbitrary files
@@ -182,26 +195,40 @@ export function registerProofCommRoutes(
 
     // Atomically register in both targets and resident_documents tables.
     // Uses a SQLite transaction to ensure both inserts succeed or both fail.
-    const doc = documentsStore.addWithTarget(
-      {
-        name: docName,
-        documentPath: document_path,
-        documentHash: docContent.hash,
-        config: docConfig,
-      },
-      {
-        type: 'agent',
-        protocol: 'a2a',
-        name: docName,
-        enabled: true,
-        config: {
-          schema_version: 1,
-          url: `internal://document/${docId}`,
-          document_type: 'resident',
+    let doc;
+    try {
+      doc = documentsStore.addWithTarget(
+        {
+          name: docName,
+          documentPath: document_path,
+          documentHash: docContent.hash,
+          config: docConfig,
         },
-      },
-      docId
-    );
+        {
+          type: 'agent',
+          protocol: 'a2a',
+          name: docName,
+          enabled: true,
+          config: {
+            schema_version: 1,
+            url: `internal://document/${docId}`,
+            document_type: 'resident',
+          },
+        },
+        docId
+      );
+    } catch (err) {
+      // Handle UNIQUE constraint violation (concurrent registration of same path)
+      if (err instanceof Error && err.message.includes('UNIQUE constraint failed')) {
+        return reply.code(409).send({
+          error: {
+            code: 'CONFLICT',
+            message: `Document already registered for path: ${document_path}`,
+          },
+        });
+      }
+      throw err;
+    }
 
     // Emit document activated event
     emitDocumentEvent(options.auditLogger, 'activated', {
@@ -315,7 +342,7 @@ export function registerProofCommRoutes(
       },
     },
   }, async (request, reply) => {
-    const auth = request.auth as AuthInfo;
+    const auth = getAuth(request);
 
     const { doc_id } = request.params;
     const { memory } = request.body;
@@ -379,7 +406,7 @@ export function registerProofCommRoutes(
   }>('/proofcomm/documents/:doc_id', {
     preHandler: requireAuth,
   }, async (request, reply) => {
-    const auth = request.auth as AuthInfo;
+    const auth = getAuth(request);
     const { doc_id } = request.params;
 
     // Get document info before deletion for audit event
@@ -415,7 +442,7 @@ export function registerProofCommRoutes(
   }>('/proofcomm/documents/:doc_id/refresh', {
     preHandler: requireAuth,
   }, async (request, reply) => {
-    const auth = request.auth as AuthInfo;
+    const auth = getAuth(request);
 
     const { doc_id } = request.params;
     const doc = documentsStore.get(doc_id);

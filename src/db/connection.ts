@@ -390,6 +390,9 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
               !err.message.includes('already exists')) {
             throw err;
           }
+          if (err instanceof Error) {
+            console.warn(`[db] Migration 9→10 skipped statement (already exists): ${err.message}`);
+          }
         }
       }
 
