@@ -23,6 +23,13 @@ export const RESERVED_PREFIXES = ['doc/', 'space/'] as const;
 export type ReservedPrefix = typeof RESERVED_PREFIXES[number];
 
 /**
+ * Skill route prefix for @skill: routing
+ * Format: @skill:<name>
+ * Not in RESERVED_PREFIXES because skill names are not target IDs
+ */
+export const SKILL_ROUTE_PREFIX = '@skill:';
+
+/**
  * Valid ID pattern for doc/space IDs
  * Alphanumeric, underscore, and hyphen only
  */
@@ -33,7 +40,7 @@ export const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 /**
  * Type of routing target
  */
-export type RoutingTargetType = 'agent' | 'document' | 'space';
+export type RoutingTargetType = 'agent' | 'document' | 'space' | 'skill';
 
 /**
  * Parsed routing target
@@ -55,6 +62,7 @@ export interface RoutingTarget {
  * G2 Contract:
  * - doc/<id> routes to document
  * - space/<id> routes to space
+ * - @skill:<name> routes via skill resolution
  * - Other values route to regular agent
  *
  * @param agent - Agent field value from A2A request
@@ -90,6 +98,15 @@ export function parseAgentField(agent: string): RoutingTarget {
       );
     }
     return { type: 'space', id, original: agent };
+  }
+
+  // Check for @skill: prefix (Phase 9.2: Skill Routing)
+  if (agent.startsWith(SKILL_ROUTE_PREFIX)) {
+    const skillName = agent.slice(SKILL_ROUTE_PREFIX.length);
+    if (!skillName) {
+      throw new RoutingError('Empty skill name after @skill: prefix', 'INVALID_SKILL_NAME');
+    }
+    return { type: 'skill', id: skillName, original: agent };
   }
 
   // Regular agent (URL or ID)
@@ -184,6 +201,8 @@ export class RoutingError extends Error {
 export type RoutingErrorCode =
   | 'INVALID_DOC_ID'
   | 'INVALID_SPACE_ID'
+  | 'INVALID_SKILL_NAME'
+  | 'SKILL_NOT_FOUND'
   | 'RESERVED_PREFIX'
   | 'UNKNOWN_TARGET';
 
@@ -200,6 +219,16 @@ export function buildDocumentRoute(docId: string): string {
     );
   }
   return `doc/${docId}`;
+}
+
+/**
+ * Build an agent field value for a skill route
+ */
+export function buildSkillRoute(skillName: string): string {
+  if (!skillName) {
+    throw new RoutingError('Skill name cannot be empty', 'INVALID_SKILL_NAME');
+  }
+  return `${SKILL_ROUTE_PREFIX}${skillName}`;
 }
 
 /**
@@ -286,4 +315,11 @@ export function isSpaceTarget(target: RoutingTarget): boolean {
  */
 export function isAgentTarget(target: RoutingTarget): boolean {
   return target.type === 'agent';
+}
+
+/**
+ * Check if a routing target is a skill route
+ */
+export function isSkillTarget(target: RoutingTarget): boolean {
+  return target.type === 'skill';
 }

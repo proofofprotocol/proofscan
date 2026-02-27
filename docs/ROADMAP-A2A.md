@@ -35,7 +35,12 @@ proofscan の A2A (Agent-to-Agent) プロトコル対応ロードマップ。
 | 7.6 | レジストリ検索（MCP/A2A） | ✅ 完了 | 2026-02-11 |
 | 7.7 | リソース使用量表示 | ✅ 完了 | 2026-02-13 |
 | 7.8 | doctor拡張（統合診断） | ✅ 完了 | 2026-02-15 |
-| 8 | Protocol Gateway | ✅ 完了 | 2026-02-15 | - |
+| 8 | Protocol Gateway | ✅ 完了 | 2026-02-15 |
+| 9.0 | ProofComm Foundation (G1-G3) | ✅ 完了 | 2026-02-22 |
+| 9.1 | Resident Documents | ✅ 完了 | 2026-02-22 |
+| 9.2 | Skill Routing | ✅ 完了 | 2026-02-27 |
+| 9.3 | Autonomous Spaces | 📋 未着手 | - |
+| 9.4 | ProofPortal MVP | 📋 未着手 | - |
 
 ---
 
@@ -637,6 +642,223 @@ GET    /health                  ヘルスチェック
 
 ---
 
+## Phase 9: ProofComm + ProofPortal 🚀
+
+proofscanを **Agent Communication Platform** へ進化させる。エージェント間通信基盤 (ProofComm) と可視化UI (ProofPortal) を実装。
+
+**設計書:** `/home/shin/vault/03_Projects/proofscan/3040 - proofscan Phase 9 - ProofComm + ProofPortal 設計書.md`
+
+### コンセプト
+
+- **ProofComm**: Agent Communication Gateway（エージェント間通信基盤）
+- **ProofPortal**: SSEベース可視化UI（読み取り専用、source-of-truthにならない）
+
+### ガード規約
+
+| 規約 | 内容 |
+|------|------|
+| G1 | `metadata_json` は必ずJSON文字列 |
+| G2 | `doc/` `space/` は Reserved Namespace |
+| G3 | Space メッセージは代表イベント1回のみ |
+
+### サブフェーズ
+
+| Sub | 内容 | 状態 | PRマージ日 |
+|-----|------|------|------------|
+| 9.0 | Foundation (G1-G3, routing) | ✅ 完了 | 2026-02-22 |
+| 9.1 | Resident Documents | ✅ 完了 | 2026-02-22 |
+| 9.2 | Skill Routing | ✅ 完了 | 2026-02-27 |
+| 9.3 | Autonomous Spaces | 📋 未着手 | - |
+| 9.4 | ProofPortal MVP | 📋 未着手 | - |
+
+### 9.0 Foundation ✅
+
+ガード規約 G1-G3 の確定、イベント基盤の整備。
+
+- [x] `src/proofcomm/events.ts` — G1: metadata stringify, emitProofCommEvent()
+- [x] `src/proofcomm/routing.ts` — G2: parseAgentField(), Reserved Namespace
+- [x] `src/gateway/audit.ts` — metadata stringify 統一
+- [x] `allowedDocumentRoot` 設定 — セキュリティ対策
+- [x] `transformMemory()` — 原子的 read-modify-write 操作
+
+**PR:** #123 (merged 2026-02-22)
+
+### 9.1 Resident Documents ✅
+
+ドキュメントがエージェントとして会話に参加。
+
+**PR:** #123 (merged 2026-02-22)
+
+**DBスキーマ:**
+```sql
+CREATE TABLE IF NOT EXISTS resident_documents (
+  doc_id TEXT PRIMARY KEY,        -- == targets.id
+  name TEXT NOT NULL,
+  document_path TEXT NOT NULL,
+  document_hash TEXT,
+  memory_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  config_json TEXT
+);
+```
+
+**実装ファイル:**
+- `src/db/documents-store.ts` — ドキュメントストア
+- `src/proofcomm/document/store.ts` — ファイル読み取り、ハッシュ
+- `src/proofcomm/document/memory.ts` — メモリ管理
+- `src/proofcomm/document/responder.ts` — 応答生成
+- `src/gateway/proofcommProxy.ts` — 管理エンドポイント
+- `src/gateway/a2aProxy.ts` — doc/ ルーティング
+
+**APIエンドポイント:**
+```
+POST /proofcomm/documents/register
+GET  /proofcomm/documents/:doc_id/memory
+POST /a2a/v1/message/send  { agent: 'doc/<doc_id>' }
+```
+
+### 9.2 Skill Routing ✅
+
+スキルベースのエージェント自動選択（Pull型キャッシュ）。
+
+**PR:** #125 (merged 2026-02-27)
+
+**DBスキーマ:**
+```sql
+CREATE TABLE IF NOT EXISTS skills_cache (
+  skill_id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  use_when TEXT,
+  dont_use_when TEXT,
+  examples_json TEXT,
+  tags_json TEXT,
+  cached_at TEXT NOT NULL,
+  expires_at TEXT
+);
+```
+
+**実装ファイル:**
+- `src/db/skills-store.ts` — スキルキャッシュストア
+- `src/proofcomm/skill-registry.ts` — Pull型検索ロジック
+- `src/proofcomm/resolver.ts` — スキルベース解決
+
+**APIエンドポイント:**
+```
+GET /proofcomm/skills/search?q=<query>&tags=<tags>&limit=10
+```
+
+### 9.3 Autonomous Spaces
+
+エージェント専用の継続的会話空間（代表イベント方式 G3）。
+
+**DBスキーマ:**
+```sql
+CREATE TABLE IF NOT EXISTS spaces (
+  space_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  visibility TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
+  portal_visible INTEGER DEFAULT 1,
+  created_at TEXT NOT NULL,
+  creator_agent_id TEXT,
+  config_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS space_memberships (
+  space_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  role TEXT CHECK(role IN ('member', 'moderator', 'observer')),
+  joined_at TEXT NOT NULL,
+  left_at TEXT,
+  PRIMARY KEY (space_id, agent_id)
+);
+```
+
+**実装ファイル:**
+- `src/db/spaces-store.ts` — 空間・メンバーシップ管理
+- `src/proofcomm/space-manager.ts` — G3: 代表イベント + 個別配送
+- `src/gateway/a2aProxy.ts` — space/ ルーティング
+
+**APIエンドポイント:**
+```
+POST /proofcomm/spaces
+POST /proofcomm/spaces/:space_id/join
+POST /proofcomm/spaces/:space_id/leave
+GET  /proofcomm/spaces
+GET  /proofcomm/spaces/:space_id/members
+POST /a2a/v1/message/send  { agent: 'space/<space_id>' }
+```
+
+### 9.4 ProofPortal MVP
+
+SSEベースのリアルタイム可視化UI。
+
+**構造:**
+```
+src/proofportal/
+├── index.html
+├── main.ts
+├── sse-client.ts
+├── state/
+│   └── store.ts         # State keys: trace_id / space_id / agent_id
+└── components/
+    ├── AgentList.ts
+    ├── ThreadPanel.ts
+    └── SpaceView.ts
+```
+
+**State設計:**
+```typescript
+interface PortalState {
+  threads: Map<string, ThreadState>;  // key: trace_id
+  spaces: Map<string, SpaceState>;    // key: space_id
+  agents: Map<string, AgentState>;    // key: agent_id
+}
+```
+
+### アーキテクチャ
+
+```
+┌─────────────────────────────────────────────────────┐
+│                      ProofPortal                     │
+│  SSE Client (読み取り専用)                           │
+│  event_kind + metadata_json のみでパース             │
+└─────────────────────┬───────────────────────────────┘
+                      │ GET /events/stream
+┌─────────────────────▼───────────────────────────────┐
+│                      ProofComm                       │
+│  src/proofcomm/                                      │
+│  ├── resolver.ts       # 意図→対象解決               │
+│  ├── dispatcher.ts     # ルーティング実行            │
+│  ├── skill-registry.ts # スキル検索（Pull型）        │
+│  ├── space-manager.ts  # 空間管理（代表イベント方式） │
+│  ├── document/         # ドキュメントエージェント     │
+│  └── events.ts         # metadata_json規約           │
+└─────────────────────┬───────────────────────────────┘
+                      │
+┌─────────────────────▼───────────────────────────────┐
+│              既存Gateway (src/gateway/)              │
+│  server.ts, mcpProxy.ts, a2aProxy.ts, sse.ts        │
+│  ※ 会話はすべてA2A経由で統一                        │
+│  ※ doc/ space/ は Reserved Namespace               │
+└─────────────────────────────────────────────────────┘
+```
+
+### 成功基準
+
+1. **G1**: metadata_json は必ず JSON文字列
+2. **G2**: doc/ と space/ は Reserved Namespace
+3. **G3**: Space メッセージは代表イベント1回
+4. **会話はA2Aで統一**: `/a2a/v1/*` が唯一の会話API
+5. **イベント契約が安定**: Portal は event_kind + metadata_json のみ
+6. **DBは安全に拡張**: targets スキーマ変更なし
+7. **ProofPortal は読み取り専用**: SSE以外呼ばない
+
+---
+
 ## 参考リンク
 
 - [A2A Protocol Spec](https://google.github.io/A2A/)
@@ -646,6 +868,12 @@ GET    /health                  ヘルスチェック
 - [MCP Apps Blog Post](https://blog.modelcontextprotocol.io/posts/2025-11-21-mcp-apps/)
 - [MCP HTTP Transport Spec](https://spec.modelcontextprotocol.io/specification/basic/transports/#http-with-sse)
 
+### 設計書
+
+- Phase 6: `/home/shin/vault/03_Projects/proofscan/3032 - proofscan Phase 6 - MCP Apps 設計書.md`
+- Phase 8: `/home/shin/vault/03_Projects/proofscan/3037 - proofscan Phase 8 - Protocol Gateway 設計書.md`
+- Phase 9: `/home/shin/vault/03_Projects/proofscan/3040 - proofscan Phase 9 - ProofComm + ProofPortal 設計書.md`
+
 ---
 
-*Last updated: 2026-02-16*
+*Last updated: 2026-02-27*

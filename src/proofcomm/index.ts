@@ -13,9 +13,14 @@
  * - Document agent system (document/*.ts)
  * - DB store for documents (db/documents-store.ts)
  *
+ * Phase 2: Skill Routing
+ * - @skill: routing prefix (routing.ts)
+ * - Skill cache (db/skills-store.ts)
+ * - Skill registry with Pull-type caching (skill-registry.ts)
+ *
  * Future Phases:
- * - Phase 2: Skill Routing
  * - Phase 3: Autonomous Spaces
+ * - Phase 4: ProofPortal MVP
  */
 
 // ==================== Events (G1) ====================
@@ -65,6 +70,9 @@ export {
   // Route building
   buildDocumentRoute,
   buildSpaceRoute,
+  buildSkillRoute,
+  // Skill routing constants
+  SKILL_ROUTE_PREFIX,
   // Future migration
   usesFutureNamespace,
   parseFutureNamespace,
@@ -72,7 +80,16 @@ export {
   isDocumentTarget,
   isSpaceTarget,
   isAgentTarget,
+  isSkillTarget,
 } from './routing.js';
+
+// ==================== Skills (Phase 2) ====================
+export {
+  // Types
+  type SkillResolutionResult,
+  // Classes
+  SkillRegistry,
+} from './skill-registry.js';
 
 // ==================== Documents (Phase 1) ====================
 export {

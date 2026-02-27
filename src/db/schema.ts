@@ -9,9 +9,10 @@
  * Phase 6.2: Schema version 8 with ui_events table for UI tool tracking
  * Phase 8.5: Schema version 9 with gateway_events table for audit logging
  * Phase 9.0: Schema version 11 with ProofComm events, resident_documents table, and UNIQUE constraint on document_path
+ * Phase 9.2: Schema version 12 with skills_cache table for Skill Routing
  */
 
-export const EVENTS_DB_VERSION = 11;
+export const EVENTS_DB_VERSION = 12;
 export const PROOFS_DB_VERSION = 2;
 
 // events.db schema
@@ -239,6 +240,25 @@ CREATE TABLE IF NOT EXISTS resident_documents (
 );
 
 CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
+
+-- Skills cache table (Phase 9.2: Skill Routing)
+-- skill_id format: "<agent_id>/<skill_name_slug>"
+-- Caches A2A Agent Card skills for @skill: routing
+CREATE TABLE IF NOT EXISTS skills_cache (
+  skill_id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  use_when TEXT,
+  dont_use_when TEXT,
+  examples_json TEXT,
+  tags_json TEXT,
+  cached_at TEXT NOT NULL,
+  expires_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_skills_cache_agent ON skills_cache(agent_id);
+CREATE INDEX IF NOT EXISTS idx_skills_cache_name ON skills_cache(name);
 `;
 
 /**
@@ -613,6 +633,31 @@ ALTER TABLE resident_documents_new RENAME TO resident_documents;
 
 -- Recreate indexes (name index only, path is covered by UNIQUE)
 CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
+`;
+
+/**
+ * Migration from version 11 to version 12
+ * Phase 9.2: Adds skills_cache table for Skill Routing
+ */
+export const EVENTS_DB_MIGRATION_11_TO_12 = `
+-- Create skills_cache table for Skill Routing
+-- skill_id format: "<agent_id>/<skill_name_slug>"
+CREATE TABLE IF NOT EXISTS skills_cache (
+  skill_id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  use_when TEXT,
+  dont_use_when TEXT,
+  examples_json TEXT,
+  tags_json TEXT,
+  cached_at TEXT NOT NULL,
+  expires_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_skills_cache_agent ON skills_cache(agent_id);
+
+CREATE INDEX IF NOT EXISTS idx_skills_cache_name ON skills_cache(name);
 `;
 
 // proofs.db schema (version 2: added plans and runs tables)

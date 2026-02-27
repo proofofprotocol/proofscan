@@ -16,10 +16,12 @@ import { ConnectorQueueManager, QueueFullError, QueueTimeoutError } from './queu
 import { GatewayLimits } from './config.js';
 import { TargetsStore } from '../db/targets-store.js';
 import { DocumentsStore } from '../db/documents-store.js';
+import { SkillsStore } from '../db/skills-store.js';
+import { SkillRegistry } from '../proofcomm/skill-registry.js';
 import { createA2AClient } from '../a2a/client.js';
 import type { A2AMessage, TaskState } from '../a2a/types.js';
 import { ErrorCodes } from './mcpProxy.js';
-import { parseAgentField, isDocumentTarget, isSpaceTarget, VALID_ID_PATTERN } from '../proofcomm/routing.js';
+import { parseAgentField, isDocumentTarget, isSpaceTarget, isSkillTarget, VALID_ID_PATTERN } from '../proofcomm/routing.js';
 import { DocumentResponder, type DocumentMessage } from '../proofcomm/document/index.js';
 
 /**
@@ -399,6 +401,8 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
   const { configDir, limits, hideNotFound = true } = options;
   const targetsStore = new TargetsStore(configDir);
   const documentsStore = new DocumentsStore(configDir);
+  const skillsStore = new SkillsStore(configDir);
+  const skillRegistry = new SkillRegistry(skillsStore);
   const queueManager = new ConnectorQueueManager<
     { method: string; params: unknown; agentId: string },
     { result?: unknown; error?: { code: number; message: string } }
@@ -442,11 +446,31 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
+    // 0a. Resolve @skill: targets early (Phase 9.2: Skill Routing)
+    // Must happen before permission check to use the resolved agent ID
+    if (isSkillTarget(routingTarget)) {
+      const resolved = skillRegistry.resolveSkill(routingTarget.id);
+      if (!resolved) {
+        return reply.code(404).send(
+          createErrorResponse(
+            ErrorCodes.NOT_FOUND,
+            `No agent found with skill: ${routingTarget.id}`,
+            requestId
+          )
+        );
+      }
+      // Replace routing target with resolved agent and continue normal flow
+      routingTarget = { type: 'agent' as const, id: resolved.agentId, original: routingTarget.original };
+    }
+
+    // Effective agent ID: resolved from @skill:, doc/, space/, or original agentId
+    const effectiveAgentId = routingTarget.id;
+
     // For regular agents (non-URL), validate ID format (security: prevent path traversal, injection)
     // doc/ and space/ targets are validated by parseAgentField
     // URL-based agents (containing ://) are forwarded directly and don't need local ID validation
     const isUrlAgent = agentId.includes('://');
-    if (routingTarget.type === 'agent' && !isUrlAgent && !VALID_ID_PATTERN.test(agentId)) {
+    if (routingTarget.type === 'agent' && !isUrlAgent && !VALID_ID_PATTERN.test(effectiveAgentId)) {
       return reply.code(400).send(
         createErrorResponse(ErrorCodes.BAD_REQUEST, 'Invalid agent ID format', requestId)
       );
@@ -471,7 +495,7 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
 
     // 1. Permission check (method is validated above, safe to cast)
     // For document targets, use the doc ID for permission check
-    const permissionTargetId = routingTarget.type === 'document' ? routingTarget.id : agentId;
+    const permissionTargetId = routingTarget.type === 'document' ? routingTarget.id : effectiveAgentId;
     const permissionType = getPermissionType(method as A2AMethod);
     const requiredPermission = buildA2APermission(permissionType, permissionTargetId);
     if (!hasPermission(auth.permissions, requiredPermission)) {
@@ -509,7 +533,7 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
     }
 
     // 2c. Get agent from registry (targets store) - O(1) lookup by ID
-    const target = targetsStore.get(agentId);
+    const target = targetsStore.get(effectiveAgentId);
     // Validate it's an A2A agent (not an MCP connector)
     const agent = target?.type === 'agent' && target?.protocol === 'a2a' ? target : undefined;
 
@@ -526,7 +550,7 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
         );
       }
       return reply.code(404).send(
-        createErrorResponse(ErrorCodes.NOT_FOUND, `Agent not found: ${agentId}`, requestId)
+        createErrorResponse(ErrorCodes.NOT_FOUND, `Agent not found: ${effectiveAgentId}`, requestId)
       );
     }
 
@@ -542,7 +566,7 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
         );
       }
       return reply.code(404).send(
-        createErrorResponse(ErrorCodes.NOT_FOUND, `Agent not found: ${agentId}`, requestId)
+        createErrorResponse(ErrorCodes.NOT_FOUND, `Agent not found: ${effectiveAgentId}`, requestId)
       );
     }
 

@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
   RESERVED_PREFIXES,
   VALID_ID_PATTERN,
+  SKILL_ROUTE_PREFIX,
   parseAgentField,
   hasReservedPrefix,
   validateTargetId,
@@ -14,10 +15,12 @@ import {
   validateTargetIdForRegistration,
   buildDocumentRoute,
   buildSpaceRoute,
+  buildSkillRoute,
   RoutingError,
   isDocumentTarget,
   isSpaceTarget,
   isAgentTarget,
+  isSkillTarget,
   usesFutureNamespace,
   parseFutureNamespace,
 } from '../routing.js';
@@ -284,6 +287,7 @@ describe('Integration: G2 Registration Flow', () => {
     const testCases = [
       { agent: 'doc/my-doc', expectedType: 'document' },
       { agent: 'space/my-space', expectedType: 'space' },
+      { agent: '@skill:translate', expectedType: 'skill' },
       { agent: 'agent-123', expectedType: 'agent' },
       { agent: 'https://example.com/agent', expectedType: 'agent' },
     ];
@@ -292,5 +296,70 @@ describe('Integration: G2 Registration Flow', () => {
       const result = parseAgentField(agent);
       expect(result.type).toBe(expectedType);
     }
+  });
+});
+
+// ==================== Phase 9.2: Skill Routing ====================
+
+describe('Skill Routing - Phase 9.2', () => {
+  describe('SKILL_ROUTE_PREFIX', () => {
+    it('should be @skill:', () => {
+      expect(SKILL_ROUTE_PREFIX).toBe('@skill:');
+    });
+  });
+
+  describe('parseAgentField - @skill: prefix', () => {
+    it('should parse @skill:translate as skill target', () => {
+      const result = parseAgentField('@skill:translate');
+      expect(result.type).toBe('skill');
+      expect(result.id).toBe('translate');
+      expect(result.original).toBe('@skill:translate');
+    });
+
+    it('should parse @skill:text-translation as skill target', () => {
+      const result = parseAgentField('@skill:text-translation');
+      expect(result.type).toBe('skill');
+      expect(result.id).toBe('text-translation');
+    });
+
+    it('should parse @skill:summarize as skill target', () => {
+      const result = parseAgentField('@skill:summarize');
+      expect(result.type).toBe('skill');
+      expect(result.id).toBe('summarize');
+    });
+
+    it('should throw RoutingError for empty skill name', () => {
+      expect(() => parseAgentField('@skill:')).toThrow(RoutingError);
+      expect(() => parseAgentField('@skill:')).toThrow('Empty skill name');
+    });
+
+    it('should not confuse @skill: with doc/ or space/', () => {
+      expect(parseAgentField('doc/abc').type).toBe('document');
+      expect(parseAgentField('space/abc').type).toBe('space');
+      expect(parseAgentField('@skill:abc').type).toBe('skill');
+    });
+  });
+
+  describe('buildSkillRoute', () => {
+    it('should build @skill: prefix route', () => {
+      expect(buildSkillRoute('translate')).toBe('@skill:translate');
+      expect(buildSkillRoute('summarize')).toBe('@skill:summarize');
+    });
+
+    it('should throw for empty skill name', () => {
+      expect(() => buildSkillRoute('')).toThrow(RoutingError);
+    });
+  });
+
+  describe('isSkillTarget', () => {
+    it('should return true for skill target', () => {
+      expect(isSkillTarget({ type: 'skill', id: 'translate', original: '@skill:translate' })).toBe(true);
+    });
+
+    it('should return false for non-skill targets', () => {
+      expect(isSkillTarget({ type: 'agent', id: 'agent-1', original: 'agent-1' })).toBe(false);
+      expect(isSkillTarget({ type: 'document', id: 'doc-1', original: 'doc/doc-1' })).toBe(false);
+      expect(isSkillTarget({ type: 'space', id: 'space-1', original: 'space/space-1' })).toBe(false);
+    });
   });
 });
