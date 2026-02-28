@@ -1,109 +1,176 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0;url=https://github.com/proofofprotocol/proofscan/tree/main/docs">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Documentation - ProofScan</title>
-    <link rel="stylesheet" href="../css/docs.css">
-    <style>
-        .redirect-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 80vh;
-            text-align: center;
-            padding: 2rem;
-        }
-        .redirect-icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-        }
-        .redirect-message {
-            font-size: 1.5rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: #1f2937;
-        }
-        .redirect-link {
-            display: inline-block;
-            padding: 0.75rem 1.5rem;
-            background: #4f46e5;
-            color: white;
-            text-decoration: none;
-            border-radius: 0.5rem;
-            font-weight: 500;
-            transition: background 0.2s;
-        }
-        .redirect-link:hover {
-            background: #4338ca;
-        }
-        .redirect-info {
-            margin-top: 2rem;
-            color: #6b7280;
-            font-size: 0.875rem;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation - ProofScan</title>
+  <meta name="description" content="ProofScan documentation - MCP communication scanner & analyzer">
+  <link rel="stylesheet" href="/css/docs.css">
 </head>
 <body>
-    <header class="site-header">
-        <div class="container">
-            <a href="../index.html" class="logo">
-                <span class="logo-icon">🔍</span>
-                <span>ProofScan</span>
-            </a>
-            <nav class="main-nav">
-                <a href="../index.html">Home</a>
-                <a href="https://github.com/proofofprotocol/proofscan/tree/main/docs" class="active">Docs</a>
-                <a href="../commands/">Commands</a>
-                <a href="../examples/">Examples</a>
-                <a href="https://github.com/proofofprotocol/proofscan" target="_blank">GitHub</a>
-            </nav>
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo"><span>🔍</span><span>ProofScan</span></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/">Commands</a>
+          <a href="/docs/" class="active">Docs</a>
+          <a href="/examples/">Examples</a>
+          <a href="https://github.com/proofofprotocol/proofscan">GitHub</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search docs...">
         </div>
-    </header>
-
-    <div class="redirect-container">
-        <div class="redirect-icon">📚</div>
-        <h1 class="redirect-message">Redirecting to Documentation...</h1>
-        <p>You are being redirected to the ProofScan documentation on GitHub.</p>
-        <a href="https://github.com/proofofprotocol/proofscan/tree/main/docs" class="redirect-link">
-            Go to Documentation →
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
+          <span>⭐</span>
+          <span>GitHub</span>
         </a>
-        <p class="redirect-info">
-            If you are not redirected automatically, please click the link above.
-        </p>
+      </div>
     </div>
+  </header>
 
-    <footer class="site-footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <h3>ProofScan</h3>
-                    <p>MCP通信の完全可視化ツール</p>
-                </div>
-                <div class="footer-section">
-                    <h3>ドキュメント</h3>
-                    <ul>
-                        <li><a href="https://github.com/proofofprotocol/proofscan/blob/main/docs/GUIDE.md">ユーザーガイド</a></li>
-                        <li><a href="https://github.com/proofofprotocol/proofscan/blob/main/docs/SHELL.md">シェルモード</a></li>
-                        <li><a href="https://github.com/proofofprotocol/proofscan/blob/main/docs/PROXY.md">プロキシガイド</a></li>
-                        <li><a href="https://github.com/proofofprotocol/proofscan/blob/main/docs/POPL.md">POPLガイド</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h3>コミュニティ</h3>
-                    <ul>
-                        <li><a href="https://github.com/proofofprotocol/proofscan">GitHub</a></li>
-                        <li><a href="https://github.com/proofofprotocol/proofscan/issues">Issues</a></li>
-                        <li><a href="https://github.com/proofofprotocol/proofscan/discussions">Discussions</a></li>
-                    </ul>
-                </div>
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">Getting Started</div>
+        <a href="/docs/" class="sidebar-item active">📖 Overview</a>
+        <a href="/docs/installation.html" class="sidebar-item">⚙️ Installation</a>
+        <a href="/docs/quickstart.html" class="sidebar-item">🚀 Quick Start</a>
+        
+        <div class="sidebar-category">Core Concepts</div>
+        <a href="/docs/architecture.html" class="sidebar-item">🏗️ Architecture</a>
+        <a href="/docs/mcp-protocol.html" class="sidebar-item">🔌 MCP Protocol</a>
+        <a href="/docs/workflows.html" class="sidebar-item">🔄 Workflows</a>
+        
+        <div class="sidebar-category">Resources</div>
+        <a href="/commands/" class="sidebar-item">Command Reference</a>
+        <a href="/examples/" class="sidebar-item">Examples</a>
+        <a href="https://github.com/proofofprotocol/proofscan" class="sidebar-item">GitHub</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">Documentation</span>
+      </nav>
+
+      <article>
+        <h1>📖 ProofScan Documentation</h1>
+        <p class="lead">Complete guide to using ProofScan - the MCP communication scanner & analyzer</p>
+
+        <section id="what-is-proofscan">
+          <h2>What is ProofScan?</h2>
+          <p>ProofScan is a comprehensive tool for scanning, monitoring, and analyzing Model Context Protocol (MCP) communications. It provides complete visibility into JSON-RPC traffic between AI systems and servers.</p>
+          
+          <div class="note info">
+            <div class="note-title">💡 Key Features</div>
+            <ul>
+              <li><strong>Real-time Monitoring</strong> - Watch JSON-RPC events as they happen</li>
+              <li><strong>Complete Transparency</strong> - Capture all requests, responses, and notifications</li>
+              <li><strong>Hierarchical Views</strong> - Visualize connector → session → RPC relationships</li>
+              <li><strong>Proof Generation</strong> - Create auditable proof-of-protocol records</li>
+              <li><strong>A2A Support</strong> - Monitor agent-to-agent communications</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="getting-started">
+          <h2>Getting Started</h2>
+          <p>Follow these steps to start using ProofScan:</p>
+          
+          <div class="step-card">
+            <h3>1. Installation</h3>
+            <p>Install ProofScan using npm:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>npm install -g proofscan</code></pre>
             </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 Proof of Protocol. MIT License.</p>
+            <p><a href="/docs/installation.html">→ Full installation guide</a></p>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Initialize Configuration</h3>
+            <p>Set up your ProofScan configuration:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan config init</code></pre>
             </div>
-        </div>
-    </footer>
+          </div>
+
+          <div class="step-card">
+            <h3>3. Add a Connector</h3>
+            <p>Register your first MCP server:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan connectors add --id myserver --stdio "npx @modelcontextprotocol/server-example"</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>4. Start Scanning</h3>
+            <p>Begin monitoring communications:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan scan start --id myserver</code></pre>
+            </div>
+            <p><a href="/docs/quickstart.html">→ Complete quick start guide</a></p>
+          </div>
+        </section>
+
+        <section id="documentation-sections">
+          <h2>Documentation Sections</h2>
+          
+          <div class="doc-grid">
+            <div class="doc-card">
+              <h3>📚 Commands</h3>
+              <p>Complete reference for all ProofScan commands</p>
+              <a href="/commands/" class="doc-link">View Commands →</a>
+            </div>
+            
+            <div class="doc-card">
+              <h3>💡 Examples</h3>
+              <p>Practical examples and use cases</p>
+              <a href="/examples/" class="doc-link">View Examples →</a>
+            </div>
+            
+            <div class="doc-card">
+              <h3>🏗️ Architecture</h3>
+              <p>Learn how ProofScan works internally</p>
+              <a href="/docs/architecture.html" class="doc-link">Learn More →</a>
+            </div>
+            
+            <div class="doc-card">
+              <h3>🔌 MCP Protocol</h3>
+              <p>Understanding the Model Context Protocol</p>
+              <a href="/docs/mcp-protocol.html" class="doc-link">Read Guide →</a>
+            </div>
+          </div>
+        </section>
+
+        <section id="next-steps">
+          <h2>Next Steps</h2>
+          <ul>
+            <li><a href="/docs/quickstart.html">Complete the Quick Start Guide</a></li>
+            <li><a href="/commands/">Browse the Command Reference</a></li>
+            <li><a href="/examples/">Explore Usage Examples</a></li>
+            <li><a href="https://github.com/proofofprotocol/proofscan">Contribute on GitHub</a></li>
+          </ul>
+        </section>
+      </article>
+    </main>
+
+    <aside class="toc-sidebar">
+      <!-- TOC will be auto-generated -->
+    </aside>
+  </div>
+
+  <script src="/js/main.js"></script>
 </body>
 </html>
