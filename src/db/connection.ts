@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, EVENTS_DB_MIGRATION_5_TO_6_DATA, EVENTS_DB_MIGRATION_6_TO_7, EVENTS_DB_MIGRATION_7_TO_8, EVENTS_DB_MIGRATION_8_TO_9, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, EVENTS_DB_MIGRATION_5_TO_6_DATA, EVENTS_DB_MIGRATION_6_TO_7, EVENTS_DB_MIGRATION_7_TO_8, EVENTS_DB_MIGRATION_8_TO_9, EVENTS_DB_MIGRATION_9_TO_10, EVENTS_DB_MIGRATION_10_TO_11, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -364,6 +364,64 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
               !err.message.includes('already exists')) {
             throw err;
           }
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  // Migration 9 → 10: Add ProofComm event kinds and resident_documents table (Phase 9.0)
+  if (fromVersion < 10) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_9_TO_10);
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Only swallow SQLite "already exists" errors - rethrow everything else
+          const isSqliteError = err instanceof Error &&
+            (err as { code?: string }).code === 'SQLITE_ERROR' &&
+            err.message.includes('already exists');
+          if (!isSqliteError) {
+            throw err;
+          }
+          console.warn(`[db] Migration 9→10 skipped statement (already exists): ${err.message}`);
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
+  // Migration 10 → 11: Add UNIQUE constraint on document_path in resident_documents (Phase 9.1)
+  if (fromVersion < 11) {
+    try {
+      db.exec('BEGIN TRANSACTION');
+
+      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_10_TO_11);
+
+      for (const stmt of statements) {
+        try {
+          db.exec(stmt + ';');
+        } catch (err) {
+          // Only swallow SQLite "already exists" errors - rethrow everything else
+          const isSqliteError = err instanceof Error &&
+            (err as { code?: string }).code === 'SQLITE_ERROR' &&
+            err.message.includes('already exists');
+          if (!isSqliteError) {
+            throw err;
+          }
+          console.warn(`[db] Migration 10→11 skipped statement (already exists): ${err.message}`);
         }
       }
 

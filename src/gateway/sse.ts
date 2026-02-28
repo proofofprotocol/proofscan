@@ -225,8 +225,9 @@ export async function sseStreamHandler(
     const kindsParam = request.query.kinds?.split(',').filter(Boolean) ?? [];
     const clientIdFilter = request.query.client_id ?? '';
 
-    // Validate event kinds
+    // Validate event kinds (Gateway + ProofComm)
     const validKinds: GatewayEventKind[] = [
+      // Gateway events
       'gateway_auth_success',
       'gateway_auth_failure',
       'gateway_mcp_request',
@@ -234,6 +235,11 @@ export async function sseStreamHandler(
       'gateway_a2a_request',
       'gateway_a2a_response',
       'gateway_error',
+      // ProofComm events (Phase 9.0)
+      'proofcomm_space',
+      'proofcomm_skill',
+      'proofcomm_document',
+      'proofcomm_route',
     ];
 
     const kinds = kindsParam.filter((kind) =>

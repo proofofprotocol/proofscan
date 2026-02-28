@@ -15,6 +15,7 @@ import { createMCPProxyHandler, MCPProxyRequest } from './mcpProxy.js';
 import { createA2AProxyHandler, A2AProxyRequest } from './a2aProxy.js';
 import { createAuditLogger, AuditLogger } from './audit.js';
 import { sseStreamHandler, getSseManager } from './sse.js';
+import { registerProofCommRoutes } from './proofcommProxy.js';
 
 export interface GatewayServer {
   /** Fastify instance */
@@ -178,6 +179,33 @@ export function createGatewayServer(
     });
 
     log.info({ event: 'a2a_proxy_enabled', configDir });
+
+    // ProofComm Management Routes (Phase 9.0)
+    const auditLogger = createAuditLogger(configDir);
+
+    // Wire allowedDocumentRoot from GatewayConfig
+    const allowedDocumentRoot = fullConfig.allowedDocumentRoot;
+
+    // Log ProofComm status
+    if (allowedDocumentRoot) {
+      log.info({
+        event: 'proofcomm_document_registration_enabled',
+        allowedDocumentRoot,
+      });
+    } else {
+      log.info({
+        event: 'proofcomm_document_registration_disabled',
+        message: 'allowedDocumentRoot not configured - document registration returns 503',
+      });
+    }
+
+    registerProofCommRoutes(server, {
+      configDir,
+      auditLogger,
+      allowedDocumentRoot,
+    });
+
+    log.info({ event: 'proofcomm_routes_enabled', configDir });
   }
 
   // Graceful shutdown handlers

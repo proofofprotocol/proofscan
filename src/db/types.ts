@@ -94,7 +94,12 @@ export type GatewayEventKind =
   | 'gateway_mcp_response'    // MCP proxy response
   | 'gateway_a2a_request'     // A2A proxy request
   | 'gateway_a2a_response'    // A2A proxy response
-  | 'gateway_error';          // Gateway error
+  | 'gateway_error'           // Gateway error
+  // ProofComm events (Phase 9.0)
+  | 'proofcomm_space'         // Space: created/joined/left/message/delivery_failed
+  | 'proofcomm_skill'         // Skill: search/match
+  | 'proofcomm_document'      // Document: activated/context_updated
+  | 'proofcomm_route';        // Route: resolved/dispatched
 
 /** Gateway audit event record */
 export interface GatewayEvent {
@@ -257,4 +262,16 @@ export interface AgentCache {
   agent_card_hash: string | null;
   fetched_at: string | null;
   expires_at: string | null;
+}
+
+// Resident documents table (Phase 9.0: ProofComm)
+export interface ResidentDocument {
+  doc_id: string;
+  name: string;
+  document_path: string;
+  document_hash: string | null;
+  memory_json: string | null;
+  created_at: string;
+  updated_at: string | null;
+  config_json: string | null;
 }

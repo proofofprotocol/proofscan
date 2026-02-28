@@ -29,6 +29,12 @@ export interface GatewayConfig {
   limits: GatewayLimits;
   /** Authentication configuration */
   auth: AuthConfig;
+  /**
+   * Allowed root directory for document registration (ProofComm).
+   * If set, document registration is enabled and restricted to this directory.
+   * If not set, document registration returns 503 Service Unavailable.
+   */
+  allowedDocumentRoot?: string;
 }
 
 /** Default gateway limits */

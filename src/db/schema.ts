@@ -8,9 +8,10 @@
  * Phase 2.4: Schema version 7 with task_events table for Task lifecycle tracking
  * Phase 6.2: Schema version 8 with ui_events table for UI tool tracking
  * Phase 8.5: Schema version 9 with gateway_events table for audit logging
+ * Phase 9.0: Schema version 11 with ProofComm events, resident_documents table, and UNIQUE constraint on document_path
  */
 
-export const EVENTS_DB_VERSION = 9;
+export const EVENTS_DB_VERSION = 11;
 export const PROOFS_DB_VERSION = 2;
 
 // events.db schema
@@ -183,6 +184,7 @@ CREATE INDEX IF NOT EXISTS idx_ui_events_type ON ui_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_ui_events_ts ON ui_events(ts);
 
 -- Gateway events table (Phase 8.5: Audit logging for Protocol Gateway)
+-- Phase 9.0: Added ProofComm event kinds
 CREATE TABLE IF NOT EXISTS gateway_events (
   event_id TEXT PRIMARY KEY,
   request_id TEXT NOT NULL,
@@ -196,7 +198,11 @@ CREATE TABLE IF NOT EXISTS gateway_events (
       'gateway_mcp_response',
       'gateway_a2a_request',
       'gateway_a2a_response',
-      'gateway_error'
+      'gateway_error',
+      'proofcomm_space',
+      'proofcomm_skill',
+      'proofcomm_document',
+      'proofcomm_route'
     )
   ),
   target_id TEXT,
@@ -217,6 +223,22 @@ CREATE INDEX IF NOT EXISTS idx_gateway_events_client ON gateway_events(client_id
 CREATE INDEX IF NOT EXISTS idx_gateway_events_kind ON gateway_events(event_kind);
 CREATE INDEX IF NOT EXISTS idx_gateway_events_target ON gateway_events(target_id);
 CREATE INDEX IF NOT EXISTS idx_gateway_events_ts ON gateway_events(ts);
+
+-- Resident documents table (Phase 9.0: ProofComm Resident Documents)
+-- doc_id == targets.id for unified identification
+-- document_path is UNIQUE to prevent duplicate registrations
+CREATE TABLE IF NOT EXISTS resident_documents (
+  doc_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  document_path TEXT NOT NULL UNIQUE,
+  document_hash TEXT,
+  memory_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  config_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
 `;
 
 /**
@@ -482,6 +504,115 @@ CREATE INDEX IF NOT EXISTS idx_gateway_events_client ON gateway_events(client_id
 CREATE INDEX IF NOT EXISTS idx_gateway_events_kind ON gateway_events(event_kind);
 CREATE INDEX IF NOT EXISTS idx_gateway_events_target ON gateway_events(target_id);
 CREATE INDEX IF NOT EXISTS idx_gateway_events_ts ON gateway_events(ts);
+
+`;
+
+/**
+ * Migration from version 9 to version 10
+ * Phase 9.0: ProofComm - Adds ProofComm event kinds to gateway_events and creates resident_documents table
+ */
+export const EVENTS_DB_MIGRATION_9_TO_10 = `
+-- Recreate gateway_events table with ProofComm event kinds
+-- SQLite doesn't support ALTER CHECK, so we recreate the table
+
+-- Create new table with updated constraint
+CREATE TABLE gateway_events_new (
+  event_id TEXT PRIMARY KEY,
+  request_id TEXT NOT NULL,
+  trace_id TEXT,
+  client_id TEXT NOT NULL,
+  event_kind TEXT NOT NULL CHECK(
+    event_kind IN (
+      'gateway_auth_success',
+      'gateway_auth_failure',
+      'gateway_mcp_request',
+      'gateway_mcp_response',
+      'gateway_a2a_request',
+      'gateway_a2a_response',
+      'gateway_error',
+      'proofcomm_space',
+      'proofcomm_skill',
+      'proofcomm_document',
+      'proofcomm_route'
+    )
+  ),
+  target_id TEXT,
+  method TEXT,
+  ts TEXT NOT NULL,
+  latency_ms INTEGER,
+  upstream_latency_ms INTEGER,
+  decision TEXT CHECK(decision IN ('allow', 'deny')),
+  deny_reason TEXT,
+  error TEXT,
+  status_code INTEGER,
+  metadata_json TEXT
+);
+
+-- Copy data from old table
+INSERT INTO gateway_events_new SELECT * FROM gateway_events;
+
+-- Drop old table and indexes
+DROP TABLE gateway_events;
+
+-- Rename new table
+ALTER TABLE gateway_events_new RENAME TO gateway_events;
+
+-- Recreate indexes
+CREATE INDEX IF NOT EXISTS idx_gateway_events_request ON gateway_events(request_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_trace ON gateway_events(trace_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_client ON gateway_events(client_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_kind ON gateway_events(event_kind);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_target ON gateway_events(target_id);
+CREATE INDEX IF NOT EXISTS idx_gateway_events_ts ON gateway_events(ts);
+
+-- Create resident_documents table
+-- Note: document_path UNIQUE added in version 11
+CREATE TABLE IF NOT EXISTS resident_documents (
+  doc_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  document_path TEXT NOT NULL,
+  document_hash TEXT,
+  memory_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  config_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_resident_docs_path ON resident_documents(document_path);
+CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
+`;
+
+/**
+ * Migration from version 10 to version 11
+ * Phase 9.1: Add UNIQUE constraint on document_path in resident_documents
+ */
+export const EVENTS_DB_MIGRATION_10_TO_11 = `
+-- Recreate resident_documents table with UNIQUE constraint on document_path
+-- SQLite doesn't support ALTER CONSTRAINT, so we recreate the table
+
+-- Create new table with UNIQUE constraint
+CREATE TABLE resident_documents_new (
+  doc_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  document_path TEXT NOT NULL UNIQUE,
+  document_hash TEXT,
+  memory_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  config_json TEXT
+);
+
+-- Copy data from old table (will fail if duplicates exist)
+INSERT INTO resident_documents_new SELECT * FROM resident_documents;
+
+-- Drop old table
+DROP TABLE resident_documents;
+
+-- Rename new table
+ALTER TABLE resident_documents_new RENAME TO resident_documents;
+
+-- Recreate indexes (name index only, path is covered by UNIQUE)
+CREATE INDEX IF NOT EXISTS idx_resident_docs_name ON resident_documents(name);
 `;
 
 // proofs.db schema (version 2: added plans and runs tables)
