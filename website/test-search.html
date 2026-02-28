@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Search Test</title>
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .search-test { max-width: 600px; margin: 0 auto; }
+    h1 { color: #667eea; }
+  </style>
+</head>
+<body>
+  <div class="search-test">
+    <h1>🔍 Pagefind Search Test</h1>
+    <p>Testing if Pagefind loads and initializes correctly:</p>
+    <div id="search"></div>
+    <div id="status" style="margin-top: 20px; padding: 10px; background: #f5f5f5;"></div>
+  </div>
+
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    const status = document.getElementById('status');
+    status.innerHTML = '<p>⏳ Loading Pagefind...</p>';
+    
+    setTimeout(() => {
+      if (typeof PagefindUI !== 'undefined') {
+        status.innerHTML += '<p>✅ PagefindUI is defined</p>';
+        try {
+          new PagefindUI({ element: "#search", showSubResults: true });
+          status.innerHTML += '<p>✅ PagefindUI initialized successfully</p>';
+        } catch (e) {
+          status.innerHTML += '<p>❌ Error initializing: ' + e.message + '</p>';
+        }
+      } else {
+        status.innerHTML += '<p>❌ PagefindUI is NOT defined</p>';
+      }
+    }, 1000);
+  </script>
+</body>
+</html>

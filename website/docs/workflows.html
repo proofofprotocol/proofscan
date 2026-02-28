@@ -490,9 +490,21 @@ pfscan status</code></pre>
   <script src="/js/main.js"></script>
   <script src="/pagefind/pagefind-ui.js"></script>
   <script>
-    window.addEventListener("DOMContentLoaded", () => {
-      new PagefindUI({ element: "#search", showSubResults: true });
-    });
+    function initPagefind() {
+      if (document.getElementById("search") && typeof PagefindUI !== "undefined") {
+        new PagefindUI({ 
+          element: "#search", 
+          showSubResults: true,
+          highlightParam: "highlight"
+        });
+      }
+    }
+    
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initPagefind);
+    } else {
+      initPagefind();
+    }
   </script>
 </body>
 </html>
