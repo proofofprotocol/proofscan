@@ -6,6 +6,7 @@
   <meta name="description" content="ProofScan観測コマンド - view, tree, rpc, status, summary, analyze の完全ガイド">
   <title>Observation Commands - ProofScan</title>
   <link rel="stylesheet" href="/css/docs.css">
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
 </head>
 <body>
   <header class="docs-header">
@@ -22,8 +23,8 @@
         </nav>
       </div>
       <div class="header-right">
-        <div class="search-bar">
-          <span class="search-icon">🔍</span>
+        <div class="search-wrapper">
+          
           <input type="search" class="search-input" placeholder="Search commands...">
         </div>
         <a href="https://github.com/proofofprotocol/proofscan" class="github-link"><span>⭐</span><span>GitHub</span></a>
@@ -328,5 +329,11 @@ pfscan analyze --verbose           # 詳細統計</code></pre>
   </div>
 
   <script src="/js/main.js"></script>
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      new PagefindUI({ element: "#search", showSubResults: true });
+    });
+  </script>
 </body>
 </html>

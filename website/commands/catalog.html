@@ -6,6 +6,7 @@
     <title>Catalog Commands – ProofScan</title>
     <meta name="description" content="ProofScanのMCPサーバーカタログとコネクタ管理コマンドのリファレンス">
     <link rel="stylesheet" href="../css/docs.css">
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
 </head>
 <body>
     <header class="site-header">
@@ -476,5 +477,11 @@ type %APPDATA%\Claude\claude_desktop_config.json | \
     </footer>
 
     <script src="../js/main.js"></script>
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      new PagefindUI({ element: "#search", showSubResults: true });
+    });
+  </script>
 </body>
 </html>

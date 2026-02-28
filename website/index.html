@@ -257,6 +257,7 @@
       color: var(--text-muted);
     }
   </style>
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
 </head>
 <body>
   <!-- Header -->
@@ -277,9 +278,9 @@
         </nav>
       </div>
       <div class="header-right">
-        <div class="search-bar">
-          <span class="search-icon">🔍</span>
-          <input type="search" class="search-input" placeholder="Search docs...">
+        <div class="search-wrapper">
+          
+          <div id="search"></div>
         </div>
         <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
           <span>⭐</span>
@@ -472,5 +473,11 @@
   </footer>
 
   <script src="/js/main.js"></script>
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      new PagefindUI({ element: "#search", showSubResults: true });
+    });
+  </script>
 </body>
 </html>

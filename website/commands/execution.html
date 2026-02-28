@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Execution Commands - ProofScan</title>
   <link rel="stylesheet" href="/css/docs.css">
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
 </head>
 <body>
   <header class="docs-header">
@@ -21,8 +22,8 @@
         </nav>
       </div>
       <div class="header-right">
-        <div class="search-bar">
-          <span class="search-icon">🔍</span>
+        <div class="search-wrapper">
+          
           <input type="search" class="search-input" placeholder="Search...">
         </div>
         <a href="https://github.com/proofofprotocol/proofscan" class="github-link"><span>⭐</span><span>GitHub</span></a>
@@ -142,5 +143,11 @@ pfscan monitor --port 3001</code></pre>
   </div>
 
   <script src="/js/main.js"></script>
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      new PagefindUI({ element: "#search", showSubResults: true });
+    });
+  </script>
 </body>
 </html>

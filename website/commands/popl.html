@@ -6,6 +6,7 @@
     <title>POPL Commands – ProofScan</title>
     <meta name="description" content="ProofScanのPOPL（Public Observable Proof Ledger）とバリデーションプラン管理コマンドのリファレンス">
     <link rel="stylesheet" href="../css/docs.css">
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
 </head>
 <body>
     <header class="site-header">
@@ -587,5 +588,11 @@ pfscan archive run --yes</code></pre>
     </footer>
 
     <script src="../js/main.js"></script>
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      new PagefindUI({ element: "#search", showSubResults: true });
+    });
+  </script>
 </body>
 </html>

@@ -6,6 +6,7 @@
     <title>実行例 – ProofScan</title>
     <meta name="description" content="ProofScanの実行例とコマンドデモ">
     <link rel="stylesheet" href="../css/docs.css">
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
 </head>
 <body>
     <header class="site-header">
@@ -462,5 +463,11 @@ Files:
     </footer>
 
     <script src="../js/main.js"></script>
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      new PagefindUI({ element: "#search", showSubResults: true });
+    });
+  </script>
 </body>
 </html>

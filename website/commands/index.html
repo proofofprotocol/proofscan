@@ -6,6 +6,7 @@
   <meta name="description" content="ProofScan全コマンドリファレンス - 27メインコマンド、100+サブコマンドの完全ガイド">
   <title>コマンドリファレンス - ProofScan</title>
   <link rel="stylesheet" href="/css/docs.css">
+  <link href="/pagefind/pagefind-ui.css" rel="stylesheet">
 </head>
 <body>
   <!-- Header -->
@@ -25,8 +26,8 @@
         </nav>
       </div>
       <div class="header-right">
-        <div class="search-bar">
-          <span class="search-icon">🔍</span>
+        <div class="search-wrapper">
+          
           <input type="search" class="search-input" placeholder="Search commands...">
         </div>
         <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
@@ -357,5 +358,11 @@ pfscan proxy start --connectors time,weather
   </div>
 
   <script src="/js/main.js"></script>
+  <script src="/pagefind/pagefind-ui.js"></script>
+  <script>
+    window.addEventListener("DOMContentLoaded", () => {
+      new PagefindUI({ element: "#search", showSubResults: true });
+    });
+  </script>
 </body>
 </html>

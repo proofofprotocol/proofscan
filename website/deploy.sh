@@ -78,6 +78,59 @@ for file in docs/*.html; do
   fi
 done
 
+# Upload Pagefind (search functionality)
+echo "📤 Uploading Pagefind search files..."
+if [ -d "pagefind" ]; then
+  # Upload main JS and CSS files
+  for file in pagefind/*.{js,css,json}; do
+    if [ -f "$file" ]; then
+      filename=$(basename "$file")
+      echo "  → $filename"
+      curl -T "$file" -u "$FTP_USER:$FTP_PASS" "$FTP_HOST${FTP_DIR}pagefind/$filename" --ftp-create-dirs
+    fi
+  done
+  
+  # Upload WASM files
+  for file in pagefind/*.pagefind; do
+    if [ -f "$file" ]; then
+      filename=$(basename "$file")
+      echo "  → $filename"
+      curl -T "$file" -u "$FTP_USER:$FTP_PASS" "$FTP_HOST${FTP_DIR}pagefind/$filename" --ftp-create-dirs
+    fi
+  done
+  
+  # Upload pf_meta files
+  for file in pagefind/*.pf_meta; do
+    if [ -f "$file" ]; then
+      filename=$(basename "$file")
+      echo "  → $filename"
+      curl -T "$file" -u "$FTP_USER:$FTP_PASS" "$FTP_HOST${FTP_DIR}pagefind/$filename" --ftp-create-dirs
+    fi
+  done
+  
+  # Upload index files
+  if [ -d "pagefind/index" ]; then
+    for file in pagefind/index/*; do
+      if [ -f "$file" ]; then
+        filename=$(basename "$file")
+        echo "  → index/$filename"
+        curl -T "$file" -u "$FTP_USER:$FTP_PASS" "$FTP_HOST${FTP_DIR}pagefind/index/$filename" --ftp-create-dirs
+      fi
+    done
+  fi
+  
+  # Upload fragment files
+  if [ -d "pagefind/fragment" ]; then
+    for file in pagefind/fragment/*; do
+      if [ -f "$file" ]; then
+        filename=$(basename "$file")
+        echo "  → fragment/$filename"
+        curl -T "$file" -u "$FTP_USER:$FTP_PASS" "$FTP_HOST${FTP_DIR}pagefind/fragment/$filename" --ftp-create-dirs
+      fi
+    done
+  fi
+fi
+
 echo ""
 echo "✅ Deployment completed!"
 echo "🌐 Your site is now live at: https://proofofprotocol.online/"
