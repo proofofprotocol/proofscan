@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflows - ProofScan Documentation</title>
+  <meta name="description" content="Common ProofScan workflows and usage patterns">
+  <link rel="stylesheet" href="/css/docs.css">
+</head>
+<body>
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo"><span>🔍</span><span>ProofScan</span></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/">Commands</a>
+          <a href="/docs/" class="active">Docs</a>
+          <a href="/examples/">Examples</a>
+          <a href="https://github.com/proofofprotocol/proofscan">GitHub</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search docs...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
+          <span>⭐</span>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">Getting Started</div>
+        <a href="/docs/" class="sidebar-item">📖 Overview</a>
+        <a href="/docs/installation.html" class="sidebar-item">⚙️ Installation</a>
+        <a href="/docs/quickstart.html" class="sidebar-item">🚀 Quick Start</a>
+        
+        <div class="sidebar-category">Core Concepts</div>
+        <a href="/docs/architecture.html" class="sidebar-item">🏗️ Architecture</a>
+        <a href="/docs/mcp-protocol.html" class="sidebar-item">🔌 MCP Protocol</a>
+        <a href="/docs/workflows.html" class="sidebar-item active">🔄 Workflows</a>
+        
+        <div class="sidebar-category">Resources</div>
+        <a href="/commands/" class="sidebar-item">Command Reference</a>
+        <a href="/examples/" class="sidebar-item">Examples</a>
+        <a href="https://github.com/proofofprotocol/proofscan" class="sidebar-item">GitHub</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <a href="/docs/">Documentation</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">Workflows</span>
+      </nav>
+
+      <article>
+        <h1>🔄 Common Workflows</h1>
+        <p class="lead">Practical patterns for using ProofScan in different scenarios</p>
+
+        <section id="development-workflow">
+          <h2>Development Workflow</h2>
+          <p>Using ProofScan while developing an MCP server:</p>
+          
+          <div class="step-card">
+            <h3>1. Set Up Development Environment</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Initialize ProofScan
+pfscan config init
+
+# Add your development server
+pfscan connectors add \
+  --id dev-server \
+  --stdio "node dist/index.js"</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Start Monitoring</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Terminal 1: Start scanning
+pfscan scan start --id dev-server
+
+# Terminal 2: Watch events in real-time
+pfscan view --follow --fulltime --json</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>3. Test Your Implementation</h3>
+            <p>Use your MCP client to interact with the server. ProofScan will capture all traffic.</p>
+          </div>
+
+          <div class="step-card">
+            <h3>4. Analyze Results</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># View hierarchical structure
+pfscan tree
+
+# Check for errors
+pfscan view --errors
+
+# Generate summary
+pfscan summary</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>5. Iterate and Refine</h3>
+            <p>Based on the captured data, fix bugs and improve your implementation. Repeat the process.</p>
+          </div>
+        </section>
+
+        <section id="debugging-workflow">
+          <h2>Debugging Workflow</h2>
+          <p>Troubleshooting issues with MCP communications:</p>
+          
+          <h3>Scenario: Connection Not Establishing</h3>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># Try to start scanning
+pfscan scan start --id problematic-server
+
+# Check connector status
+pfscan status --id problematic-server
+
+# View any errors
+pfscan view --errors --since 10m</code></pre>
+          </div>
+
+          <h3>Scenario: Slow Response Times</h3>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># Scan the server
+pfscan scan start --id slow-server
+
+# View events with latency info
+pfscan view --fulltime
+
+# Find slow operations (latency > 1000ms)
+pfscan view | grep "lat=[0-9][0-9][0-9][0-9]ms"</code></pre>
+          </div>
+
+          <h3>Scenario: Unexpected Behavior</h3>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># Capture a complete session
+pfscan scan start --id mystery-server
+
+# View complete message flow
+pfscan tree --rpc-all
+
+# Export for detailed analysis
+pfscan view --json > debug.json</code></pre>
+          </div>
+        </section>
+
+        <section id="testing-workflow">
+          <h2>Testing Workflow</h2>
+          <p>Using ProofScan for automated testing:</p>
+          
+          <div class="step-card">
+            <h3>1. Create Test Script</h3>
+            <pre><code>#!/bin/bash
+# test-mcp-server.sh
+
+# Start ProofScan
+SESSION_ID=$(pfscan scan start --id test-server | grep "Session:" | awk '{print $2}')
+
+# Run your tests
+npm test
+
+# Stop scanning
+pfscan scan stop
+
+# Generate report
+pfscan summary --session $SESSION_ID
+
+# Check for errors
+ERROR_COUNT=$(pfscan view --session $SESSION_ID --errors | wc -l)
+
+if [ $ERROR_COUNT -gt 0 ]; then
+  echo "❌ Test failed: $ERROR_COUNT errors detected"
+  exit 1
+else
+  echo "✅ Test passed: No errors"
+  exit 0
+fi</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Integration with CI/CD</h3>
+            <pre><code># .github/workflows/test.yml
+name: MCP Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Install ProofScan
+        run: npm install -g proofscan
+      
+      - name: Run tests with ProofScan
+        run: ./test-mcp-server.sh
+      
+      - name: Upload scan results
+        if: failure()
+        uses: actions/upload-artifact@v2
+        with:
+          name: proofscan-logs
+          path: ~/.config/proofscan/sessions/</code></pre>
+          </div>
+        </section>
+
+        <section id="production-monitoring">
+          <h2>Production Monitoring</h2>
+          <p>Continuous monitoring of production MCP servers:</p>
+          
+          <div class="step-card">
+            <h3>1. Set Up Monitoring</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Add production servers
+pfscan connectors add \
+  --id prod-api \
+  --sse "https://api.example.com/mcp"
+
+pfscan connectors add \
+  --id prod-db \
+  --sse "https://db.example.com/mcp"</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Start Continuous Scanning</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Start monitoring in background
+pfscan scan start --id prod-api &
+pfscan scan start --id prod-db &</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>3. Set Up Alerting</h3>
+            <pre><code>#!/bin/bash
+# monitor-errors.sh
+
+while true; do
+  ERRORS=$(pfscan view --since 5m --errors | wc -l)
+  
+  if [ $ERRORS -gt 10 ]; then
+    echo "⚠️  High error rate detected: $ERRORS errors in last 5 minutes"
+    # Send alert (Slack, email, etc.)
+  fi
+  
+  sleep 300  # Check every 5 minutes
+done</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>4. Generate Daily Reports</h3>
+            <pre><code>#!/bin/bash
+# daily-report.sh
+
+# Get today's sessions
+TODAY=$(date +%Y-%m-%d)
+
+# Generate reports for each connector
+for CONNECTOR in prod-api prod-db; do
+  echo "=== Report for $CONNECTOR ==="
+  pfscan summary --connector $CONNECTOR --since $TODAY
+  echo ""
+done</code></pre>
+          </div>
+        </section>
+
+        <section id="audit-workflow">
+          <h2>Audit & Compliance Workflow</h2>
+          <p>Creating verifiable audit trails:</p>
+          
+          <div class="step-card">
+            <h3>1. Capture Critical Operations</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Start scanning for audit
+pfscan scan start --id financial-api
+
+# Perform critical operations
+# (All communications are captured automatically)</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Generate Proof Records</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Generate POPL proof
+pfscan popl generate \
+  --session <session-id> \
+  --output audit-2024-02-17.json
+
+# Include metadata
+pfscan popl generate \
+  --session <session-id> \
+  --metadata "audit_type:financial,period:Q1-2024" \
+  --output Q1-2024-audit.json</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>3. Verify Proof Integrity</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Verify the proof
+pfscan popl verify --file audit-2024-02-17.json
+
+# Should output:
+# ✓ Proof signature valid
+# ✓ All events verified
+# ✓ Timeline consistent</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>4. Archive and Store</h3>
+            <pre><code># Create tamper-proof archive
+tar -czf audits-2024-Q1.tar.gz ~/.config/proofscan/sessions/
+
+# Store in secure location
+aws s3 cp audits-2024-Q1.tar.gz s3://audit-bucket/2024/Q1/</code></pre>
+          </div>
+        </section>
+
+        <section id="performance-analysis">
+          <h2>Performance Analysis Workflow</h2>
+          <p>Identifying and optimizing performance bottlenecks:</p>
+          
+          <div class="step-card">
+            <h3>1. Baseline Measurement</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Scan under normal load
+pfscan scan start --id target-server
+
+# Run standard workload
+./run-benchmark.sh
+
+# Generate performance summary
+pfscan summary</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Identify Slow Operations</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Find operations taking > 1 second
+pfscan view | grep "lat=[0-9][0-9][0-9][0-9]ms"
+
+# Sort by latency
+pfscan view --json | jq '.[] | select(.latency_ms > 1000)' | jq -s 'sort_by(.latency_ms) | reverse'</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>3. Analyze RPC Patterns</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># View RPC call frequency
+pfscan tree --rpc-all
+
+# Count calls by method
+pfscan view --json | jq '.message.method' | sort | uniq -c | sort -rn</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>4. Compare Before/After</h3>
+            <pre><code># Capture baseline
+pfscan scan start --id server
+SESSION_BEFORE=$(pfscan status | grep Session | awk '{print $2}')
+
+# Make optimization changes
+
+# Capture after optimization
+pfscan scan start --id server
+SESSION_AFTER=$(pfscan status | grep Session | awk '{print $2}')
+
+# Compare summaries
+echo "=== BEFORE ==="
+pfscan summary --session $SESSION_BEFORE
+
+echo "=== AFTER ==="
+pfscan summary --session $SESSION_AFTER</code></pre>
+          </div>
+        </section>
+
+        <section id="multi-server-workflow">
+          <h2>Multi-Server Workflow</h2>
+          <p>Monitoring multiple MCP servers simultaneously:</p>
+          
+          <div class="step-card">
+            <h3>1. Register Multiple Connectors</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Add all servers
+pfscan connectors add --id api-server --sse "https://api.example.com/mcp"
+pfscan connectors add --id db-server --sse "https://db.example.com/mcp"
+pfscan connectors add --id cache-server --stdio "redis-mcp-server"</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Start All Scans</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Start all in background
+for connector in api-server db-server cache-server; do
+  pfscan scan start --id $connector &
+done</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>3. Monitor Aggregate View</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code># Watch all events
+pfscan view --follow
+
+# View by connector
+pfscan tree
+
+# Check individual status
+pfscan status</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="tips">
+          <h2>Workflow Tips</h2>
+          
+          <div class="note info">
+            <div class="note-title">💡 Best Practices</div>
+            <ul>
+              <li><strong>Session Management:</strong> Use descriptive connector IDs to identify sessions later</li>
+              <li><strong>Time Filters:</strong> Use <code>--since</code> and <code>--until</code> for focused analysis</li>
+              <li><strong>JSON Output:</strong> Use <code>--json</code> for integration with other tools</li>
+              <li><strong>Background Tasks:</strong> Run scans in background (<code>&</code>) for continuous monitoring</li>
+              <li><strong>Regular Cleanup:</strong> Archive old sessions to save disk space</li>
+              <li><strong>Automation:</strong> Script repetitive workflows for consistency</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="next-steps">
+          <h2>Next Steps</h2>
+          <ul>
+            <li><a href="/commands/">→ Command Reference</a> - Detailed command documentation</li>
+            <li><a href="/examples/">→ Examples</a> - More practical examples</li>
+            <li><a href="/docs/architecture.html">→ Architecture</a> - Understanding internals</li>
+          </ul>
+        </section>
+      </article>
+    </main>
+
+    <aside class="toc-sidebar">
+      <!-- TOC will be auto-generated by main.js -->
+    </aside>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

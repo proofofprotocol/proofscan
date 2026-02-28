@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Installation - ProofScan Documentation</title>
+  <meta name="description" content="How to install and set up ProofScan">
+  <link rel="stylesheet" href="/css/docs.css">
+</head>
+<body>
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo"><span>🔍</span><span>ProofScan</span></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/">Commands</a>
+          <a href="/docs/" class="active">Docs</a>
+          <a href="/examples/">Examples</a>
+          <a href="https://github.com/proofofprotocol/proofscan">GitHub</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search docs...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
+          <span>⭐</span>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">Getting Started</div>
+        <a href="/docs/" class="sidebar-item">📖 Overview</a>
+        <a href="/docs/installation.html" class="sidebar-item active">⚙️ Installation</a>
+        <a href="/docs/quickstart.html" class="sidebar-item">🚀 Quick Start</a>
+        
+        <div class="sidebar-category">Core Concepts</div>
+        <a href="/docs/architecture.html" class="sidebar-item">🏗️ Architecture</a>
+        <a href="/docs/mcp-protocol.html" class="sidebar-item">🔌 MCP Protocol</a>
+        <a href="/docs/workflows.html" class="sidebar-item">🔄 Workflows</a>
+        
+        <div class="sidebar-category">Resources</div>
+        <a href="/commands/" class="sidebar-item">Command Reference</a>
+        <a href="/examples/" class="sidebar-item">Examples</a>
+        <a href="https://github.com/proofofprotocol/proofscan" class="sidebar-item">GitHub</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <a href="/docs/">Documentation</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">Installation</span>
+      </nav>
+
+      <article>
+        <h1>⚙️ Installation</h1>
+        <p class="lead">How to install and set up ProofScan on your system</p>
+
+        <section id="requirements">
+          <h2>System Requirements</h2>
+          <p>Before installing ProofScan, ensure your system meets these requirements:</p>
+          <ul>
+            <li><strong>Node.js</strong> - version 18.0.0 or higher</li>
+            <li><strong>npm</strong> - version 9.0.0 or higher (comes with Node.js)</li>
+            <li><strong>Operating System</strong> - macOS, Linux, or Windows (WSL recommended)</li>
+          </ul>
+          
+          <div class="note info">
+            <div class="note-title">💡 Checking Your Version</div>
+            <p>Run these commands to check your current versions:</p>
+            <pre><code>node --version
+npm --version</code></pre>
+          </div>
+        </section>
+
+        <section id="npm-installation">
+          <h2>Installation via npm</h2>
+          <p>The easiest way to install ProofScan is via npm:</p>
+          
+          <h3>Global Installation (Recommended)</h3>
+          <p>Install ProofScan globally to use it from anywhere:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>npm install -g proofscan</code></pre>
+          </div>
+          <p>After installation, verify it worked:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>pfscan --version</code></pre>
+          </div>
+
+          <h3>Local Installation</h3>
+          <p>To install ProofScan in a specific project:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>npm install proofscan</code></pre>
+          </div>
+          <p>Then use it with npx:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>npx pfscan --version</code></pre>
+          </div>
+        </section>
+
+        <section id="github-installation">
+          <h2>Installation from GitHub</h2>
+          <p>To install the latest development version directly from GitHub:</p>
+          
+          <h3>Clone and Build</h3>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>git clone https://github.com/proofofprotocol/proofscan.git
+cd proofscan
+npm install
+npm run build
+npm link</code></pre>
+          </div>
+          
+          <div class="note info">
+            <div class="note-title">⚠️ Development Installation</div>
+            <p>This method installs the latest code from GitHub, which may include unreleased features or bugs. Use the npm installation for production environments.</p>
+          </div>
+        </section>
+
+        <section id="configuration">
+          <h2>Initial Configuration</h2>
+          <p>After installation, initialize your ProofScan configuration:</p>
+          
+          <h3>1. Initialize Config File</h3>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>pfscan config init</code></pre>
+          </div>
+          <p>This creates a configuration file at:</p>
+          <ul>
+            <li><strong>Linux:</strong> <code>~/.config/proofscan/config.json</code></li>
+            <li><strong>macOS:</strong> <code>~/Library/Application Support/proofscan/config.json</code></li>
+            <li><strong>Windows:</strong> <code>%APPDATA%\proofscan\config.json</code></li>
+          </ul>
+
+          <h3>2. View Configuration</h3>
+          <p>Check your current configuration:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>pfscan config show</code></pre>
+          </div>
+
+          <h3>3. Edit Configuration</h3>
+          <p>Open the config file in your default editor:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>pfscan config edit</code></pre>
+          </div>
+        </section>
+
+        <section id="verification">
+          <h2>Verify Installation</h2>
+          <p>Test that ProofScan is working correctly:</p>
+          
+          <div class="step-card">
+            <h3>1. Check Version</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan --version</code></pre>
+            </div>
+            <p>Should output something like: <code>0.11.2</code></p>
+          </div>
+
+          <div class="step-card">
+            <h3>2. View Help</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan --help</code></pre>
+            </div>
+            <p>Should display the main help menu with available commands.</p>
+          </div>
+
+          <div class="step-card">
+            <h3>3. List Connectors</h3>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan connectors ls</code></pre>
+            </div>
+            <p>Should show an empty list (you haven't added any connectors yet).</p>
+          </div>
+        </section>
+
+        <section id="troubleshooting">
+          <h2>Troubleshooting</h2>
+          
+          <h3>Command Not Found</h3>
+          <p>If you get "command not found" errors:</p>
+          <ul>
+            <li>Ensure npm's global bin directory is in your PATH</li>
+            <li>Try closing and reopening your terminal</li>
+            <li>On macOS/Linux, check <code>npm config get prefix</code></li>
+            <li>Add npm's bin directory to PATH: <code>export PATH="$(npm config get prefix)/bin:$PATH"</code></li>
+          </ul>
+
+          <h3>Permission Errors</h3>
+          <p>If you get permission errors during installation:</p>
+          <ul>
+            <li><strong>Linux/macOS:</strong> Don't use <code>sudo npm install -g</code></li>
+            <li>Instead, configure npm to use a different directory: <a href="https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally">npm permissions guide</a></li>
+            <li><strong>Windows:</strong> Run your terminal as Administrator</li>
+          </ul>
+
+          <h3>Node Version Issues</h3>
+          <p>If ProofScan doesn't work due to Node.js version:</p>
+          <ul>
+            <li>Update Node.js to the latest LTS version from <a href="https://nodejs.org/">nodejs.org</a></li>
+            <li>Or use a version manager like <a href="https://github.com/nvm-sh/nvm">nvm</a> (Linux/macOS) or <a href="https://github.com/coreybutler/nvm-windows">nvm-windows</a></li>
+          </ul>
+        </section>
+
+        <section id="next-steps">
+          <h2>Next Steps</h2>
+          <p>Now that ProofScan is installed, you're ready to start using it:</p>
+          <ul>
+            <li><a href="/docs/quickstart.html">→ Quick Start Guide</a> - Get started in 5 minutes</li>
+            <li><a href="/commands/">→ Command Reference</a> - Browse all available commands</li>
+            <li><a href="/examples/">→ Examples</a> - See ProofScan in action</li>
+          </ul>
+        </section>
+      </article>
+    </main>
+
+    <aside class="toc-sidebar">
+      <!-- TOC will be auto-generated by main.js -->
+    </aside>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

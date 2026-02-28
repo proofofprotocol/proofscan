@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Start - ProofScan Documentation</title>
+  <meta name="description" content="Get started with ProofScan in 5 minutes">
+  <link rel="stylesheet" href="/css/docs.css">
+</head>
+<body>
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo"><span>🔍</span><span>ProofScan</span></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/">Commands</a>
+          <a href="/docs/" class="active">Docs</a>
+          <a href="/examples/">Examples</a>
+          <a href="https://github.com/proofofprotocol/proofscan">GitHub</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search docs...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
+          <span>⭐</span>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">Getting Started</div>
+        <a href="/docs/" class="sidebar-item">📖 Overview</a>
+        <a href="/docs/installation.html" class="sidebar-item">⚙️ Installation</a>
+        <a href="/docs/quickstart.html" class="sidebar-item active">🚀 Quick Start</a>
+        
+        <div class="sidebar-category">Core Concepts</div>
+        <a href="/docs/architecture.html" class="sidebar-item">🏗️ Architecture</a>
+        <a href="/docs/mcp-protocol.html" class="sidebar-item">🔌 MCP Protocol</a>
+        <a href="/docs/workflows.html" class="sidebar-item">🔄 Workflows</a>
+        
+        <div class="sidebar-category">Resources</div>
+        <a href="/commands/" class="sidebar-item">Command Reference</a>
+        <a href="/examples/" class="sidebar-item">Examples</a>
+        <a href="https://github.com/proofofprotocol/proofscan" class="sidebar-item">GitHub</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <a href="/docs/">Documentation</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">Quick Start</span>
+      </nav>
+
+      <article>
+        <h1>🚀 Quick Start</h1>
+        <p class="lead">Get started with ProofScan in 5 minutes</p>
+
+        <section id="prerequisites">
+          <h2>Prerequisites</h2>
+          <p>Before you begin, make sure you have:</p>
+          <ul>
+            <li>ProofScan installed (<a href="/docs/installation.html">Installation Guide</a>)</li>
+            <li>An MCP server to scan (or use one of the examples below)</li>
+            <li>Basic familiarity with command-line tools</li>
+          </ul>
+        </section>
+
+        <section id="basic-workflow">
+          <h2>Basic Workflow</h2>
+          <p>ProofScan follows a simple workflow:</p>
+          
+          <div class="step-card">
+            <h3>Step 1: Initialize Configuration</h3>
+            <p>Create your ProofScan configuration file:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan config init</code></pre>
+            </div>
+            <p>Output:</p>
+            <pre><code>✓ Configuration initialized
+  Config path: ~/.config/proofscan/config.json</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>Step 2: Add a Connector</h3>
+            <p>Register an MCP server (connector):</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan connectors add \
+  --id time-server \
+  --stdio "npx -y @modelcontextprotocol/server-everything"</code></pre>
+            </div>
+            <p>Output:</p>
+            <pre><code>✓ Connector added: time-server</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>Step 3: Start Scanning</h3>
+            <p>Begin monitoring the connector:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan scan start --id time-server</code></pre>
+            </div>
+            <p>Output:</p>
+            <pre><code>✓ Scan started
+  Session: f2442c9b
+  Connector: time-server
+  
+Waiting for events... (Press Ctrl+C to stop)</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>Step 4: View Events</h3>
+            <p>In another terminal, watch the captured events in real-time:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan view --follow</code></pre>
+            </div>
+            <p>Or view events from a specific session:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan view --session f2442c9b</code></pre>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <h3>Step 5: Generate Reports</h3>
+            <p>Create a summary report:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan summary --session f2442c9b</code></pre>
+            </div>
+            <p>Or generate a complete proof record:</p>
+            <div class="code-block">
+              <button class="copy-button">Copy</button>
+              <pre><code>pfscan popl generate --session f2442c9b</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="common-patterns">
+          <h2>Common Usage Patterns</h2>
+          
+          <h3>Real-Time Monitoring</h3>
+          <p>Watch events as they happen:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># Start scanning in background
+pfscan scan start --id myserver &
+
+# Follow events in real-time
+pfscan view --follow --fulltime</code></pre>
+          </div>
+
+          <h3>Error Tracking</h3>
+          <p>Monitor only errors:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code>pfscan view --follow --errors</code></pre>
+          </div>
+
+          <h3>Session Analysis</h3>
+          <p>Analyze a completed session:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># View hierarchical structure
+pfscan tree --session <session-id>
+
+# Generate summary
+pfscan summary --session <session-id>
+
+# Export as proof
+pfscan popl generate --session <session-id></code></pre>
+          </div>
+
+          <h3>Multiple Connectors</h3>
+          <p>Monitor multiple MCP servers:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># Add multiple connectors
+pfscan connectors add --id server1 --stdio "..."
+pfscan connectors add --id server2 --stdio "..."
+
+# Start both
+pfscan scan start --id server1 &
+pfscan scan start --id server2 &
+
+# View all events
+pfscan view --follow</code></pre>
+          </div>
+        </section>
+
+        <section id="example-scenarios">
+          <h2>Example Scenarios</h2>
+          
+          <h3>Scenario 1: Testing an MCP Server</h3>
+          <p>You're developing an MCP server and want to see all JSON-RPC traffic:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># Add your server
+pfscan connectors add --id myserver --stdio "node dist/index.js"
+
+# Start scanning with full details
+pfscan scan start --id myserver
+
+# In another terminal, watch events with full timestamps
+pfscan view --follow --fulltime --json</code></pre>
+          </div>
+
+          <h3>Scenario 2: Debugging Connection Issues</h3>
+          <p>Your MCP client isn't connecting properly:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># Start scanning
+pfscan scan start --id problematic-server
+
+# Monitor only errors
+pfscan view --follow --errors
+
+# Check connection status
+pfscan status --id problematic-server</code></pre>
+          </div>
+
+          <h3>Scenario 3: Audit Trail Generation</h3>
+          <p>You need a verifiable record of all communications:</p>
+          <div class="code-block">
+            <button class="copy-button">Copy</button>
+            <pre><code># Scan with proof generation enabled
+pfscan scan start --id production-server
+
+# After session completes, generate proof
+pfscan popl generate --session <session-id> --output audit.json
+
+# Verify the proof
+pfscan popl verify --file audit.json</code></pre>
+          </div>
+        </section>
+
+        <section id="tips">
+          <h2>Tips & Tricks</h2>
+          
+          <div class="note info">
+            <div class="note-title">💡 Useful Tips</div>
+            <ul>
+              <li><strong>Background Scanning:</strong> Add <code>&</code> to run scans in background: <code>pfscan scan start --id myserver &</code></li>
+              <li><strong>Filter by Time:</strong> Use <code>--since</code> to view recent events: <code>pfscan view --since 1h</code></li>
+              <li><strong>JSON Output:</strong> Add <code>--json</code> for machine-readable output</li>
+              <li><strong>Save Sessions:</strong> Session data is automatically saved for later analysis</li>
+              <li><strong>List Sessions:</strong> Run <code>pfscan sessions ls</code> to see all recorded sessions</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="next-steps">
+          <h2>Next Steps</h2>
+          <p>Now that you know the basics:</p>
+          <ul>
+            <li><a href="/commands/">→ Command Reference</a> - Learn all available commands</li>
+            <li><a href="/examples/">→ Examples</a> - See more detailed examples</li>
+            <li><a href="/docs/architecture.html">→ Architecture</a> - Understand how ProofScan works</li>
+            <li><a href="/docs/mcp-protocol.html">→ MCP Protocol</a> - Learn about the Model Context Protocol</li>
+          </ul>
+        </section>
+      </article>
+    </main>
+
+    <aside class="toc-sidebar">
+      <!-- TOC will be auto-generated by main.js -->
+    </aside>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

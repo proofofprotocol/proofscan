@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Protocol - ProofScan Documentation</title>
+  <meta name="description" content="Understanding the Model Context Protocol">
+  <link rel="stylesheet" href="/css/docs.css">
+</head>
+<body>
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo"><span>🔍</span><span>ProofScan</span></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/">Commands</a>
+          <a href="/docs/" class="active">Docs</a>
+          <a href="/examples/">Examples</a>
+          <a href="https://github.com/proofofprotocol/proofscan">GitHub</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search docs...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
+          <span>⭐</span>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">Getting Started</div>
+        <a href="/docs/" class="sidebar-item">📖 Overview</a>
+        <a href="/docs/installation.html" class="sidebar-item">⚙️ Installation</a>
+        <a href="/docs/quickstart.html" class="sidebar-item">🚀 Quick Start</a>
+        
+        <div class="sidebar-category">Core Concepts</div>
+        <a href="/docs/architecture.html" class="sidebar-item">🏗️ Architecture</a>
+        <a href="/docs/mcp-protocol.html" class="sidebar-item active">🔌 MCP Protocol</a>
+        <a href="/docs/workflows.html" class="sidebar-item">🔄 Workflows</a>
+        
+        <div class="sidebar-category">Resources</div>
+        <a href="/commands/" class="sidebar-item">Command Reference</a>
+        <a href="/examples/" class="sidebar-item">Examples</a>
+        <a href="https://github.com/proofofprotocol/proofscan" class="sidebar-item">GitHub</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <a href="/docs/">Documentation</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">MCP Protocol</span>
+      </nav>
+
+      <article>
+        <h1>🔌 Model Context Protocol (MCP)</h1>
+        <p class="lead">Understanding the Model Context Protocol and how ProofScan monitors it</p>
+
+        <section id="what-is-mcp">
+          <h2>What is MCP?</h2>
+          <p>The <strong>Model Context Protocol (MCP)</strong> is an open standard that enables AI applications to connect to external data sources, tools, and services. It provides a universal way for AI models to interact with the world beyond their training data.</p>
+          
+          <div class="note info">
+            <div class="note-title">🎯 Key Benefits of MCP</div>
+            <ul>
+              <li><strong>Standardization:</strong> One protocol for all integrations</li>
+              <li><strong>Security:</strong> Controlled access to resources</li>
+              <li><strong>Flexibility:</strong> Works with any AI system and data source</li>
+              <li><strong>Transparency:</strong> All communications are auditable</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="protocol-basics">
+          <h2>Protocol Basics</h2>
+          <p>MCP is built on <strong>JSON-RPC 2.0</strong>, a lightweight remote procedure call protocol. All communications follow this standard format.</p>
+          
+          <h3>Message Types</h3>
+          
+          <h4>1. Requests</h4>
+          <p>Client sends a request to the server:</p>
+          <pre><code>{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}</code></pre>
+
+          <h4>2. Responses</h4>
+          <p>Server replies with a response:</p>
+          <pre><code>{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "tools": [...]
+  }
+}</code></pre>
+
+          <h4>3. Notifications</h4>
+          <p>One-way messages (no response expected):</p>
+          <pre><code>{
+  "jsonrpc": "2.0",
+  "method": "notifications/message",
+  "params": {
+    "level": "info",
+    "message": "Task completed"
+  }
+}</code></pre>
+
+          <h4>4. Errors</h4>
+          <p>Error responses when something goes wrong:</p>
+          <pre><code>{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32601,
+    "message": "Method not found"
+  }
+}</code></pre>
+        </section>
+
+        <section id="core-methods">
+          <h2>Core MCP Methods</h2>
+          
+          <h3>Initialization</h3>
+          <p>Establish connection and exchange capabilities:</p>
+          <ul>
+            <li><code>initialize</code> - Exchange protocol versions and capabilities</li>
+            <li><code>initialized</code> - Confirm initialization complete</li>
+          </ul>
+
+          <h3>Resource Discovery</h3>
+          <p>Discover available resources and tools:</p>
+          <ul>
+            <li><code>tools/list</code> - List all available tools</li>
+            <li><code>resources/list</code> - List available resources</li>
+            <li><code>prompts/list</code> - List available prompts</li>
+          </ul>
+
+          <h3>Tool Execution</h3>
+          <p>Execute tools and retrieve results:</p>
+          <ul>
+            <li><code>tools/call</code> - Execute a specific tool</li>
+          </ul>
+
+          <h3>Resource Access</h3>
+          <p>Read data from resources:</p>
+          <ul>
+            <li><code>resources/read</code> - Read resource content</li>
+            <li><code>resources/subscribe</code> - Subscribe to resource updates</li>
+          </ul>
+
+          <h3>Notifications</h3>
+          <p>Asynchronous event notifications:</p>
+          <ul>
+            <li><code>notifications/message</code> - Log messages</li>
+            <li><code>notifications/progress</code> - Progress updates</li>
+            <li><code>notifications/resources/updated</code> - Resource change events</li>
+          </ul>
+        </section>
+
+        <section id="transport-layers">
+          <h2>Transport Layers</h2>
+          <p>MCP supports multiple transport mechanisms:</p>
+          
+          <h3>1. stdio (Standard Input/Output)</h3>
+          <p>Communication via process stdin/stdout:</p>
+          <ul>
+            <li>Most common for local development</li>
+            <li>Simple process spawning</li>
+            <li>No network configuration needed</li>
+          </ul>
+          <pre><code># Example stdio connector
+pfscan connectors add \
+  --id local-server \
+  --stdio "node server.js"</code></pre>
+
+          <h3>2. SSE (Server-Sent Events)</h3>
+          <p>HTTP-based streaming for server-to-client messages:</p>
+          <ul>
+            <li>Ideal for remote servers</li>
+            <li>Works through firewalls</li>
+            <li>Standard HTTP(S) transport</li>
+          </ul>
+          <pre><code># Example SSE connector
+pfscan connectors add \
+  --id remote-server \
+  --sse "https://api.example.com/mcp"</code></pre>
+
+          <h3>3. WebSocket</h3>
+          <p>Full-duplex bidirectional communication:</p>
+          <ul>
+            <li>Real-time bidirectional messaging</li>
+            <li>Lower latency than SSE</li>
+            <li>More complex infrastructure</li>
+          </ul>
+        </section>
+
+        <section id="lifecycle">
+          <h2>Connection Lifecycle</h2>
+          <p>Understanding the MCP connection flow:</p>
+          
+          <div class="step-card">
+            <h3>1. Connection Establishment</h3>
+            <p>Client establishes transport connection with server</p>
+            <pre><code>Client → [connect] → Server</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Initialization</h3>
+            <p>Exchange protocol version and capabilities:</p>
+            <pre><code>Client: initialize
+  {
+    "protocolVersion": "1.0",
+    "capabilities": {...}
+  }
+
+Server: result
+  {
+    "protocolVersion": "1.0",
+    "capabilities": {...},
+    "serverInfo": {...}
+  }
+
+Client: initialized</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>3. Active Communication</h3>
+            <p>Client and server exchange messages:</p>
+            <pre><code>Client → tools/list → Server
+Client ← result ← Server
+Client → tools/call → Server
+Client ← result ← Server
+...</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>4. Termination</h3>
+            <p>Clean shutdown of connection:</p>
+            <pre><code>Client → [disconnect] → Server</code></pre>
+          </div>
+        </section>
+
+        <section id="proofscan-monitoring">
+          <h2>How ProofScan Monitors MCP</h2>
+          <p>ProofScan captures all MCP communications transparently:</p>
+          
+          <h3>Capture Points</h3>
+          <ul>
+            <li><strong>All Requests:</strong> Every method call from client to server</li>
+            <li><strong>All Responses:</strong> Every result and error response</li>
+            <li><strong>All Notifications:</strong> Asynchronous messages in both directions</li>
+            <li><strong>Timing Data:</strong> Latency for each request/response pair</li>
+          </ul>
+
+          <h3>What ProofScan Records</h3>
+          <pre><code>{
+  "timestamp": "2024-02-17T10:30:45.123Z",
+  "session_id": "f2442c9b",
+  "connector_id": "myserver",
+  "direction": "request",
+  "message": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "get_weather",
+      "arguments": {"city": "Tokyo"}
+    }
+  },
+  "metadata": {
+    "latency_ms": 145,
+    "size_bytes": 256
+  }
+}</code></pre>
+
+          <h3>Analysis Capabilities</h3>
+          <ul>
+            <li>View complete message sequences</li>
+            <li>Identify performance bottlenecks</li>
+            <li>Debug protocol issues</li>
+            <li>Generate audit trails</li>
+            <li>Verify correct implementation</li>
+          </ul>
+        </section>
+
+        <section id="a2a-protocol">
+          <h2>A2A (Agent-to-Agent) Protocol</h2>
+          <p>ProofScan also supports monitoring the emerging Agent-to-Agent (A2A) protocol:</p>
+          
+          <h3>What is A2A?</h3>
+          <p>A2A extends MCP concepts to enable direct agent-to-agent communication:</p>
+          <ul>
+            <li>Agents can discover and call each other</li>
+            <li>Built on MCP foundations</li>
+            <li>Supports complex multi-agent workflows</li>
+          </ul>
+
+          <h3>A2A-Specific Methods</h3>
+          <ul>
+            <li><code>agent/discover</code> - Find available agents</li>
+            <li><code>agent/call</code> - Invoke another agent</li>
+            <li><code>agent/subscribe</code> - Subscribe to agent events</li>
+          </ul>
+
+          <h3>Monitoring A2A with ProofScan</h3>
+          <pre><code># Add an A2A agent connector
+pfscan agent add \
+  --id research-agent \
+  --connector mcp-research
+
+# Monitor A2A communications
+pfscan scan start --id research-agent
+pfscan view --follow</code></pre>
+        </section>
+
+        <section id="best-practices">
+          <h2>Best Practices</h2>
+          
+          <div class="note info">
+            <div class="note-title">💡 MCP Implementation Tips</div>
+            <ul>
+              <li><strong>Error Handling:</strong> Always handle errors gracefully</li>
+              <li><strong>Timeouts:</strong> Set appropriate request timeouts</li>
+              <li><strong>Idempotency:</strong> Make operations idempotent when possible</li>
+              <li><strong>Logging:</strong> Use notifications for important events</li>
+              <li><strong>Versioning:</strong> Properly version your MCP implementations</li>
+            </ul>
+          </div>
+
+          <h3>When to Use ProofScan</h3>
+          <ul>
+            <li><strong>Development:</strong> Debug MCP implementations</li>
+            <li><strong>Testing:</strong> Verify protocol compliance</li>
+            <li><strong>Production:</strong> Monitor live MCP traffic</li>
+            <li><strong>Auditing:</strong> Generate compliance records</li>
+            <li><strong>Performance:</strong> Identify slow operations</li>
+          </ul>
+        </section>
+
+        <section id="resources">
+          <h2>Additional Resources</h2>
+          <ul>
+            <li><a href="https://modelcontextprotocol.io">Official MCP Documentation</a></li>
+            <li><a href="https://github.com/modelcontextprotocol">MCP on GitHub</a></li>
+            <li><a href="/docs/architecture.html">→ ProofScan Architecture</a></li>
+            <li><a href="/docs/workflows.html">→ Common Workflows</a></li>
+            <li><a href="/commands/">→ Command Reference</a></li>
+          </ul>
+        </section>
+      </article>
+    </main>
+
+    <aside class="toc-sidebar">
+      <!-- TOC will be auto-generated by main.js -->
+    </aside>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture - ProofScan Documentation</title>
+  <meta name="description" content="Learn how ProofScan works internally">
+  <link rel="stylesheet" href="/css/docs.css">
+</head>
+<body>
+  <header class="docs-header">
+    <div class="header-container">
+      <div class="header-left">
+        <button class="mobile-menu-toggle">☰</button>
+        <a href="/" class="logo"><span>🔍</span><span>ProofScan</span></a>
+        <nav class="main-nav">
+          <a href="/">Home</a>
+          <a href="/commands/">Commands</a>
+          <a href="/docs/" class="active">Docs</a>
+          <a href="/examples/">Examples</a>
+          <a href="https://github.com/proofofprotocol/proofscan">GitHub</a>
+        </nav>
+      </div>
+      <div class="header-right">
+        <div class="search-bar">
+          <span class="search-icon">🔍</span>
+          <input type="search" class="search-input" placeholder="Search docs...">
+        </div>
+        <a href="https://github.com/proofofprotocol/proofscan" class="github-link">
+          <span>⭐</span>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <div class="docs-layout">
+    <aside class="docs-sidebar">
+      <nav>
+        <div class="sidebar-category">Getting Started</div>
+        <a href="/docs/" class="sidebar-item">📖 Overview</a>
+        <a href="/docs/installation.html" class="sidebar-item">⚙️ Installation</a>
+        <a href="/docs/quickstart.html" class="sidebar-item">🚀 Quick Start</a>
+        
+        <div class="sidebar-category">Core Concepts</div>
+        <a href="/docs/architecture.html" class="sidebar-item active">🏗️ Architecture</a>
+        <a href="/docs/mcp-protocol.html" class="sidebar-item">🔌 MCP Protocol</a>
+        <a href="/docs/workflows.html" class="sidebar-item">🔄 Workflows</a>
+        
+        <div class="sidebar-category">Resources</div>
+        <a href="/commands/" class="sidebar-item">Command Reference</a>
+        <a href="/examples/" class="sidebar-item">Examples</a>
+        <a href="https://github.com/proofofprotocol/proofscan" class="sidebar-item">GitHub</a>
+      </nav>
+    </aside>
+
+    <main class="docs-content">
+      <nav class="breadcrumb">
+        <a href="/">Home</a>
+        <span class="breadcrumb-separator">›</span>
+        <a href="/docs/">Documentation</a>
+        <span class="breadcrumb-separator">›</span>
+        <span class="breadcrumb-current">Architecture</span>
+      </nav>
+
+      <article>
+        <h1>🏗️ Architecture</h1>
+        <p class="lead">Understanding how ProofScan works internally</p>
+
+        <section id="overview">
+          <h2>System Overview</h2>
+          <p>ProofScan is designed as a transparent proxy that sits between MCP clients and servers, capturing all JSON-RPC communications. The architecture follows a modular design with clear separation of concerns.</p>
+          
+          <div class="note info">
+            <div class="note-title">🎯 Core Design Principles</div>
+            <ul>
+              <li><strong>Transparency</strong> - No modification of MCP traffic</li>
+              <li><strong>Non-invasive</strong> - Works with any MCP server without changes</li>
+              <li><strong>Complete Capture</strong> - Records all requests, responses, and notifications</li>
+              <li><strong>Minimal Overhead</strong> - Low latency impact on communications</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="components">
+          <h2>Main Components</h2>
+          
+          <h3>1. Connector Manager</h3>
+          <p>Manages MCP server connections and lifecycle:</p>
+          <ul>
+            <li><strong>Registration:</strong> Store connector configurations (stdio, SSE, WebSocket)</li>
+            <li><strong>Spawning:</strong> Launch MCP server processes</li>
+            <li><strong>Connection:</strong> Establish and maintain communication channels</li>
+            <li><strong>Health Monitoring:</strong> Track connector status and availability</li>
+          </ul>
+
+          <h3>2. Proxy Layer</h3>
+          <p>The transparent proxy that intercepts and forwards JSON-RPC messages:</p>
+          <ul>
+            <li><strong>Message Interception:</strong> Capture all JSON-RPC traffic</li>
+            <li><strong>Bidirectional Forwarding:</strong> Pass messages between client and server</li>
+            <li><strong>Protocol Support:</strong> Handle stdio, SSE, and WebSocket transports</li>
+            <li><strong>Error Handling:</strong> Gracefully handle connection failures</li>
+          </ul>
+
+          <h3>3. Event Storage</h3>
+          <p>Persistent storage for captured JSON-RPC events:</p>
+          <ul>
+            <li><strong>Session Management:</strong> Group events by scanning session</li>
+            <li><strong>Hierarchical Storage:</strong> Organize by connector → session → RPC</li>
+            <li><strong>Timestamping:</strong> Record precise timing information</li>
+            <li><strong>Indexing:</strong> Enable fast querying and filtering</li>
+          </ul>
+
+          <h3>4. Query Engine</h3>
+          <p>Retrieve and analyze stored events:</p>
+          <ul>
+            <li><strong>Filtering:</strong> By session, connector, time range, event type</li>
+            <li><strong>Aggregation:</strong> Generate summaries and statistics</li>
+            <li><strong>Real-time:</strong> Stream events as they're captured</li>
+            <li><strong>Export:</strong> Output in various formats (JSON, POPL)</li>
+          </ul>
+
+          <h3>5. POPL Generator</h3>
+          <p>Create Proof-of-Protocol records:</p>
+          <ul>
+            <li><strong>Evidence Collection:</strong> Gather all relevant events</li>
+            <li><strong>Cryptographic Signing:</strong> Add signatures for verification</li>
+            <li><strong>Format Compliance:</strong> Follow POPL standard</li>
+            <li><strong>Verification:</strong> Validate proof integrity</li>
+          </ul>
+        </section>
+
+        <section id="data-flow">
+          <h2>Data Flow</h2>
+          <p>Understanding how data flows through ProofScan:</p>
+          
+          <div class="step-card">
+            <h3>1. Initialization</h3>
+            <pre><code>User → Config Manager → Connector Registry
+     ↓
+Configuration File
+     ↓
+Connector Definitions</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>2. Scanning Start</h3>
+            <pre><code>User Command → Scanner
+     ↓
+Connector Manager → Spawn Process
+     ↓
+Proxy Layer → Establish Connection
+     ↓
+Event Storage → Create Session</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>3. Message Capture</h3>
+            <pre><code>MCP Client ←→ Proxy Layer ←→ MCP Server
+              ↓
+        Event Storage
+              ↓
+     Session Database</code></pre>
+          </div>
+
+          <div class="step-card">
+            <h3>4. Query & Analysis</h3>
+            <pre><code>User Query → Query Engine
+     ↓
+Event Storage → Retrieve Events
+     ↓
+Formatter → Output Results</code></pre>
+          </div>
+        </section>
+
+        <section id="storage-structure">
+          <h2>Storage Structure</h2>
+          <p>ProofScan uses a hierarchical storage model:</p>
+          
+          <h3>Directory Layout</h3>
+          <pre><code>~/.config/proofscan/
+├── config.json              # Main configuration
+├── connectors/              # Connector definitions
+│   ├── connector1.json
+│   └── connector2.json
+└── sessions/                # Captured sessions
+    ├── session1/
+    │   ├── metadata.json    # Session info
+    │   └── events.jsonl     # Event stream
+    └── session2/
+        ├── metadata.json
+        └── events.jsonl</code></pre>
+
+          <h3>Event Format</h3>
+          <p>Each captured event includes:</p>
+          <pre><code>{
+  "timestamp": "2024-02-17T10:30:45.123Z",
+  "session_id": "f2442c9b",
+  "connector_id": "myserver",
+  "direction": "request|response|notification",
+  "message": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list",
+    ...
+  },
+  "metadata": {
+    "latency_ms": 45,
+    "size_bytes": 256
+  }
+}</code></pre>
+        </section>
+
+        <section id="proxy-modes">
+          <h2>Proxy Modes</h2>
+          <p>ProofScan supports different proxy modes for various use cases:</p>
+          
+          <h3>Inline Mode (Default)</h3>
+          <p>ProofScan spawns and manages the MCP server process:</p>
+          <pre><code>Client → ProofScan → MCP Server (spawned)</code></pre>
+          <ul>
+            <li>Full control over server lifecycle</li>
+            <li>Automatic process management</li>
+            <li>Best for development and testing</li>
+          </ul>
+
+          <h3>Transparent Proxy Mode</h3>
+          <p>ProofScan connects to an existing MCP server:</p>
+          <pre><code>Client → ProofScan → MCP Server (external)</code></pre>
+          <ul>
+            <li>Works with existing deployments</li>
+            <li>No process management needed</li>
+            <li>Best for production monitoring</li>
+          </ul>
+
+          <h3>Recording Mode</h3>
+          <p>ProofScan only records, doesn't forward:</p>
+          <pre><code>MCP Traffic → ProofScan (recording only)</code></pre>
+          <ul>
+            <li>Passive monitoring</li>
+            <li>No latency impact</li>
+            <li>Best for audit trails</li>
+          </ul>
+        </section>
+
+        <section id="performance">
+          <h2>Performance Characteristics</h2>
+          
+          <h3>Latency Impact</h3>
+          <ul>
+            <li><strong>Typical overhead:</strong> 1-5ms per message</li>
+            <li><strong>Async storage:</strong> Events written without blocking</li>
+            <li><strong>Memory efficient:</strong> Streaming storage for large sessions</li>
+          </ul>
+
+          <h3>Scalability</h3>
+          <ul>
+            <li><strong>Concurrent connectors:</strong> Supports multiple simultaneous scans</li>
+            <li><strong>Large sessions:</strong> Handles thousands of events efficiently</li>
+            <li><strong>Long-running:</strong> Designed for continuous monitoring</li>
+          </ul>
+
+          <h3>Resource Usage</h3>
+          <ul>
+            <li><strong>CPU:</strong> Minimal (< 5% for typical workloads)</li>
+            <li><strong>Memory:</strong> ~50MB base + ~1KB per captured event</li>
+            <li><strong>Disk:</strong> ~500 bytes per JSON-RPC message</li>
+          </ul>
+        </section>
+
+        <section id="extensibility">
+          <h2>Extensibility Points</h2>
+          
+          <h3>Custom Transports</h3>
+          <p>Add support for new MCP transport protocols:</p>
+          <ul>
+            <li>Implement transport interface</li>
+            <li>Register with connector manager</li>
+            <li>Example: HTTP, gRPC, custom protocols</li>
+          </ul>
+
+          <h3>Event Processors</h3>
+          <p>Add custom processing for captured events:</p>
+          <ul>
+            <li>Real-time analysis</li>
+            <li>Custom filtering</li>
+            <li>Integration with external systems</li>
+          </ul>
+
+          <h3>Export Formats</h3>
+          <p>Support additional output formats:</p>
+          <ul>
+            <li>Custom JSON schemas</li>
+            <li>CSV, XML, Protobuf</li>
+            <li>Integration with analysis tools</li>
+          </ul>
+        </section>
+
+        <section id="security">
+          <h2>Security Considerations</h2>
+          
+          <div class="note info">
+            <div class="note-title">🔒 Security Features</div>
+            <ul>
+              <li><strong>No data modification:</strong> ProofScan never alters MCP traffic</li>
+              <li><strong>Local storage:</strong> All data stored on local filesystem</li>
+              <li><strong>No external communication:</strong> No telemetry or phone-home</li>
+              <li><strong>Cryptographic signing:</strong> POPL proofs are cryptographically signed</li>
+              <li><strong>Audit trail:</strong> Immutable record of all communications</li>
+            </ul>
+          </div>
+
+          <h3>Best Practices</h3>
+          <ul>
+            <li>Secure your <code>~/.config/proofscan/</code> directory</li>
+            <li>Be aware that ProofScan captures all traffic (including sensitive data)</li>
+            <li>Use appropriate file permissions</li>
+            <li>Regularly archive and rotate old sessions</li>
+          </ul>
+        </section>
+
+        <section id="next-steps">
+          <h2>Next Steps</h2>
+          <ul>
+            <li><a href="/docs/mcp-protocol.html">→ MCP Protocol</a> - Learn about the Model Context Protocol</li>
+            <li><a href="/docs/workflows.html">→ Workflows</a> - Common usage patterns</li>
+            <li><a href="/commands/">→ Command Reference</a> - Detailed command documentation</li>
+          </ul>
+        </section>
+      </article>
+    </main>
+
+    <aside class="toc-sidebar">
+      <!-- TOC will be auto-generated by main.js -->
+    </aside>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>
