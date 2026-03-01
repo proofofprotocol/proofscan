@@ -705,9 +705,23 @@ export function registerProofCommRoutes(
   });
 
   // POST /proofcomm/skills/purge - Purge expired skills
+  // Requires broad write permission since it affects all agents' expired skills
   fastify.post('/proofcomm/skills/purge', {
     preHandler: requireAuth,
-  }, async (_request, reply) => {
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+
+    // Permission check: require broad skills write permission
+    const requiredPerm = buildProofCommPermission('skills', 'write');
+    if (!hasPermission(auth.permissions, requiredPerm)) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
     const deleted = skillRegistry.purgeExpired();
     return reply.send({ deleted });
   });
