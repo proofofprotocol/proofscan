@@ -160,8 +160,23 @@ export class SkillsStore {
       // Delete all existing skills for this agent first
       this.db.prepare('DELETE FROM skills_cache WHERE agent_id = ?').run(agentId);
 
+      // Track slugs to detect collisions
+      const seenSlugs = new Map<string, string>(); // slug -> original name
+
       // Insert all new skills
       for (const skill of skills) {
+        const slug = slugifySkillName(skill.name);
+
+        // Check for slug collision
+        const existingName = seenSlugs.get(slug);
+        if (existingName) {
+          console.warn(
+            `[skills-store] Slug collision for agent ${agentId}: ` +
+            `"${skill.name}" → "${slug}" (overwrites "${existingName}")`
+          );
+        }
+        seenSlugs.set(slug, skill.name);
+
         this.upsert({ ...skill, agentId });
       }
 

@@ -15,6 +15,7 @@ import type { AuthInfo } from './authMiddleware.js';
 import { DocumentsStore, type DocumentConfig } from '../db/documents-store.js';
 import { SkillsStore } from '../db/skills-store.js';
 import { SkillRegistry } from '../proofcomm/skill-registry.js';
+import { TargetsStore } from '../db/targets-store.js';
 import {
   validateDocumentPath,
   getDocumentName,
@@ -107,6 +108,7 @@ export function registerProofCommRoutes(
   const documentsStore = new DocumentsStore(options.configDir);
   const skillsStore = new SkillsStore(options.configDir);
   const skillRegistry = new SkillRegistry(skillsStore);
+  const targetsStore = new TargetsStore(options.configDir);
 
   // POST /proofcomm/documents/register - Register a new document
   fastify.post<{
@@ -608,6 +610,18 @@ export function registerProofCommRoutes(
     const auth = getAuth(request);
     const { agent_id } = request.params;
     const { agent_card } = request.body;
+
+    // Security: Validate that agent_id corresponds to a registered target
+    // to prevent cache poisoning with fake agent IDs
+    const target = targetsStore.get(agent_id);
+    if (!target) {
+      return reply.code(404).send({
+        error: {
+          code: 'AGENT_NOT_FOUND',
+          message: `Agent not registered: ${agent_id}`,
+        },
+      });
+    }
 
     const count = skillRegistry.refreshFromAgentCard(agent_id, agent_card);
 

@@ -169,6 +169,29 @@ describe('SkillsStore', () => {
 
       expect(store.list('agent-1')).toHaveLength(0);
     });
+
+    it('should handle slug collisions (last wins, logs warning)', () => {
+      // Spy on console.warn to verify warning is logged
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // "My Skill" and "my skill" both become "my_skill" (case-insensitive collision)
+      const count = store.upsertMany('agent-1', [
+        { name: 'My Skill', description: 'First' },
+        { name: 'my skill', description: 'Second (overwrites)' },
+      ]);
+
+      expect(count).toBe(2); // Both attempted
+      const skills = store.list('agent-1');
+      expect(skills).toHaveLength(1); // Only one survives
+      expect(skills[0].description).toBe('Second (overwrites)');
+
+      // Verify warning was logged
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Slug collision')
+      );
+
+      warnSpy.mockRestore();
+    });
   });
 
   // ==================== get ====================
