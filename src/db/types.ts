@@ -275,3 +275,39 @@ export interface ResidentDocument {
   updated_at: string | null;
   config_json: string | null;
 }
+
+// Skills cache table (Phase 9.2: Skill Routing)
+// skill_id format: "<agent_id>/<skill_name_slug>"
+export interface SkillCache {
+  skill_id: string;
+  agent_id: string;
+  name: string;
+  description: string | null;
+  use_when: string | null;
+  dont_use_when: string | null;
+  examples_json: string | null;  // JSON array of strings
+  tags_json: string | null;      // JSON array of strings
+  cached_at: string;             // ISO8601
+  expires_at: string | null;     // ISO8601, null = no expiry
+}
+
+// Parsed skill cache entry (for external use)
+export interface SkillCacheEntry {
+  skillId: string;
+  agentId: string;
+  name: string;
+  description?: string;
+  useWhen?: string;
+  dontUseWhen?: string;
+  examples: string[];
+  tags: string[];
+  cachedAt: string;
+  expiresAt?: string;
+}
+
+// Skill search result with relevance score
+export interface SkillSearchResult {
+  agentId: string;
+  skill: SkillCacheEntry;
+  score: number;  // Higher is more relevant
+}

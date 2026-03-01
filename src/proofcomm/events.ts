@@ -44,6 +44,7 @@ export type ProofCommAction =
   // skill
   | 'search'
   | 'match'
+  | 'refresh'
   // document
   | 'activated'
   | 'deactivated'
@@ -187,7 +188,7 @@ export function emitSpaceEvent(
  */
 export function emitSkillEvent(
   auditLogger: AuditLogger,
-  action: 'search' | 'match',
+  action: 'search' | 'match' | 'refresh',
   metadata: Omit<ProofCommMetadata, 'action'>,
   baseOptions: ProofCommEventBaseOptions
 ): string {
@@ -286,7 +287,7 @@ export function isProofCommEventKind(kind: string): kind is ProofCommEventKind {
 export function isValidAction(kind: ProofCommEventKind, action: string): boolean {
   const validActions: Record<ProofCommEventKind, string[]> = {
     proofcomm_space: ['created', 'joined', 'left', 'message', 'delivery_failed'],
-    proofcomm_skill: ['search', 'match'],
+    proofcomm_skill: ['search', 'match', 'refresh'],
     proofcomm_document: ['activated', 'deactivated', 'context_updated'],
     proofcomm_route: ['resolved', 'dispatched'],
   };

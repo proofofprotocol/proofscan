@@ -13,6 +13,7 @@ import { mkdtemp, rm, mkdir } from 'fs/promises';
 import { join } from 'path';
 import type { AuthInfo } from '../authMiddleware.js';
 import { TargetsStore } from '../../db/targets-store.js';
+import { SkillsStore } from '../../db/skills-store.js';
 
 // Mock the A2A client to avoid actual HTTP requests
 vi.mock('../../a2a/client.js', () => ({
@@ -631,6 +632,152 @@ describe('A2A Proxy', () => {
       expect(msgResponse.statusCode).toBe(403);
 
       await taskServer.close();
+    });
+  });
+
+  describe('@skill: routing (Phase 9.2)', () => {
+    let skillsStore: SkillsStore;
+
+    beforeEach(() => {
+      // Initialize skills store and add test skills
+      skillsStore = new SkillsStore(configDir);
+
+      // Add skills for test-agent
+      skillsStore.upsertMany('test-agent', [
+        {
+          name: 'translate',
+          description: 'Translation service',
+          tags: ['language', 'translation'],
+        },
+        {
+          name: 'summarize',
+          description: 'Text summarization',
+          tags: ['text', 'nlp'],
+        },
+      ]);
+    });
+
+    it('should resolve @skill: prefix to agent ID', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: '@skill:translate',
+          method: 'message/send',
+          params: { message: 'Translate this text' },
+        },
+      });
+
+      // Should succeed because @skill:translate resolves to test-agent
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.result).toBeDefined();
+    });
+
+    it('should return 404 for non-existent skill', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: '@skill:nonexistent',
+          method: 'message/send',
+          params: { message: 'hello' },
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.payload);
+      expect(body.error.message).toContain('No agent found with skill');
+    });
+
+    it('should reject empty skill name', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: '@skill:',
+          method: 'message/send',
+          params: { message: 'hello' },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.error.message).toContain('Empty skill name');
+    });
+
+    it('should use resolved agent ID for permission check', async () => {
+      // Create server with permission only for test-agent
+      const skillServer = Fastify();
+      skillServer.addHook('onRequest', async (request) => {
+        request.requestId = 'test-request-id';
+      });
+      skillServer.addHook('preHandler', async (request) => {
+        (request as unknown as { auth: AuthInfo }).auth = {
+          client_id: 'skill-client',
+          permissions: ['a2a:message:test-agent'], // Permission for resolved agent
+        };
+      });
+
+      const { handler } = createA2AProxyHandler({
+        configDir,
+        limits: DEFAULT_LIMITS,
+        hideNotFound: false,
+      });
+      skillServer.post('/a2a/v1/message/send', handler);
+      await skillServer.ready();
+
+      // Should succeed because @skill:translate -> test-agent and we have permission
+      const response = await skillServer.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: '@skill:translate',
+          method: 'message/send',
+          params: { message: 'hello' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+
+      await skillServer.close();
+    });
+
+    it('should reject when resolved agent lacks permission', async () => {
+      // Create server with permission for different agent
+      const noPermServer = Fastify();
+      noPermServer.addHook('onRequest', async (request) => {
+        request.requestId = 'test-request-id';
+      });
+      noPermServer.addHook('preHandler', async (request) => {
+        (request as unknown as { auth: AuthInfo }).auth = {
+          client_id: 'limited-client',
+          permissions: ['a2a:message:other-agent'], // No permission for test-agent
+        };
+      });
+
+      const { handler } = createA2AProxyHandler({
+        configDir,
+        limits: DEFAULT_LIMITS,
+        hideNotFound: false,
+      });
+      noPermServer.post('/a2a/v1/message/send', handler);
+      await noPermServer.ready();
+
+      // @skill:translate -> test-agent but we don't have permission for test-agent
+      const response = await noPermServer.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: '@skill:translate',
+          method: 'message/send',
+          params: { message: 'hello' },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+
+      await noPermServer.close();
     });
   });
 });

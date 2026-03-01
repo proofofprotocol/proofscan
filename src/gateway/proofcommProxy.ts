@@ -12,7 +12,11 @@
 import type { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { ulid } from 'ulid';
 import type { AuthInfo } from './authMiddleware.js';
+import { hasPermission, buildProofCommPermission } from './permissions.js';
 import { DocumentsStore, type DocumentConfig } from '../db/documents-store.js';
+import { SkillsStore } from '../db/skills-store.js';
+import { SkillRegistry } from '../proofcomm/skill-registry.js';
+import { TargetsStore } from '../db/targets-store.js';
 import {
   validateDocumentPath,
   getDocumentName,
@@ -20,7 +24,7 @@ import {
   DocumentStoreError,
 } from '../proofcomm/document/index.js';
 import { buildDocumentRoute } from '../proofcomm/routing.js';
-import { emitDocumentEvent } from '../proofcomm/events.js';
+import { emitDocumentEvent, emitSkillEvent } from '../proofcomm/events.js';
 import type { AuditLogger } from './audit.js';
 
 /**
@@ -103,6 +107,9 @@ export function registerProofCommRoutes(
   options: ProofCommProxyOptions
 ): void {
   const documentsStore = new DocumentsStore(options.configDir);
+  const skillsStore = new SkillsStore(options.configDir);
+  const skillRegistry = new SkillRegistry(skillsStore);
+  const targetsStore = new TargetsStore(options.configDir);
 
   // POST /proofcomm/documents/register - Register a new document
   fastify.post<{
@@ -521,5 +528,201 @@ export function registerProofCommRoutes(
       previous_hash: doc.documentHash,
       changed,
     });
+  });
+
+  // ==================== Skill Routes (Phase 9.2) ====================
+
+  // GET /proofcomm/skills - List all cached skills
+  fastify.get('/proofcomm/skills', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          agent_id: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { agent_id } = request.query as { agent_id?: string };
+    const skills = skillRegistry.list(agent_id);
+    return reply.send({ skills, count: skills.length });
+  });
+
+  // GET /proofcomm/skills/search - Search skills
+  fastify.get('/proofcomm/skills/search', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        required: ['q'],
+        properties: {
+          q: { type: 'string', minLength: 1, maxLength: 200 },
+          tags: { type: 'string' },  // comma-separated
+          limit: { type: 'integer', minimum: 1, maximum: 50 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { q, tags, limit } = request.query as {
+      q: string;
+      tags?: string;
+      limit?: number;
+    };
+
+    const tagList = tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined;
+    const results = skillRegistry.search(q, tagList, limit ?? 10);
+
+    emitSkillEvent(options.auditLogger, 'search', {
+      skill_name: q,
+    }, {
+      requestId: request.requestId,
+      traceId: request.headers['x-trace-id'] as string | undefined,
+      clientId: auth.client_id,
+    });
+
+    return reply.send({ results, count: results.length });
+  });
+
+  // POST /proofcomm/skills/refresh/:agent_id - Refresh skills from agent card
+  fastify.post<{
+    Params: { agent_id: string };
+    Body: { agent_card: Record<string, unknown> };
+  }>('/proofcomm/skills/refresh/:agent_id', {
+    preHandler: requireAuth,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['agent_id'],
+        properties: {
+          agent_id: { type: 'string', minLength: 1 },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['agent_card'],
+        properties: {
+          agent_card: { type: 'object' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { agent_id } = request.params;
+    const { agent_card } = request.body;
+
+    // Permission check: require write permission scoped to agent_id
+    const requiredPerm = buildProofCommPermission('skills', 'write', agent_id);
+    if (!hasPermission(auth.permissions, requiredPerm)) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    // Security: Validate that agent_id corresponds to a registered target
+    // to prevent cache poisoning with fake agent IDs
+    const target = targetsStore.get(agent_id);
+    if (!target) {
+      return reply.code(404).send({
+        error: {
+          code: 'AGENT_NOT_FOUND',
+          message: `Agent not registered: ${agent_id}`,
+        },
+      });
+    }
+
+    const count = skillRegistry.refreshFromAgentCard(agent_id, agent_card);
+
+    // -1 means skills key was missing (no-op)
+    if (count === -1) {
+      return reply.code(200).send({
+        agent_id,
+        skills_cached: null,
+        message: 'No skills key in agent card, cache unchanged',
+      });
+    }
+
+    emitSkillEvent(options.auditLogger, 'refresh', {
+      agent_id,
+    }, {
+      requestId: request.requestId,
+      traceId: request.headers['x-trace-id'] as string | undefined,
+      clientId: auth.client_id,
+    });
+
+    return reply.code(200).send({
+      agent_id,
+      skills_cached: count,
+    });
+  });
+
+  // DELETE /proofcomm/skills/:agent_id - Clear all skills for an agent
+  fastify.delete<{
+    Params: { agent_id: string };
+  }>('/proofcomm/skills/:agent_id', {
+    preHandler: requireAuth,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['agent_id'],
+        properties: {
+          agent_id: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { agent_id } = request.params;
+
+    // Permission check: require write permission scoped to agent_id
+    const requiredPerm = buildProofCommPermission('skills', 'write', agent_id);
+    if (!hasPermission(auth.permissions, requiredPerm)) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    // Validate agent exists (consistency with refresh endpoint)
+    const target = targetsStore.get(agent_id);
+    if (!target) {
+      return reply.code(404).send({
+        error: {
+          code: 'AGENT_NOT_FOUND',
+          message: `Agent not registered: ${agent_id}`,
+        },
+      });
+    }
+
+    const deleted = skillRegistry.clearAgent(agent_id);
+    return reply.code(200).send({ agent_id, deleted });
+  });
+
+  // POST /proofcomm/skills/purge - Purge expired skills
+  // Requires broad write permission since it affects all agents' expired skills
+  fastify.post('/proofcomm/skills/purge', {
+    preHandler: requireAuth,
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+
+    // Permission check: require broad skills write permission
+    const requiredPerm = buildProofCommPermission('skills', 'write');
+    if (!hasPermission(auth.permissions, requiredPerm)) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    const deleted = skillRegistry.purgeExpired();
+    return reply.send({ deleted });
   });
 }
