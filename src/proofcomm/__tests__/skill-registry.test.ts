@@ -125,9 +125,21 @@ describe('SkillRegistry', () => {
       expect(skill.dontUseWhen).toBe('User asks for original language');
     });
 
-    it('should handle non-array skills gracefully', () => {
+    it('should handle non-array skills gracefully (no-op)', () => {
       const count = registry.refreshFromAgentCard('agent-1', { skills: 'not-an-array' });
-      expect(count).toBe(0);
+      // Non-array skills = no-op, returns -1
+      expect(count).toBe(-1);
+    });
+
+    it('should NOT delete existing cache when skills is non-array', () => {
+      // First, add some skills
+      registry.refreshFromAgentCard('agent-1', { skills: [{ name: 'Existing' }] });
+      expect(registry.list('agent-1')).toHaveLength(1);
+
+      // Then pass non-array skills - should not modify cache
+      const count = registry.refreshFromAgentCard('agent-1', { skills: 42 });
+      expect(count).toBe(-1);
+      expect(registry.list('agent-1')).toHaveLength(1); // Still has existing skill
     });
   });
 

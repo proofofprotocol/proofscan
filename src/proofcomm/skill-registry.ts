@@ -64,6 +64,7 @@ export class SkillRegistry {
    *
    * Behavior:
    * - skills: undefined → no-op, return -1 (key missing, don't modify cache)
+   * - skills: <non-array> → no-op, return -1 (invalid type, don't modify cache)
    * - skills: [] → clear cache, return 0 (explicit empty array)
    * - skills: [...] → replace cache with new skills
    */
@@ -71,14 +72,14 @@ export class SkillRegistry {
     const card = agentCard as AgentCard;
     const skills = card?.skills;
 
-    // If skills key is missing (undefined), don't modify cache
-    // This distinguishes partial card updates from explicit skill removal
-    if (skills === undefined) {
+    // If skills key is missing (undefined) or not an array, don't modify cache
+    // This prevents accidental cache deletion from malformed agent cards
+    if (skills === undefined || !Array.isArray(skills)) {
       return -1;
     }
 
-    // If skills is not an array or is empty, clear cache
-    if (!Array.isArray(skills) || skills.length === 0) {
+    // If skills is an explicit empty array, clear cache
+    if (skills.length === 0) {
       this.skillsStore.deleteByAgent(agentId);
       return 0;
     }

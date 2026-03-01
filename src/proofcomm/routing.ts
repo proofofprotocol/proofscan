@@ -202,6 +202,9 @@ export class RoutingError extends Error {
 
 /**
  * Routing error codes
+ *
+ * Note: SKILL_NOT_FOUND is defined for future error handling unification.
+ * Currently, a2aProxy.ts returns 404 directly without throwing RoutingError.
  */
 export type RoutingErrorCode =
   | 'INVALID_DOC_ID'
