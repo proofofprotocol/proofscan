@@ -15,7 +15,9 @@ import type { AuthInfo } from './authMiddleware.js';
 import { hasPermission, buildProofCommPermission } from './permissions.js';
 import { DocumentsStore, type DocumentConfig } from '../db/documents-store.js';
 import { SkillsStore } from '../db/skills-store.js';
+import { SpacesStore } from '../db/spaces-store.js';
 import { SkillRegistry } from '../proofcomm/skill-registry.js';
+import { SpaceManager } from '../proofcomm/spaces/index.js';
 import { TargetsStore } from '../db/targets-store.js';
 import {
   validateDocumentPath,
@@ -23,9 +25,10 @@ import {
   readDocument,
   DocumentStoreError,
 } from '../proofcomm/document/index.js';
-import { buildDocumentRoute } from '../proofcomm/routing.js';
+import { buildDocumentRoute, buildSpaceRoute } from '../proofcomm/routing.js';
 import { emitDocumentEvent, emitSkillEvent } from '../proofcomm/events.js';
 import type { AuditLogger } from './audit.js';
+import type { SpaceVisibility, MemberRole } from '../db/types.js';
 
 /**
  * Document registration request body
@@ -110,6 +113,8 @@ export function registerProofCommRoutes(
   const skillsStore = new SkillsStore(options.configDir);
   const skillRegistry = new SkillRegistry(skillsStore);
   const targetsStore = new TargetsStore(options.configDir);
+  const spacesStore = new SpacesStore(options.configDir);
+  const spaceManager = new SpaceManager(spacesStore, options.auditLogger);
 
   // POST /proofcomm/documents/register - Register a new document
   fastify.post<{
@@ -724,5 +729,439 @@ export function registerProofCommRoutes(
 
     const deleted = skillRegistry.purgeExpired();
     return reply.send({ deleted });
+  });
+
+  // ==================== Space Routes (Phase 9.3) ====================
+
+  // POST /proofcomm/spaces - Create a new space
+  fastify.post<{
+    Body: {
+      name: string;
+      description?: string;
+      visibility: SpaceVisibility;
+      portal_visible?: boolean;
+      creator_agent_id?: string;
+      config?: Record<string, unknown>;
+    };
+  }>('/proofcomm/spaces', {
+    preHandler: requireAuth,
+    schema: {
+      body: {
+        type: 'object',
+        required: ['name', 'visibility'],
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 200 },
+          description: { type: 'string', maxLength: 1000 },
+          visibility: { type: 'string', enum: ['public', 'private'] },
+          portal_visible: { type: 'boolean' },
+          creator_agent_id: { type: 'string' },
+          config: { type: 'object' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+
+    // Permission check: require spaces write permission
+    const requiredPerm = buildProofCommPermission('spaces', 'write');
+    if (!hasPermission(auth.permissions, requiredPerm)) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    const { name, description, visibility, portal_visible, creator_agent_id, config } = request.body;
+
+    const result = spaceManager.createSpace(
+      {
+        name,
+        description,
+        visibility,
+        portalVisible: portal_visible,
+        creatorAgentId: creator_agent_id,
+        config,
+      },
+      {
+        requestId: request.requestId,
+        traceId: request.headers['x-trace-id'] as string | undefined,
+        clientId: auth.client_id,
+      },
+    );
+
+    if (!result.ok) {
+      return reply.code(400).send({
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    return reply.code(201).send({
+      space_id: result.value.spaceId,
+      name: result.value.name,
+      description: result.value.description,
+      visibility: result.value.visibility,
+      portal_visible: result.value.portalVisible,
+      creator_agent_id: result.value.creatorAgentId,
+      created_at: result.value.createdAt,
+      route: buildSpaceRoute(result.value.spaceId),
+    });
+  });
+
+  // GET /proofcomm/spaces - List all spaces
+  fastify.get<{
+    Querystring: { visibility?: SpaceVisibility };
+  }>('/proofcomm/spaces', {
+    preHandler: requireAuth,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          visibility: { type: 'string', enum: ['public', 'private'] },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+
+    // Permission check: require spaces read permission
+    const requiredPerm = buildProofCommPermission('spaces', 'read');
+    if (!hasPermission(auth.permissions, requiredPerm)) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    const { visibility } = request.query;
+    const spaces = spaceManager.listSpaces(visibility ? { visibility } : undefined);
+
+    return reply.send({
+      spaces: spaces.map(s => ({
+        space_id: s.spaceId,
+        name: s.name,
+        description: s.description,
+        visibility: s.visibility,
+        portal_visible: s.portalVisible,
+        creator_agent_id: s.creatorAgentId,
+        created_at: s.createdAt,
+        member_count: spaceManager.memberCount(s.spaceId),
+        route: buildSpaceRoute(s.spaceId),
+      })),
+      count: spaces.length,
+    });
+  });
+
+  // GET /proofcomm/spaces/:space_id - Get space details
+  fastify.get<{
+    Params: { space_id: string };
+  }>('/proofcomm/spaces/:space_id', {
+    preHandler: requireAuth,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['space_id'],
+        properties: {
+          space_id: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { space_id } = request.params;
+
+    // Permission check: require spaces read permission (scoped or general)
+    const requiredPerm = buildProofCommPermission('spaces', 'read', space_id);
+    if (!hasPermission(auth.permissions, requiredPerm) &&
+        !hasPermission(auth.permissions, buildProofCommPermission('spaces', 'read'))) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    const space = spaceManager.getSpace(space_id);
+    if (!space) {
+      return reply.code(404).send({
+        error: {
+          code: 'SPACE_NOT_FOUND',
+          message: `Space not found: ${space_id}`,
+        },
+      });
+    }
+
+    return reply.send({
+      space_id: space.spaceId,
+      name: space.name,
+      description: space.description,
+      visibility: space.visibility,
+      portal_visible: space.portalVisible,
+      creator_agent_id: space.creatorAgentId,
+      config: space.config,
+      created_at: space.createdAt,
+      member_count: spaceManager.memberCount(space_id),
+      route: buildSpaceRoute(space_id),
+    });
+  });
+
+  // POST /proofcomm/spaces/:space_id/join - Join a space
+  fastify.post<{
+    Params: { space_id: string };
+    Body: { agent_id: string; role?: MemberRole };
+  }>('/proofcomm/spaces/:space_id/join', {
+    preHandler: requireAuth,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['space_id'],
+        properties: {
+          space_id: { type: 'string', minLength: 1 },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['agent_id'],
+        properties: {
+          agent_id: { type: 'string', minLength: 1 },
+          role: { type: 'string', enum: ['member', 'moderator', 'observer'] },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { space_id } = request.params;
+    const { agent_id, role } = request.body;
+
+    // Permission check: require spaces write permission (scoped or general)
+    const requiredPerm = buildProofCommPermission('spaces', 'write', space_id);
+    if (!hasPermission(auth.permissions, requiredPerm) &&
+        !hasPermission(auth.permissions, buildProofCommPermission('spaces', 'write'))) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    const result = spaceManager.joinSpace(
+      space_id,
+      agent_id,
+      role ?? 'member',
+      {
+        requestId: request.requestId,
+        traceId: request.headers['x-trace-id'] as string | undefined,
+        clientId: auth.client_id,
+      },
+    );
+
+    if (!result.ok) {
+      const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
+        : result.error.code === 'ALREADY_MEMBER' ? 409
+        : 400;
+      return reply.code(statusCode).send({
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    return reply.code(200).send({
+      space_id,
+      agent_id,
+      joined: true,
+    });
+  });
+
+  // POST /proofcomm/spaces/:space_id/leave - Leave a space
+  fastify.post<{
+    Params: { space_id: string };
+    Body: { agent_id: string };
+  }>('/proofcomm/spaces/:space_id/leave', {
+    preHandler: requireAuth,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['space_id'],
+        properties: {
+          space_id: { type: 'string', minLength: 1 },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['agent_id'],
+        properties: {
+          agent_id: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { space_id } = request.params;
+    const { agent_id } = request.body;
+
+    // Permission check: require spaces write permission (scoped or general)
+    const requiredPerm = buildProofCommPermission('spaces', 'write', space_id);
+    if (!hasPermission(auth.permissions, requiredPerm) &&
+        !hasPermission(auth.permissions, buildProofCommPermission('spaces', 'write'))) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    const result = spaceManager.leaveSpace(
+      space_id,
+      agent_id,
+      {
+        requestId: request.requestId,
+        traceId: request.headers['x-trace-id'] as string | undefined,
+        clientId: auth.client_id,
+      },
+    );
+
+    if (!result.ok) {
+      const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
+        : result.error.code === 'NOT_MEMBER' ? 404
+        : 400;
+      return reply.code(statusCode).send({
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    return reply.code(200).send({
+      space_id,
+      agent_id,
+      left: true,
+    });
+  });
+
+  // GET /proofcomm/spaces/:space_id/members - List members of a space
+  fastify.get<{
+    Params: { space_id: string };
+    Querystring: { active_only?: boolean };
+  }>('/proofcomm/spaces/:space_id/members', {
+    preHandler: requireAuth,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['space_id'],
+        properties: {
+          space_id: { type: 'string', minLength: 1 },
+        },
+      },
+      querystring: {
+        type: 'object',
+        properties: {
+          active_only: { type: 'boolean' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { space_id } = request.params;
+    const { active_only } = request.query;
+
+    // Permission check: require spaces read permission (scoped or general)
+    const requiredPerm = buildProofCommPermission('spaces', 'read', space_id);
+    if (!hasPermission(auth.permissions, requiredPerm) &&
+        !hasPermission(auth.permissions, buildProofCommPermission('spaces', 'read'))) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    // Check space exists
+    if (!spaceManager.spaceExists(space_id)) {
+      return reply.code(404).send({
+        error: {
+          code: 'SPACE_NOT_FOUND',
+          message: `Space not found: ${space_id}`,
+        },
+      });
+    }
+
+    const members = spaceManager.listMembers(space_id, {
+      activeOnly: active_only !== false, // default true
+    });
+
+    return reply.send({
+      space_id,
+      members: members.map(m => ({
+        agent_id: m.agentId,
+        role: m.role,
+        joined_at: m.joinedAt,
+        left_at: m.leftAt,
+      })),
+      count: members.length,
+    });
+  });
+
+  // DELETE /proofcomm/spaces/:space_id - Delete a space
+  fastify.delete<{
+    Params: { space_id: string };
+  }>('/proofcomm/spaces/:space_id', {
+    preHandler: requireAuth,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['space_id'],
+        properties: {
+          space_id: { type: 'string', minLength: 1 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { space_id } = request.params;
+
+    // Permission check: require spaces write permission (scoped or general)
+    const requiredPerm = buildProofCommPermission('spaces', 'write', space_id);
+    if (!hasPermission(auth.permissions, requiredPerm) &&
+        !hasPermission(auth.permissions, buildProofCommPermission('spaces', 'write'))) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    const result = spaceManager.deleteSpace(
+      space_id,
+      {
+        requestId: request.requestId,
+        traceId: request.headers['x-trace-id'] as string | undefined,
+        clientId: auth.client_id,
+      },
+    );
+
+    if (!result.ok) {
+      return reply.code(404).send({
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    return reply.code(204).send();
   });
 }

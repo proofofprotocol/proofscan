@@ -328,3 +328,683 @@ describe('ProofComm Proxy - Skill Endpoints', () => {
     });
   });
 });
+
+describe('ProofComm Proxy - Space Endpoints', () => {
+  let server: FastifyInstance;
+  let configDir: string;
+  let targetsStore: TargetsStore;
+
+  beforeEach(async () => {
+    // Create temp config directory
+    configDir = await mkdtemp(join(tmpdir(), 'pfscan-proofcomm-space-test-'));
+
+    // Initialize targets store and add test agents
+    targetsStore = new TargetsStore(configDir);
+    targetsStore.add({
+      type: 'agent',
+      protocol: 'a2a',
+      name: 'Test Agent',
+      enabled: true,
+      config: { url: 'http://localhost:3001' },
+    }, { id: 'test-agent' });
+
+    targetsStore.add({
+      type: 'agent',
+      protocol: 'a2a',
+      name: 'Another Agent',
+      enabled: true,
+      config: { url: 'http://localhost:3002' },
+    }, { id: 'another-agent' });
+
+    // Create Fastify server
+    server = Fastify();
+
+    // Add request ID
+    server.addHook('onRequest', async (request) => {
+      request.requestId = 'test-request-id';
+    });
+
+    // Add mock auth
+    server.addHook('preHandler', async (request) => {
+      (request as unknown as { auth: AuthInfo }).auth = {
+        client_id: 'test-client',
+        permissions: ['proofcomm:*'],
+      };
+    });
+
+    // Create audit logger
+    const auditLogger = createAuditLogger(configDir);
+
+    // Register ProofComm routes
+    registerProofCommRoutes(server, {
+      configDir,
+      auditLogger,
+    });
+
+    await server.ready();
+  });
+
+  afterEach(async () => {
+    await server.close();
+    closeAllDbs();
+    await rm(configDir, { recursive: true });
+  });
+
+  describe('POST /proofcomm/spaces', () => {
+    it('should create a new space', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: {
+          name: 'Test Space',
+          visibility: 'public',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.payload);
+      expect(body.space_id).toBeDefined();
+      expect(body.name).toBe('Test Space');
+      expect(body.visibility).toBe('public');
+      expect(body.route).toMatch(/^space\//);
+    });
+
+    it('should create a space with all optional fields', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: {
+          name: 'Full Space',
+          description: 'A test space',
+          visibility: 'private',
+          portal_visible: false,
+          creator_agent_id: 'test-agent',
+          config: { theme: 'dark' },
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.payload);
+      expect(body.description).toBe('A test space');
+      expect(body.visibility).toBe('private');
+      expect(body.portal_visible).toBe(false);
+      expect(body.creator_agent_id).toBe('test-agent');
+    });
+
+    it('should auto-join creator as moderator', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: {
+          name: 'Creator Space',
+          visibility: 'public',
+          creator_agent_id: 'test-agent',
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      const body = JSON.parse(response.payload);
+
+      // Check that creator is a member
+      const membersResponse = await server.inject({
+        method: 'GET',
+        url: `/proofcomm/spaces/${body.space_id}/members`,
+      });
+
+      const membersBody = JSON.parse(membersResponse.payload);
+      expect(membersBody.members).toHaveLength(1);
+      expect(membersBody.members[0].agent_id).toBe('test-agent');
+      expect(membersBody.members[0].role).toBe('moderator');
+    });
+
+    it('should require name field', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: {
+          visibility: 'public',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should require visibility field', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: {
+          name: 'No Visibility',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should reject invalid visibility value', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: {
+          name: 'Bad Visibility',
+          visibility: 'invalid',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('GET /proofcomm/spaces', () => {
+    it('should return empty list when no spaces exist', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/proofcomm/spaces',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.spaces).toEqual([]);
+      expect(body.count).toBe(0);
+    });
+
+    it('should return all spaces', async () => {
+      // Create two spaces
+      await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Space 1', visibility: 'public' },
+      });
+      await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Space 2', visibility: 'private' },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/proofcomm/spaces',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.count).toBe(2);
+      expect(body.spaces.map((s: { name: string }) => s.name)).toContain('Space 1');
+      expect(body.spaces.map((s: { name: string }) => s.name)).toContain('Space 2');
+    });
+
+    it('should filter by visibility', async () => {
+      await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Public Space', visibility: 'public' },
+      });
+      await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Private Space', visibility: 'private' },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/proofcomm/spaces?visibility=public',
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.count).toBe(1);
+      expect(body.spaces[0].name).toBe('Public Space');
+    });
+
+    it('should include member_count in response', async () => {
+      const createResponse = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: {
+          name: 'Space with Members',
+          visibility: 'public',
+          creator_agent_id: 'test-agent',
+        },
+      });
+      const createBody = JSON.parse(createResponse.payload);
+
+      // Join another agent
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${createBody.space_id}/join`,
+        payload: { agent_id: 'another-agent' },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/proofcomm/spaces',
+      });
+
+      const body = JSON.parse(response.payload);
+      expect(body.spaces[0].member_count).toBe(2);
+    });
+  });
+
+  describe('GET /proofcomm/spaces/:space_id', () => {
+    it('should return space details', async () => {
+      const createResponse = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: {
+          name: 'Detail Space',
+          description: 'Test description',
+          visibility: 'public',
+        },
+      });
+      const createBody = JSON.parse(createResponse.payload);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/proofcomm/spaces/${createBody.space_id}`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.space_id).toBe(createBody.space_id);
+      expect(body.name).toBe('Detail Space');
+      expect(body.description).toBe('Test description');
+      expect(body.member_count).toBe(0);
+    });
+
+    it('should return 404 for non-existent space', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/proofcomm/spaces/non-existent-space-id',
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('SPACE_NOT_FOUND');
+    });
+  });
+
+  describe('POST /proofcomm/spaces/:space_id/join', () => {
+    let spaceId: string;
+
+    beforeEach(async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Join Test Space', visibility: 'public' },
+      });
+      spaceId = JSON.parse(response.payload).space_id;
+    });
+
+    it('should join an agent to a space', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.space_id).toBe(spaceId);
+      expect(body.agent_id).toBe('test-agent');
+      expect(body.joined).toBe(true);
+    });
+
+    it('should join with specified role', async () => {
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent', role: 'observer' },
+      });
+
+      const membersResponse = await server.inject({
+        method: 'GET',
+        url: `/proofcomm/spaces/${spaceId}/members`,
+      });
+
+      const body = JSON.parse(membersResponse.payload);
+      expect(body.members[0].role).toBe('observer');
+    });
+
+    it('should return 409 if already a member', async () => {
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      const response = await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('ALREADY_MEMBER');
+    });
+
+    it('should return 404 for non-existent space', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/non-existent/join',
+        payload: { agent_id: 'test-agent' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('should require agent_id in body', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('POST /proofcomm/spaces/:space_id/leave', () => {
+    let spaceId: string;
+
+    beforeEach(async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Leave Test Space', visibility: 'public' },
+      });
+      spaceId = JSON.parse(response.payload).space_id;
+
+      // Join an agent first
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+    });
+
+    it('should leave a space', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/leave`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.left).toBe(true);
+    });
+
+    it('should return 404 if not a member', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/leave`,
+        payload: { agent_id: 'another-agent' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('NOT_MEMBER');
+    });
+
+    it('should return 404 for non-existent space', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/non-existent/leave',
+        payload: { agent_id: 'test-agent' },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('should allow re-join after leave', async () => {
+      // Leave
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/leave`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      // Re-join
+      const response = await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.payload).joined).toBe(true);
+    });
+  });
+
+  describe('GET /proofcomm/spaces/:space_id/members', () => {
+    let spaceId: string;
+
+    beforeEach(async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Members Test Space', visibility: 'public' },
+      });
+      spaceId = JSON.parse(response.payload).space_id;
+    });
+
+    it('should return empty list when no members', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: `/proofcomm/spaces/${spaceId}/members`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.members).toEqual([]);
+      expect(body.count).toBe(0);
+    });
+
+    it('should return all members', async () => {
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent', role: 'moderator' },
+      });
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'another-agent', role: 'member' },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/proofcomm/spaces/${spaceId}/members`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.count).toBe(2);
+      expect(body.members.map((m: { agent_id: string }) => m.agent_id)).toContain('test-agent');
+      expect(body.members.map((m: { agent_id: string }) => m.agent_id)).toContain('another-agent');
+    });
+
+    it('should filter out left members by default', async () => {
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/leave`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/proofcomm/spaces/${spaceId}/members`,
+      });
+
+      const body = JSON.parse(response.payload);
+      expect(body.count).toBe(0);
+    });
+
+    it('should include left members when active_only=false', async () => {
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/leave`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: `/proofcomm/spaces/${spaceId}/members?active_only=false`,
+      });
+
+      const body = JSON.parse(response.payload);
+      expect(body.count).toBe(1);
+      expect(body.members[0].left_at).toBeDefined();
+    });
+
+    it('should return 404 for non-existent space', async () => {
+      const response = await server.inject({
+        method: 'GET',
+        url: '/proofcomm/spaces/non-existent/members',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('DELETE /proofcomm/spaces/:space_id', () => {
+    it('should delete a space', async () => {
+      const createResponse = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Delete Test Space', visibility: 'public' },
+      });
+      const spaceId = JSON.parse(createResponse.payload).space_id;
+
+      const response = await server.inject({
+        method: 'DELETE',
+        url: `/proofcomm/spaces/${spaceId}`,
+      });
+
+      expect(response.statusCode).toBe(204);
+
+      // Verify space is gone
+      const getResponse = await server.inject({
+        method: 'GET',
+        url: `/proofcomm/spaces/${spaceId}`,
+      });
+      expect(getResponse.statusCode).toBe(404);
+    });
+
+    it('should cascade delete memberships', async () => {
+      const createResponse = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Cascade Delete Space', visibility: 'public' },
+      });
+      const spaceId = JSON.parse(createResponse.payload).space_id;
+
+      // Add members
+      await server.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      // Delete space
+      const response = await server.inject({
+        method: 'DELETE',
+        url: `/proofcomm/spaces/${spaceId}`,
+      });
+
+      expect(response.statusCode).toBe(204);
+    });
+
+    it('should return 404 for non-existent space', async () => {
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/proofcomm/spaces/non-existent-space',
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('Permission checks', () => {
+    let restrictedServer: FastifyInstance;
+
+    beforeEach(async () => {
+      restrictedServer = Fastify();
+
+      restrictedServer.addHook('onRequest', async (request) => {
+        request.requestId = 'test-request-id';
+      });
+
+      // Auth with limited permissions
+      restrictedServer.addHook('preHandler', async (request) => {
+        (request as unknown as { auth: AuthInfo }).auth = {
+          client_id: 'restricted-client',
+          permissions: ['proofcomm:skills:read'], // No spaces permissions
+        };
+      });
+
+      const auditLogger = createAuditLogger(configDir);
+      registerProofCommRoutes(restrictedServer, {
+        configDir,
+        auditLogger,
+      });
+
+      await restrictedServer.ready();
+    });
+
+    afterEach(async () => {
+      await restrictedServer.close();
+    });
+
+    it('should return 403 for create without permission', async () => {
+      const response = await restrictedServer.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Forbidden', visibility: 'public' },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('FORBIDDEN');
+    });
+
+    it('should return 403 for list without permission', async () => {
+      const response = await restrictedServer.inject({
+        method: 'GET',
+        url: '/proofcomm/spaces',
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('should return 403 for join without permission', async () => {
+      // First create a space with full permissions
+      const createResponse = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Restricted Join', visibility: 'public' },
+      });
+      const spaceId = JSON.parse(createResponse.payload).space_id;
+
+      // Try to join with restricted permissions
+      const response = await restrictedServer.inject({
+        method: 'POST',
+        url: `/proofcomm/spaces/${spaceId}/join`,
+        payload: { agent_id: 'test-agent' },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+  });
+});

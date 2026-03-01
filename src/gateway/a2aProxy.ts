@@ -17,12 +17,15 @@ import { GatewayLimits } from './config.js';
 import { TargetsStore } from '../db/targets-store.js';
 import { DocumentsStore } from '../db/documents-store.js';
 import { SkillsStore } from '../db/skills-store.js';
+import { SpacesStore } from '../db/spaces-store.js';
 import { SkillRegistry } from '../proofcomm/skill-registry.js';
+import { SpaceManager, type SpaceBroadcastRequest } from '../proofcomm/spaces/index.js';
 import { createA2AClient } from '../a2a/client.js';
 import type { A2AMessage, TaskState } from '../a2a/types.js';
 import { ErrorCodes } from './mcpProxy.js';
 import { parseAgentField, isDocumentTarget, isSpaceTarget, isSkillTarget, VALID_ID_PATTERN } from '../proofcomm/routing.js';
 import { DocumentResponder, type DocumentMessage } from '../proofcomm/document/index.js';
+import { createAuditLogger, type AuditLogger } from './audit.js';
 
 /**
  * A2A Proxy request body
@@ -387,6 +390,121 @@ async function handleDocumentRequest(
 }
 
 /**
+ * Handle space request (space/ prefix routing)
+ *
+ * Space routing implements G3 (Representative Event) pattern:
+ * - Single event emitted for the broadcast operation
+ * - Individual deliveries to agents have no audit
+ *
+ * Request format (pure A2A Message, no method/params):
+ * { agent: "space/<space_id>", message: { role: "user", parts: [...] } }
+ */
+async function handleSpaceRequest(
+  spaceId: string,
+  method: string,
+  params: unknown,
+  spaceManager: SpaceManager,
+  requestId: string,
+  senderAgentId: string | undefined,
+  clientId: string,
+  traceId: string | undefined,
+  reply: FastifyReply
+): Promise<A2AProxyResponse> {
+
+  // Only message/send is supported for spaces
+  if (method !== 'message/send') {
+    return reply.code(400).send(
+      createErrorResponse(
+        ErrorCodes.BAD_REQUEST,
+        `Method not supported for spaces: ${method}. Use message/send.`,
+        requestId
+      )
+    );
+  }
+
+  // Check space exists
+  const space = spaceManager.getSpace(spaceId);
+  if (!space) {
+    return reply.code(404).send(
+      createErrorResponse(ErrorCodes.NOT_FOUND, `Space not found: ${spaceId}`, requestId)
+    );
+  }
+
+  // Validate params
+  if (!params || typeof params !== 'object' || !('message' in params)) {
+    return reply.code(400).send(
+      createErrorResponse(ErrorCodes.BAD_REQUEST, 'Invalid params: message field required', requestId)
+    );
+  }
+
+  const messageParams = params as { message: string | A2AMessage };
+  const message = messageParams.message;
+
+  // Determine sender agent ID
+  // Priority: explicit agent_id in params > auth-derived agent ID > client_id
+  const effectiveSenderId = senderAgentId || clientId;
+
+  // Validate sender is a member of the space
+  if (!spaceManager.isMember(spaceId, effectiveSenderId)) {
+    return reply.code(403).send(
+      createErrorResponse(
+        ErrorCodes.FORBIDDEN,
+        `Sender is not a member of space: ${spaceId}`,
+        requestId
+      )
+    );
+  }
+
+  // Build broadcast request
+  const broadcastRequest: SpaceBroadcastRequest = {
+    spaceId,
+    senderAgentId: effectiveSenderId,
+    message: typeof message === 'string'
+      ? { role: 'user', parts: [{ text: message }] }
+      : message,
+  };
+
+  // Dispatch function for broadcasting to individual agents
+  // Phase 9.3 MVP: Records intent but doesn't actually send (future: real A2A dispatch)
+  const dispatchToAgent: (agentId: string, message: A2AMessage) => Promise<{ success: boolean; error?: string }> =
+    async (_agentId, _message) => {
+      // TODO: Phase 9.4 - Implement actual A2A message delivery to agents
+      // For now, we consider all deliveries successful (intent recorded)
+      return { success: true };
+    };
+
+  // Broadcast to space
+  const result = await spaceManager.broadcastToSpace(
+    broadcastRequest,
+    dispatchToAgent,
+    {
+      requestId,
+      traceId,
+      clientId,
+    },
+  );
+
+  if (!result.ok) {
+    const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
+      : result.error.code === 'NOT_MEMBER' ? 403
+      : 400;
+    return reply.code(statusCode).send(
+      createErrorResponse(result.error.code, result.error.message, requestId)
+    );
+  }
+
+  // Return broadcast result
+  return {
+    result: {
+      space_id: spaceId,
+      delivered: result.value.deliveredCount,
+      failed: result.value.failedCount,
+      recipients: result.value.recipientCount,
+    },
+  };
+}
+
+/**
  * A2A Proxy handler result
  */
 export interface A2AProxyHandlerResult {
@@ -403,6 +521,9 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
   const documentsStore = new DocumentsStore(configDir);
   const skillsStore = new SkillsStore(configDir);
   const skillRegistry = new SkillRegistry(skillsStore);
+  const spacesStore = new SpacesStore(configDir);
+  const auditLogger = createAuditLogger(configDir);
+  const spaceManager = new SpaceManager(spacesStore, auditLogger);
   const queueManager = new ConnectorQueueManager<
     { method: string; params: unknown; agentId: string },
     { result?: unknown; error?: { code: number; message: string } }
@@ -522,14 +643,18 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
-    // 2b. Handle space targets (G2: space/ prefix routing) - Not yet implemented
+    // 2b. Handle space targets (G2: space/ prefix routing)
     if (isSpaceTarget(routingTarget)) {
-      return reply.code(501).send(
-        createErrorResponse(
-          ErrorCodes.NOT_IMPLEMENTED,
-          `Space routing is not yet implemented: ${routingTarget.original}`,
-          requestId
-        )
+      return handleSpaceRequest(
+        routingTarget.id,
+        method,
+        params,
+        spaceManager,
+        requestId,
+        undefined, // senderAgentId - derived from auth.client_id
+        auth.client_id,
+        request.headers['x-trace-id'] as string | undefined,
+        reply
       );
     }
 

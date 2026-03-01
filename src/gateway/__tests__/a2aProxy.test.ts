@@ -14,6 +14,8 @@ import { join } from 'path';
 import type { AuthInfo } from '../authMiddleware.js';
 import { TargetsStore } from '../../db/targets-store.js';
 import { SkillsStore } from '../../db/skills-store.js';
+import { SpacesStore } from '../../db/spaces-store.js';
+import { closeAllDbs } from '../../db/connection.js';
 
 // Mock the A2A client to avoid actual HTTP requests
 vi.mock('../../a2a/client.js', () => ({
@@ -128,6 +130,7 @@ describe('A2A Proxy', () => {
 
   afterEach(async () => {
     await server.close();
+    closeAllDbs();
     await rm(configDir, { recursive: true });
     vi.clearAllMocks();
   });
@@ -778,6 +781,218 @@ describe('A2A Proxy', () => {
       expect(response.statusCode).toBe(403);
 
       await noPermServer.close();
+    });
+  });
+
+  describe('space/ routing (Phase 9.3)', () => {
+    let spacesStore: SpacesStore;
+    let spaceId: string;
+
+    beforeEach(() => {
+      // Initialize spaces store
+      spacesStore = new SpacesStore(configDir);
+
+      // Create a test space
+      const space = spacesStore.create({
+        name: 'Test Space',
+        visibility: 'public',
+      });
+      spaceId = space.spaceId;
+    });
+
+    it('should broadcast message to space members', async () => {
+      // Join test-client as member (using client_id as agent_id for simplicity)
+      spacesStore.join(spaceId, 'test-client', 'member');
+      spacesStore.join(spaceId, 'another-agent', 'member');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: `space/${spaceId}`,
+          method: 'message/send',
+          params: { message: 'Hello everyone!' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.result).toBeDefined();
+      expect(body.result.space_id).toBe(spaceId);
+      expect(body.result.recipients).toBe(1); // Excludes sender (test-client)
+      expect(body.result.delivered).toBe(1);
+      expect(body.result.failed).toBe(0);
+    });
+
+    it('should return 404 for non-existent space', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: 'space/non-existent-space',
+          method: 'message/send',
+          params: { message: 'Hello!' },
+        },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe(ErrorCodes.NOT_FOUND);
+    });
+
+    it('should return 403 if sender is not a member', async () => {
+      // Don't join the sender (test-client)
+      spacesStore.join(spaceId, 'another-agent', 'member');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: `space/${spaceId}`,
+          method: 'message/send',
+          params: { message: 'Hello!' },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe(ErrorCodes.FORBIDDEN);
+      expect(body.error.message).toContain('not a member');
+    });
+
+    it('should reject unsupported methods for spaces', async () => {
+      spacesStore.join(spaceId, 'test-client', 'member');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/tasks/get',
+        payload: {
+          agent: `space/${spaceId}`,
+          method: 'tasks/get',
+          params: { id: 'task-123' },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.error.message).toContain('Method not supported for spaces');
+    });
+
+    it('should accept message as A2A object', async () => {
+      spacesStore.join(spaceId, 'test-client', 'member');
+      spacesStore.join(spaceId, 'another-agent', 'member');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: `space/${spaceId}`,
+          method: 'message/send',
+          params: {
+            message: {
+              role: 'user',
+              parts: [{ text: 'Hello from A2A!' }],
+            },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.result.delivered).toBe(1);
+    });
+
+    it('should require message in params', async () => {
+      spacesStore.join(spaceId, 'test-client', 'member');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: `space/${spaceId}`,
+          method: 'message/send',
+          params: {},
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.error.message).toContain('message field required');
+    });
+
+    it('should handle broadcast to space with no other members', async () => {
+      // Only the sender is a member
+      spacesStore.join(spaceId, 'test-client', 'member');
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: `space/${spaceId}`,
+          method: 'message/send',
+          params: { message: 'Hello to no one!' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.result.recipients).toBe(0);
+      expect(body.result.delivered).toBe(0);
+    });
+
+    it('should respect A2A permission check for spaces', async () => {
+      // Create server with limited permissions (no space access)
+      const limitedServer = Fastify();
+      limitedServer.addHook('onRequest', async (request) => {
+        request.requestId = 'test-request-id';
+      });
+      limitedServer.addHook('preHandler', async (request) => {
+        (request as unknown as { auth: AuthInfo }).auth = {
+          client_id: 'limited-client',
+          permissions: ['a2a:message:test-agent'], // Only has access to test-agent, not spaces
+        };
+      });
+
+      const { handler } = createA2AProxyHandler({
+        configDir,
+        limits: DEFAULT_LIMITS,
+        hideNotFound: true,
+      });
+      limitedServer.post('/a2a/v1/message/send', handler);
+      await limitedServer.ready();
+
+      spacesStore.join(spaceId, 'limited-client', 'member');
+
+      const response = await limitedServer.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: `space/${spaceId}`,
+          method: 'message/send',
+          params: { message: 'Hello!' },
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+
+      await limitedServer.close();
+    });
+
+    it('should allow space access with wildcard permission', async () => {
+      spacesStore.join(spaceId, 'test-client', 'member');
+
+      // Using server with a2a:* permission (set in beforeEach)
+      const response = await server.inject({
+        method: 'POST',
+        url: '/a2a/v1/message/send',
+        payload: {
+          agent: `space/${spaceId}`,
+          method: 'message/send',
+          params: { message: 'Hello!' },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
     });
   });
 });
