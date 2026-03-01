@@ -122,14 +122,6 @@ export class SkillRegistry {
   }
 
   /**
-   * Get all agent IDs that have skills matching a query
-   * Used for multi-agent skill routing (future use)
-   */
-  resolveAgents(skillName: string): string[] {
-    return this.skillsStore.resolveByName(skillName);
-  }
-
-  /**
    * Clear all skills for an agent (e.g., when agent is removed)
    */
   clearAgent(agentId: string): number {

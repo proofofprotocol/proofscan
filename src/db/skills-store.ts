@@ -188,11 +188,13 @@ export class SkillsStore {
 
   /**
    * Get a skill by skill_id
+   * Returns undefined if skill is expired
    */
   get(skillId: string): SkillCacheEntry | undefined {
+    const now = new Date().toISOString();
     const row = this.db.prepare(
-      'SELECT * FROM skills_cache WHERE skill_id = ?'
-    ).get(skillId) as SkillCache | undefined;
+      'SELECT * FROM skills_cache WHERE skill_id = ? AND (expires_at IS NULL OR expires_at > ?)'
+    ).get(skillId, now) as SkillCache | undefined;
 
     return row ? this.toExternal(row) : undefined;
   }
@@ -227,6 +229,10 @@ export class SkillsStore {
    * Search skills by query string and/or tags
    * Searches: name, description, use_when, tags
    * Returns results sorted by relevance score (descending)
+   *
+   * Performance note: This loads all non-expired skills into memory for scoring.
+   * Acceptable for small-to-medium caches (< 1000 skills). For larger deployments,
+   * consider adding SQL LIKE pre-filtering on name/description before in-memory scoring.
    */
   search(query: string, tags?: string[], limit = 10): SkillSearchResult[] {
     const now = new Date().toISOString();

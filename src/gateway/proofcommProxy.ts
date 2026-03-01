@@ -625,7 +625,7 @@ export function registerProofCommRoutes(
 
     const count = skillRegistry.refreshFromAgentCard(agent_id, agent_card);
 
-    emitSkillEvent(options.auditLogger, 'match', {
+    emitSkillEvent(options.auditLogger, 'refresh', {
       agent_id,
     }, {
       requestId: request.requestId,

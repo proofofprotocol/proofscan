@@ -187,7 +187,7 @@ export function emitSpaceEvent(
  */
 export function emitSkillEvent(
   auditLogger: AuditLogger,
-  action: 'search' | 'match',
+  action: 'search' | 'match' | 'refresh',
   metadata: Omit<ProofCommMetadata, 'action'>,
   baseOptions: ProofCommEventBaseOptions
 ): string {
