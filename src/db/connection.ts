@@ -433,32 +433,9 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
   }
 
   // Migration 11 → 12: Add skills_cache table (Phase 9.2)
+  // Note: Uses IF NOT EXISTS, so no per-statement error handling needed
   if (fromVersion < 12) {
-    try {
-      db.exec('BEGIN TRANSACTION');
-
-      const statements = parseMigrationSql(EVENTS_DB_MIGRATION_11_TO_12);
-
-      for (const stmt of statements) {
-        try {
-          db.exec(stmt + ';');
-        } catch (err) {
-          // Only swallow SQLite "already exists" errors - rethrow everything else
-          const isSqliteError = err instanceof Error &&
-            (err as { code?: string }).code === 'SQLITE_ERROR' &&
-            err.message.includes('already exists');
-          if (!isSqliteError) {
-            throw err;
-          }
-          console.warn(`[db] Migration 11→12 skipped statement (already exists): ${err.message}`);
-        }
-      }
-
-      db.exec('COMMIT');
-    } catch (err) {
-      db.exec('ROLLBACK');
-      throw err;
-    }
+    db.exec(EVENTS_DB_MIGRATION_11_TO_12);
   }
 }
 

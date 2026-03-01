@@ -15,6 +15,9 @@
 import type { SkillCacheEntry, SkillSearchResult } from '../db/types.js';
 import { SkillsStore, type CreateSkillOptions } from '../db/skills-store.js';
 
+/** Maximum allowed skill name length (prevents abuse/performance issues) */
+const MAX_SKILL_NAME_LENGTH = 200;
+
 /**
  * A2A Agent Card skill shape (minimal subset used for caching)
  */
@@ -57,21 +60,38 @@ export class SkillRegistry {
   /**
    * Refresh skills from an A2A Agent Card
    * Replaces all cached skills for the agent
-   * Returns the number of skills cached
+   * Returns the number of skills cached, or -1 if skills key is missing (no-op)
+   *
+   * Behavior:
+   * - skills: undefined → no-op, return -1 (key missing, don't modify cache)
+   * - skills: [] → clear cache, return 0 (explicit empty array)
+   * - skills: [...] → replace cache with new skills
    */
   refreshFromAgentCard(agentId: string, agentCard: unknown): number {
     const card = agentCard as AgentCard;
     const skills = card?.skills;
 
+    // If skills key is missing (undefined), don't modify cache
+    // This distinguishes partial card updates from explicit skill removal
+    if (skills === undefined) {
+      return -1;
+    }
+
+    // If skills is not an array or is empty, clear cache
     if (!Array.isArray(skills) || skills.length === 0) {
-      // No skills in card - clear any existing cache for this agent
       this.skillsStore.deleteByAgent(agentId);
       return 0;
     }
 
     // Convert Agent Card skills to store options
+    // Filter out invalid entries: null, empty name, or name exceeding max length
     const skillOptions: Omit<CreateSkillOptions, 'agentId'>[] = skills
-      .filter((s): s is AgentCardSkill => s != null && typeof s.name === 'string' && s.name.trim() !== '')
+      .filter((s): s is AgentCardSkill =>
+        s != null &&
+        typeof s.name === 'string' &&
+        s.name.trim() !== '' &&
+        s.name.trim().length <= MAX_SKILL_NAME_LENGTH
+      )
       .map(s => ({
         name: s.name.trim(),
         description: s.description?.trim(),

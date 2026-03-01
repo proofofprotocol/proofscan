@@ -180,9 +180,9 @@ describe('SkillsStore', () => {
         { name: 'my skill', description: 'Second (overwrites)' },
       ]);
 
-      expect(count).toBe(2); // Both attempted
+      expect(count).toBe(1); // Returns actual unique count, not input count
       const skills = store.list('agent-1');
-      expect(skills).toHaveLength(1); // Only one survives
+      expect(skills).toHaveLength(1); // Only one survives (collision)
       expect(skills[0].description).toBe('Second (overwrites)');
 
       // Verify warning was logged

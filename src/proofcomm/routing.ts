@@ -116,7 +116,12 @@ export function parseAgentField(agent: string): RoutingTarget {
 // ==================== Validation Functions ====================
 
 /**
- * Check if a string starts with a reserved prefix
+ * Check if a string starts with a reserved prefix (doc/, space/)
+ *
+ * Note: @skill: is NOT considered a reserved prefix here.
+ * Skill routing (@skill:name) is handled separately in parseAgentField()
+ * because skill names are resolved to agent IDs at routing time,
+ * not treated as persistent target IDs.
  */
 export function hasReservedPrefix(value: string): boolean {
   return RESERVED_PREFIXES.some(prefix => value.startsWith(prefix));

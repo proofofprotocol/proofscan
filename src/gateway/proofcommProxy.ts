@@ -625,6 +625,15 @@ export function registerProofCommRoutes(
 
     const count = skillRegistry.refreshFromAgentCard(agent_id, agent_card);
 
+    // -1 means skills key was missing (no-op)
+    if (count === -1) {
+      return reply.code(200).send({
+        agent_id,
+        skills_cached: null,
+        message: 'No skills key in agent card, cache unchanged',
+      });
+    }
+
     emitSkillEvent(options.auditLogger, 'refresh', {
       agent_id,
     }, {
@@ -655,6 +664,18 @@ export function registerProofCommRoutes(
     },
   }, async (request, reply) => {
     const { agent_id } = request.params;
+
+    // Validate agent exists (consistency with refresh endpoint)
+    const target = targetsStore.get(agent_id);
+    if (!target) {
+      return reply.code(404).send({
+        error: {
+          code: 'AGENT_NOT_FOUND',
+          message: `Agent not registered: ${agent_id}`,
+        },
+      });
+    }
+
     const deleted = skillRegistry.clearAgent(agent_id);
     return reply.code(200).send({ agent_id, deleted });
   });

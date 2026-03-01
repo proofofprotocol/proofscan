@@ -76,10 +76,21 @@ describe('SkillRegistry', () => {
       expect(registry.list('agent-1')).toHaveLength(0);
     });
 
-    it('should clear skills when agent card has null skills', () => {
+    it('should NOT modify cache when skills key is missing (partial update)', () => {
       registry.refreshFromAgentCard('agent-1', { skills: [{ name: 'Skill' }] });
-      registry.refreshFromAgentCard('agent-1', {});
+      const result = registry.refreshFromAgentCard('agent-1', {});
 
+      // Missing skills key = no-op, returns -1
+      expect(result).toBe(-1);
+      expect(registry.list('agent-1')).toHaveLength(1);
+    });
+
+    it('should clear skills when agent card has explicit empty skills array', () => {
+      registry.refreshFromAgentCard('agent-1', { skills: [{ name: 'Skill' }] });
+      const result = registry.refreshFromAgentCard('agent-1', { skills: [] });
+
+      // Empty array = clear cache, returns 0
+      expect(result).toBe(0);
       expect(registry.list('agent-1')).toHaveLength(0);
     });
 

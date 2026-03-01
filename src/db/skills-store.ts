@@ -153,7 +153,7 @@ export class SkillsStore {
   /**
    * Upsert multiple skills for an agent atomically
    * Replaces all existing skills for the agent
-   * Returns the number of skills upserted
+   * Returns the number of unique skills actually inserted (not input count)
    */
   upsertMany(agentId: string, skills: Omit<CreateSkillOptions, 'agentId'>[]): number {
     const upsertMany = this.db.transaction(() => {
@@ -180,7 +180,8 @@ export class SkillsStore {
         this.upsert({ ...skill, agentId });
       }
 
-      return skills.length;
+      // Return actual unique skills inserted, not input count
+      return seenSlugs.size;
     });
 
     return upsertMany() as number;
