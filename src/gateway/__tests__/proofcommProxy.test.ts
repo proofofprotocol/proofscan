@@ -735,14 +735,14 @@ describe('ProofComm Proxy - Space Endpoints', () => {
       expect(body.left).toBe(true);
     });
 
-    it('should return 404 if not a member', async () => {
+    it('should return 403 if not a member', async () => {
       const response = await server.inject({
         method: 'POST',
         url: `/proofcomm/spaces/${spaceId}/leave`,
         payload: { agent_id: 'another-agent' },
       });
 
-      expect(response.statusCode).toBe(404);
+      expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.payload);
       expect(body.error.code).toBe('NOT_MEMBER');
     });

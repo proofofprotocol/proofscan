@@ -238,40 +238,36 @@ export class SpacesStore {
    * - Left (left_at != null) → UPDATE left_at=NULL, joined_at=now (return true)
    * - Already active (left_at = null) → no-op (return false)
    *
+   * Uses INSERT OR IGNORE to avoid race conditions under concurrent requests.
+   *
    * @param spaceId - Space to join
    * @param agentId - Agent joining
    * @param role - Membership role (default: 'member')
    * @returns true if joined/re-joined, false if already active member
    */
   join(spaceId: string, agentId: string, role: MemberRole = 'member'): boolean {
-    const existing = this.db.prepare(`
-      SELECT left_at FROM space_memberships
-      WHERE space_id = ? AND agent_id = ?
-    `).get(spaceId, agentId) as { left_at: string | null } | undefined;
-
     const now = new Date().toISOString();
 
-    if (!existing) {
-      // New member: INSERT
-      this.db.prepare(`
-        INSERT INTO space_memberships (space_id, agent_id, role, joined_at)
-        VALUES (?, ?, ?, ?)
-      `).run(spaceId, agentId, role, now);
+    // Try INSERT OR IGNORE first - handles new member case atomically
+    const insertResult = this.db.prepare(`
+      INSERT OR IGNORE INTO space_memberships (space_id, agent_id, role, joined_at)
+      VALUES (?, ?, ?, ?)
+    `).run(spaceId, agentId, role, now);
+
+    if (insertResult.changes > 0) {
+      // Successfully inserted - new member
       return true;
     }
 
-    if (existing.left_at !== null) {
-      // Re-join: Clear left_at and update joined_at
-      this.db.prepare(`
-        UPDATE space_memberships
-        SET left_at = NULL, joined_at = ?, role = ?
-        WHERE space_id = ? AND agent_id = ?
-      `).run(now, role, spaceId, agentId);
-      return true;
-    }
+    // Row exists - check if it's a re-join case (left_at != null)
+    const updateResult = this.db.prepare(`
+      UPDATE space_memberships
+      SET left_at = NULL, joined_at = ?, role = ?
+      WHERE space_id = ? AND agent_id = ? AND left_at IS NOT NULL
+    `).run(now, role, spaceId, agentId);
 
-    // Already active member
-    return false;
+    // Returns true if re-joined (was left), false if already active
+    return updateResult.changes > 0;
   }
 
   /**

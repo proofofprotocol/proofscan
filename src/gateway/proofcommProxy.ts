@@ -1037,7 +1037,7 @@ export function registerProofCommRoutes(
 
     if (!result.ok) {
       const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
-        : result.error.code === 'NOT_MEMBER' ? 404
+        : result.error.code === 'NOT_MEMBER' ? 403
         : 400;
       return reply.code(statusCode).send({
         error: {

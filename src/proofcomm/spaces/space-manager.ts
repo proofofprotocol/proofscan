@@ -428,23 +428,35 @@ export class SpaceManager {
       baseOptions,
     );
 
-    // 5. Dispatch to each recipient (no individual audit - G3 pattern)
+    // 5. Dispatch to all recipients concurrently (no individual audit - G3 pattern)
     const failures: Array<{ agentId: string; error: string }> = [];
     let deliveredCount = 0;
 
-    for (const agentId of recipients) {
-      try {
-        const result = await dispatchFn(agentId, message);
-        if (result.success) {
+    // Use Promise.allSettled with error wrapping to preserve agentId on failures
+    const dispatchResults = await Promise.allSettled(
+      recipients.map(async (agentId): Promise<{ agentId: string; success: boolean; error?: string }> => {
+        try {
+          const result = await dispatchFn(agentId, message);
+          return { agentId, success: result.success, error: result.error };
+        } catch (err) {
+          return {
+            agentId,
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      })
+    );
+
+    for (const settled of dispatchResults) {
+      // All promises resolve (errors caught within), but handle rejection just in case
+      if (settled.status === 'fulfilled') {
+        const { agentId, success, error } = settled.value;
+        if (success) {
           deliveredCount++;
         } else {
-          failures.push({ agentId, error: result.error ?? 'Unknown error' });
+          failures.push({ agentId, error: error ?? 'Unknown error' });
         }
-      } catch (err) {
-        failures.push({
-          agentId,
-          error: err instanceof Error ? err.message : String(err),
-        });
       }
     }
 
