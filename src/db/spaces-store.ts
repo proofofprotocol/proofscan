@@ -374,6 +374,34 @@ export class SpacesStore {
   }
 
   /**
+   * Get member counts for multiple spaces in a single query (batch operation)
+   * Returns a Map from spaceId to member count
+   */
+  getMemberCounts(spaceIds: string[]): Map<string, number> {
+    if (spaceIds.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = spaceIds.map(() => '?').join(', ');
+    const rows = this.db.prepare(`
+      SELECT space_id, COUNT(*) as n FROM space_memberships
+      WHERE space_id IN (${placeholders}) AND left_at IS NULL
+      GROUP BY space_id
+    `).all(...spaceIds) as Array<{ space_id: string; n: number }>;
+
+    const result = new Map<string, number>();
+    // Initialize all requested space IDs to 0 (in case they have no members)
+    for (const spaceId of spaceIds) {
+      result.set(spaceId, 0);
+    }
+    // Update with actual counts
+    for (const row of rows) {
+      result.set(row.space_id, row.n);
+    }
+    return result;
+  }
+
+  /**
    * Get a specific membership entry
    * @returns Membership entry or undefined if not found
    */

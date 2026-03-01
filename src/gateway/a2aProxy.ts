@@ -405,7 +405,6 @@ async function handleSpaceRequest(
   params: unknown,
   spaceManager: SpaceManager,
   requestId: string,
-  senderAgentId: string | undefined,
   clientId: string,
   traceId: string | undefined,
   reply: FastifyReply
@@ -422,15 +421,7 @@ async function handleSpaceRequest(
     );
   }
 
-  // Check space exists
-  const space = spaceManager.getSpace(spaceId);
-  if (!space) {
-    return reply.code(404).send(
-      createErrorResponse(ErrorCodes.NOT_FOUND, `Space not found: ${spaceId}`, requestId)
-    );
-  }
-
-  // Validate params
+  // Validate params structure (space existence and membership validated by broadcastToSpace)
   if (!params || typeof params !== 'object' || !('message' in params)) {
     return reply.code(400).send(
       createErrorResponse(ErrorCodes.BAD_REQUEST, 'Invalid params: message field required', requestId)
@@ -440,25 +431,10 @@ async function handleSpaceRequest(
   const messageParams = params as { message: string | A2AMessage };
   const message = messageParams.message;
 
-  // Determine sender agent ID
-  // Priority: explicit agent_id in params > auth-derived agent ID > client_id
-  const effectiveSenderId = senderAgentId || clientId;
-
-  // Validate sender is a member of the space
-  if (!spaceManager.isMember(spaceId, effectiveSenderId)) {
-    return reply.code(403).send(
-      createErrorResponse(
-        ErrorCodes.FORBIDDEN,
-        `Sender is not a member of space: ${spaceId}`,
-        requestId
-      )
-    );
-  }
-
   // Build broadcast request
   const broadcastRequest: SpaceBroadcastRequest = {
     spaceId,
-    senderAgentId: effectiveSenderId,
+    senderAgentId: clientId,
     message: typeof message === 'string'
       ? { role: 'user', parts: [{ text: message }] }
       : message,
@@ -473,7 +449,7 @@ async function handleSpaceRequest(
       return { success: true };
     };
 
-  // Broadcast to space
+  // Broadcast to space (validates space existence and sender membership internally)
   const result = await spaceManager.broadcastToSpace(
     broadcastRequest,
     dispatchToAgent,
@@ -651,7 +627,6 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
         params,
         spaceManager,
         requestId,
-        undefined, // senderAgentId - derived from auth.client_id
         auth.client_id,
         request.headers['x-trace-id'] as string | undefined,
         reply

@@ -837,7 +837,7 @@ describe('A2A Proxy', () => {
 
       expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.payload);
-      expect(body.error.code).toBe(ErrorCodes.NOT_FOUND);
+      expect(body.error.code).toBe('SPACE_NOT_FOUND');
     });
 
     it('should return 403 if sender is not a member', async () => {
@@ -856,7 +856,7 @@ describe('A2A Proxy', () => {
 
       expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.payload);
-      expect(body.error.code).toBe(ErrorCodes.FORBIDDEN);
+      expect(body.error.code).toBe('NOT_MEMBER');
       expect(body.error.message).toContain('not a member');
     });
 

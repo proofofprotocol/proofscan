@@ -162,6 +162,90 @@ describe('SpaceManager', () => {
     });
   });
 
+  describe('updateSpace', () => {
+    it('should update space and return updated SpaceEntry', () => {
+      const created = manager.createSpace(
+        { name: 'Original Name', visibility: 'public', description: 'Original' },
+        baseOptions,
+      );
+      if (!created.ok) throw new Error('Create failed');
+
+      const result = manager.updateSpace(
+        created.value.spaceId,
+        { name: 'New Name', description: 'Updated' },
+        baseOptions,
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.name).toBe('New Name');
+        expect(result.value.description).toBe('Updated');
+      }
+    });
+
+    it('should return error for nonexistent space', () => {
+      const result = manager.updateSpace(
+        'nonexistent',
+        { name: 'Test' },
+        baseOptions,
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('SPACE_NOT_FOUND');
+      }
+    });
+
+    it('should emit updated event', () => {
+      const logEventSpy = vi.spyOn(auditLogger, 'logEvent');
+
+      const created = manager.createSpace(
+        { name: 'Test Space', visibility: 'public' },
+        baseOptions,
+      );
+      if (!created.ok) throw new Error('Create failed');
+
+      logEventSpy.mockClear();
+      manager.updateSpace(
+        created.value.spaceId,
+        { name: 'Updated Name' },
+        baseOptions,
+      );
+
+      expect(logEventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'proofcomm_space',
+          metadata: expect.objectContaining({
+            action: 'updated',
+            space_id: created.value.spaceId,
+            space_name: 'Updated Name',
+          }),
+        }),
+      );
+    });
+
+    it('should not emit event when no fields to update', () => {
+      const logEventSpy = vi.spyOn(auditLogger, 'logEvent');
+
+      const created = manager.createSpace(
+        { name: 'Test Space', visibility: 'public' },
+        baseOptions,
+      );
+      if (!created.ok) throw new Error('Create failed');
+
+      logEventSpy.mockClear();
+      const result = manager.updateSpace(
+        created.value.spaceId,
+        {},
+        baseOptions,
+      );
+
+      expect(result.ok).toBe(true);
+      // No event should be emitted for empty updates
+      expect(logEventSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('deleteSpace', () => {
     it('should delete space and return success', () => {
       const created = manager.createSpace(

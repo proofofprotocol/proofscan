@@ -842,6 +842,10 @@ export function registerProofCommRoutes(
     const { visibility } = request.query;
     const spaces = spaceManager.listSpaces(visibility ? { visibility } : undefined);
 
+    // Batch fetch member counts to avoid N+1 queries
+    const spaceIds = spaces.map(s => s.spaceId);
+    const memberCounts = spaceManager.getMemberCounts(spaceIds);
+
     return reply.send({
       spaces: spaces.map(s => ({
         space_id: s.spaceId,
@@ -851,7 +855,7 @@ export function registerProofCommRoutes(
         portal_visible: s.portalVisible,
         creator_agent_id: s.creatorAgentId,
         created_at: s.createdAt,
-        member_count: spaceManager.memberCount(s.spaceId),
+        member_count: memberCounts.get(s.spaceId) ?? 0,
         route: buildSpaceRoute(s.spaceId),
       })),
       count: spaces.length,

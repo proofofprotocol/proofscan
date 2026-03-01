@@ -167,8 +167,13 @@ export class SpaceManager {
 
   /**
    * Update a space
+   * Emits 'updated' event for Portal consistency
    */
-  updateSpace(spaceId: string, updates: UpdateSpaceOptions): SpaceResult<SpaceEntry> {
+  updateSpace(
+    spaceId: string,
+    updates: UpdateSpaceOptions,
+    baseOptions: ProofCommEventBaseOptions,
+  ): SpaceResult<SpaceEntry> {
     const space = this.spacesStore.get(spaceId);
     if (!space) {
       return {
@@ -177,8 +182,26 @@ export class SpaceManager {
       };
     }
 
-    this.spacesStore.update(spaceId, updates);
-    return { ok: true, value: this.spacesStore.get(spaceId)! };
+    const updated = this.spacesStore.update(spaceId, updates);
+    if (!updated) {
+      // No fields to update (empty updates object)
+      return { ok: true, value: space };
+    }
+
+    const updatedSpace = this.spacesStore.get(spaceId)!;
+
+    // Emit updated event
+    emitSpaceEvent(
+      this.auditLogger,
+      'updated',
+      {
+        space_id: spaceId,
+        space_name: updatedSpace.name,
+      },
+      baseOptions,
+    );
+
+    return { ok: true, value: updatedSpace };
   }
 
   /**
@@ -329,6 +352,13 @@ export class SpaceManager {
    */
   memberCount(spaceId: string): number {
     return this.spacesStore.memberCount(spaceId);
+  }
+
+  /**
+   * Get member counts for multiple spaces in a single query (batch operation)
+   */
+  getMemberCounts(spaceIds: string[]): Map<string, number> {
+    return this.spacesStore.getMemberCounts(spaceIds);
   }
 
   // ==================== G3 Broadcast ====================
