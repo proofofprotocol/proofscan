@@ -12,6 +12,7 @@
 import type { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
 import { ulid } from 'ulid';
 import type { AuthInfo } from './authMiddleware.js';
+import { hasPermission, buildProofCommPermission } from './permissions.js';
 import { DocumentsStore, type DocumentConfig } from '../db/documents-store.js';
 import { SkillsStore } from '../db/skills-store.js';
 import { SkillRegistry } from '../proofcomm/skill-registry.js';
@@ -556,7 +557,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['q'],
         properties: {
-          q: { type: 'string', minLength: 1 },
+          q: { type: 'string', minLength: 1, maxLength: 200 },
           tags: { type: 'string' },  // comma-separated
           limit: { type: 'integer', minimum: 1, maximum: 50 },
         },
@@ -611,6 +612,17 @@ export function registerProofCommRoutes(
     const { agent_id } = request.params;
     const { agent_card } = request.body;
 
+    // Permission check: require write permission scoped to agent_id
+    const requiredPerm = buildProofCommPermission('skills', 'write', agent_id);
+    if (!hasPermission(auth.permissions, requiredPerm)) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
     // Security: Validate that agent_id corresponds to a registered target
     // to prevent cache poisoning with fake agent IDs
     const target = targetsStore.get(agent_id);
@@ -663,7 +675,19 @@ export function registerProofCommRoutes(
       },
     },
   }, async (request, reply) => {
+    const auth = getAuth(request);
     const { agent_id } = request.params;
+
+    // Permission check: require write permission scoped to agent_id
+    const requiredPerm = buildProofCommPermission('skills', 'write', agent_id);
+    if (!hasPermission(auth.permissions, requiredPerm)) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
 
     // Validate agent exists (consistency with refresh endpoint)
     const target = targetsStore.get(agent_id);

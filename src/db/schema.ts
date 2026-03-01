@@ -259,6 +259,7 @@ CREATE TABLE IF NOT EXISTS skills_cache (
 
 CREATE INDEX IF NOT EXISTS idx_skills_cache_agent ON skills_cache(agent_id);
 CREATE INDEX IF NOT EXISTS idx_skills_cache_name ON skills_cache(name);
+CREATE INDEX IF NOT EXISTS idx_skills_cache_expires ON skills_cache(expires_at);
 `;
 
 /**
@@ -658,6 +659,8 @@ CREATE TABLE IF NOT EXISTS skills_cache (
 CREATE INDEX IF NOT EXISTS idx_skills_cache_agent ON skills_cache(agent_id);
 
 CREATE INDEX IF NOT EXISTS idx_skills_cache_name ON skills_cache(name);
+
+CREATE INDEX IF NOT EXISTS idx_skills_cache_expires ON skills_cache(expires_at);
 `;
 
 // proofs.db schema (version 2: added plans and runs tables)

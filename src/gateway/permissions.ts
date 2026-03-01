@@ -96,3 +96,22 @@ export function buildA2APermission(
   }
   return `a2a:${method}`;
 }
+
+/**
+ * Build required permission string for ProofComm operations
+ * Format: proofcomm:<resource>:<action>:<target>
+ * Examples:
+ *   - "proofcomm:skills:write:agent-1" - write skills for agent-1
+ *   - "proofcomm:skills:read" - read any skills
+ *   - "proofcomm:*" - full proofcomm access
+ */
+export function buildProofCommPermission(
+  resource: 'skills' | 'documents',
+  action: 'read' | 'write',
+  target?: string
+): string {
+  if (target) {
+    return `proofcomm:${resource}:${action}:${target}`;
+  }
+  return `proofcomm:${resource}:${action}`;
+}
