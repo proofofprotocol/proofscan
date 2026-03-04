@@ -872,7 +872,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1, maxLength: 26 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' },
         },
       },
     },
@@ -927,7 +927,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1, maxLength: 26 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' },
         },
       },
       body: {
@@ -981,7 +981,7 @@ export function registerProofCommRoutes(
         ...(config !== undefined && { config }),
       },
       {
-        requestId: request.id,
+        requestId: request.requestId,
         clientId: auth.client_id,
         traceId: request.headers['x-trace-id'] as string | undefined,
       },
@@ -1023,7 +1023,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1, maxLength: 26 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' },
         },
       },
       body: {
@@ -1093,7 +1093,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1, maxLength: 26 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' },
         },
       },
       body: {
@@ -1161,7 +1161,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1, maxLength: 26 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' },
         },
       },
       querystring: {
@@ -1224,7 +1224,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1, maxLength: 26 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' },
         },
       },
     },

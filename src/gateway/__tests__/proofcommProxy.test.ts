@@ -614,7 +614,7 @@ describe('ProofComm Proxy - Space Endpoints', () => {
     it('should return 404 for non-existent space', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/proofcomm/spaces/non-existent-space-id',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV',
       });
 
       expect(response.statusCode).toBe(404);
@@ -681,7 +681,7 @@ describe('ProofComm Proxy - Space Endpoints', () => {
     it('should return 404 for non-existent space', async () => {
       const response = await server.inject({
         method: 'PATCH',
-        url: '/proofcomm/spaces/non-existent',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV',
         payload: { name: 'Updated' },
       });
 
@@ -754,7 +754,7 @@ describe('ProofComm Proxy - Space Endpoints', () => {
     it('should return 404 for non-existent space', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/proofcomm/spaces/non-existent/join',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/join',
         payload: { agent_id: 'test-agent' },
       });
 
@@ -818,7 +818,7 @@ describe('ProofComm Proxy - Space Endpoints', () => {
     it('should return 404 for non-existent space', async () => {
       const response = await server.inject({
         method: 'POST',
-        url: '/proofcomm/spaces/non-existent/leave',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/leave',
         payload: { agent_id: 'test-agent' },
       });
 
@@ -939,7 +939,7 @@ describe('ProofComm Proxy - Space Endpoints', () => {
     it('should return 404 for non-existent space', async () => {
       const response = await server.inject({
         method: 'GET',
-        url: '/proofcomm/spaces/non-existent/members',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/members',
       });
 
       expect(response.statusCode).toBe(404);
@@ -997,7 +997,7 @@ describe('ProofComm Proxy - Space Endpoints', () => {
     it('should return 404 for non-existent space', async () => {
       const response = await server.inject({
         method: 'DELETE',
-        url: '/proofcomm/spaces/non-existent-space',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV',
       });
 
       expect(response.statusCode).toBe(404);

@@ -831,7 +831,7 @@ describe('A2A Proxy', () => {
         method: 'POST',
         url: '/a2a/v1/message/send',
         payload: {
-          agent: 'space/non-existent-space',
+          agent: 'space/01ARZ3NDEKTSV4RRFFQ69G5FAV',
           method: 'message/send',
           params: { message: 'Hello!' },
         },
