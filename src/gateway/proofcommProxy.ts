@@ -872,7 +872,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26 },
         },
       },
     },
@@ -916,6 +916,99 @@ export function registerProofCommRoutes(
     });
   });
 
+  // PATCH /proofcomm/spaces/:space_id - Update a space
+  fastify.patch<{
+    Params: { space_id: string };
+    Body: { name?: string; description?: string; visibility?: SpaceVisibility; portal_visible?: boolean; config?: Record<string, unknown> };
+  }>('/proofcomm/spaces/:space_id', {
+    preHandler: requireAuth,
+    schema: {
+      params: {
+        type: 'object',
+        required: ['space_id'],
+        properties: {
+          space_id: { type: 'string', minLength: 1, maxLength: 26 },
+        },
+      },
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', minLength: 1, maxLength: 100 },
+          description: { type: 'string', maxLength: 500 },
+          visibility: { type: 'string', enum: ['public', 'private'] },
+          portal_visible: { type: 'boolean' },
+          config: { type: 'object' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    const auth = getAuth(request);
+    const { space_id } = request.params;
+
+    // Permission check: require spaces write permission (scoped or general)
+    const requiredPerm = buildProofCommPermission('spaces', 'write', space_id);
+    if (!hasPermission(auth.permissions, requiredPerm) &&
+        !hasPermission(auth.permissions, buildProofCommPermission('spaces', 'write'))) {
+      return reply.code(403).send({
+        error: {
+          code: 'FORBIDDEN',
+          message: `Permission denied: ${requiredPerm}`,
+        },
+      });
+    }
+
+    const { name, description, visibility, portal_visible, config } = request.body;
+
+    // Check if at least one field is being updated
+    if (name === undefined && description === undefined && visibility === undefined &&
+        portal_visible === undefined && config === undefined) {
+      return reply.code(400).send({
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'At least one field must be provided for update',
+        },
+      });
+    }
+
+    const result = spaceManager.updateSpace(
+      space_id,
+      {
+        ...(name !== undefined && { name }),
+        ...(description !== undefined && { description }),
+        ...(visibility !== undefined && { visibility }),
+        ...(portal_visible !== undefined && { portalVisible: portal_visible }),
+        ...(config !== undefined && { config }),
+      },
+      {
+        requestId: request.id,
+        clientId: auth.client_id,
+        traceId: request.headers['x-trace-id'] as string | undefined,
+      },
+    );
+
+    if (!result.ok) {
+      const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404 : 400;
+      return reply.code(statusCode).send({
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    return reply.send({
+      space_id: result.value.spaceId,
+      name: result.value.name,
+      description: result.value.description,
+      visibility: result.value.visibility,
+      portal_visible: result.value.portalVisible,
+      creator_agent_id: result.value.creatorAgentId,
+      config: result.value.config,
+      created_at: result.value.createdAt,
+    });
+  });
+
   // POST /proofcomm/spaces/:space_id/join - Join a space
   // NOTE: This is an admin API that allows enrolling any agent_id into a space.
   // The authenticated client is not required to own/control the specified agent_id.
@@ -930,7 +1023,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26 },
         },
       },
       body: {
@@ -1000,7 +1093,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26 },
         },
       },
       body: {
@@ -1068,7 +1161,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26 },
         },
       },
       querystring: {
@@ -1131,7 +1224,7 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['space_id'],
         properties: {
-          space_id: { type: 'string', minLength: 1 },
+          space_id: { type: 'string', minLength: 1, maxLength: 26 },
         },
       },
     },

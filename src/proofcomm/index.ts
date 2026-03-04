@@ -18,7 +18,7 @@
  * - Skill cache (db/skills-store.ts)
  * - Skill registry with Pull-type caching (skill-registry.ts)
  *
- * Phase 3: Autonomous Spaces
+ * Phase 9.3: Autonomous Spaces
  * - space/ prefix routing (routing.ts)
  * - Space store (db/spaces-store.ts)
  * - Space manager with G3 broadcast (spaces/space-manager.ts)
@@ -133,7 +133,7 @@ export {
   DocumentResponder,
 } from './document/index.js';
 
-// ==================== Spaces (Phase 3) ====================
+// ==================== Spaces (Phase 9.3) ====================
 export {
   // Types
   type SpaceError,

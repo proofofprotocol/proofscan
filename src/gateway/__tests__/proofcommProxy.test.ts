@@ -623,6 +623,74 @@ describe('ProofComm Proxy - Space Endpoints', () => {
     });
   });
 
+  describe('PATCH /proofcomm/spaces/:space_id', () => {
+    let spaceId: string;
+
+    beforeEach(async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces',
+        payload: { name: 'Update Test Space', visibility: 'public', description: 'Original' },
+      });
+      spaceId = JSON.parse(response.payload).space_id;
+    });
+
+    it('should update space name', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: `/proofcomm/spaces/${spaceId}`,
+        payload: { name: 'Updated Name' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.name).toBe('Updated Name');
+      expect(body.description).toBe('Original'); // unchanged
+    });
+
+    it('should update multiple fields', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: `/proofcomm/spaces/${spaceId}`,
+        payload: {
+          name: 'New Name',
+          description: 'New Description',
+          portal_visible: false,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.payload);
+      expect(body.name).toBe('New Name');
+      expect(body.description).toBe('New Description');
+      expect(body.portal_visible).toBe(false);
+    });
+
+    it('should return 400 for empty payload', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: `/proofcomm/spaces/${spaceId}`,
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('should return 404 for non-existent space', async () => {
+      const response = await server.inject({
+        method: 'PATCH',
+        url: '/proofcomm/spaces/non-existent',
+        payload: { name: 'Updated' },
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('SPACE_NOT_FOUND');
+    });
+  });
+
   describe('POST /proofcomm/spaces/:space_id/join', () => {
     let spaceId: string;
 
