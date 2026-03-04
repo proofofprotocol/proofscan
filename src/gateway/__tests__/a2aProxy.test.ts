@@ -819,8 +819,10 @@ describe('A2A Proxy', () => {
       const body = JSON.parse(response.payload);
       expect(body.result).toBeDefined();
       expect(body.result.space_id).toBe(spaceId);
+      expect(body.result.status).toBe('intent_recorded'); // Phase 9.3 MVP: intent only
       expect(body.result.recipients).toBe(1); // Excludes sender (test-client)
-      expect(body.result.delivered).toBe(1);
+      // In intent_recorded mode, delivered/failed are 0 (actual delivery in Phase 9.4)
+      expect(body.result.delivered).toBe(0);
       expect(body.result.failed).toBe(0);
     });
 
@@ -899,7 +901,8 @@ describe('A2A Proxy', () => {
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.payload);
-      expect(body.result.delivered).toBe(1);
+      expect(body.result.status).toBe('intent_recorded');
+      expect(body.result.delivered).toBe(0); // intent_recorded mode
     });
 
     it('should require message in params', async () => {

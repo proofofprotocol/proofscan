@@ -400,8 +400,12 @@ export class SpacesStore {
   }
 
   /**
-   * Get a specific membership entry
-   * @returns Membership entry or undefined if not found
+   * Get a specific membership entry (regardless of active/left status)
+   *
+   * Note: This returns the membership record even if the agent has left (left_at != null).
+   * Use `isMember()` to check if an agent is an active member.
+   *
+   * @returns Membership entry or undefined if never joined
    */
   getMembership(spaceId: string, agentId: string): SpaceMembershipEntry | undefined {
     const row = this.db.prepare(`

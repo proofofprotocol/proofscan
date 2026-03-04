@@ -474,15 +474,17 @@ async function handleSpaceRequest(
   }
 
   // Return broadcast result
-  // Note: intent_only=true indicates Phase 9.3 MVP - delivery is recorded but not actually sent
-  // Phase 9.4 will implement actual A2A message delivery and remove this flag
+  // Phase 9.3 MVP: Intent is recorded but messages are not actually delivered yet
+  // Phase 9.4 will implement actual A2A message delivery (status will change to "delivered")
   return {
     result: {
       space_id: spaceId,
-      delivered: result.value.deliveredCount,
-      failed: result.value.failedCount,
+      status: 'intent_recorded',
       recipients: result.value.recipientCount,
-      intent_only: true,
+      // Note: delivered/failed counts are 0 in intent_recorded mode
+      // They will reflect actual delivery results in Phase 9.4
+      delivered: 0,
+      failed: 0,
     },
   };
 }

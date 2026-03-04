@@ -448,8 +448,8 @@ export class SpaceManager {
       })
     );
 
-    for (const settled of dispatchResults) {
-      // All promises resolve (errors caught within), but handle rejection just in case
+    for (const [index, settled] of dispatchResults.entries()) {
+      // All promises should resolve (errors caught within), but handle rejection just in case
       if (settled.status === 'fulfilled') {
         const { agentId, success, error } = settled.value;
         if (success) {
@@ -457,6 +457,12 @@ export class SpaceManager {
         } else {
           failures.push({ agentId, error: error ?? 'Unknown error' });
         }
+      } else {
+        // Promise rejected despite inner try/catch - should not happen but handle gracefully
+        const agentId = recipients[index];
+        const error = settled.reason instanceof Error ? settled.reason.message : String(settled.reason);
+        failures.push({ agentId, error: error || 'Promise rejected unexpectedly' });
+        console.warn(`[space-manager] Unexpected promise rejection for agent ${agentId}:`, settled.reason);
       }
     }
 
