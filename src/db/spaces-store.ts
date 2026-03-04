@@ -238,7 +238,9 @@ export class SpacesStore {
    * - Left (left_at != null) → UPDATE left_at=NULL, joined_at=now (return true)
    * - Already active (left_at = null) → no-op (return false)
    *
-   * Uses INSERT OR IGNORE to avoid race conditions under concurrent requests.
+   * Uses INSERT OR IGNORE to reduce race conditions under concurrent requests.
+   * Note: Two simultaneous re-join requests may still race on the UPDATE branch,
+   * but this is acceptable for current load patterns.
    *
    * @param spaceId - Space to join
    * @param agentId - Agent joining

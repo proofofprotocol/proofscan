@@ -917,6 +917,9 @@ export function registerProofCommRoutes(
   });
 
   // POST /proofcomm/spaces/:space_id/join - Join a space
+  // NOTE: This is an admin API that allows enrolling any agent_id into a space.
+  // The authenticated client is not required to own/control the specified agent_id.
+  // Agent existence is not validated - arbitrary IDs are accepted (open membership model).
   fastify.post<{
     Params: { space_id: string };
     Body: { agent_id: string; role?: MemberRole };

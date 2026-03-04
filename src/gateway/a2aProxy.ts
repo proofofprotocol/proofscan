@@ -398,6 +398,10 @@ async function handleDocumentRequest(
  *
  * Request format (pure A2A Message, no method/params):
  * { agent: "space/<space_id>", message: { role: "user", parts: [...] } }
+ *
+ * NOTE: The gateway client_id is used as the senderAgentId for membership validation.
+ * This conflates gateway client identity with A2A agent identity. For broadcast to work,
+ * the client_id must be enrolled as a member of the target space (via the join API).
  */
 async function handleSpaceRequest(
   spaceId: string,
@@ -470,12 +474,15 @@ async function handleSpaceRequest(
   }
 
   // Return broadcast result
+  // Note: intent_only=true indicates Phase 9.3 MVP - delivery is recorded but not actually sent
+  // Phase 9.4 will implement actual A2A message delivery and remove this flag
   return {
     result: {
       space_id: spaceId,
       delivered: result.value.deliveredCount,
       failed: result.value.failedCount,
       recipients: result.value.recipientCount,
+      intent_only: true,
     },
   };
 }
