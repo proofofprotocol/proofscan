@@ -328,6 +328,7 @@ export interface Space {
   visibility: SpaceVisibility;
   portal_visible: number;  // 0 or 1 (SQLite boolean)
   created_at: string;      // ISO8601
+  updated_at: string | null; // ISO8601, set on update
   creator_agent_id: string | null;
   config_json: string | null;
 }
@@ -349,6 +350,7 @@ export interface SpaceEntry {
   visibility: SpaceVisibility;
   portalVisible: boolean;
   createdAt: string;
+  updatedAt?: string;
   creatorAgentId?: string;
   config?: Record<string, unknown>;
 }

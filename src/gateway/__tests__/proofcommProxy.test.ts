@@ -803,14 +803,15 @@ describe('ProofComm Proxy - Space Endpoints', () => {
       expect(body.left).toBe(true);
     });
 
-    it('should return 403 if not a member', async () => {
+    it('should return 409 if not a member', async () => {
       const response = await server.inject({
         method: 'POST',
         url: `/proofcomm/spaces/${spaceId}/leave`,
         payload: { agent_id: 'another-agent' },
       });
 
-      expect(response.statusCode).toBe(403);
+      // 409 Conflict: authorized but operation conflicts with current state
+      expect(response.statusCode).toBe(409);
       const body = JSON.parse(response.payload);
       expect(body.error.code).toBe('NOT_MEMBER');
     });

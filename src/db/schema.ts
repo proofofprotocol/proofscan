@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS spaces (
   visibility TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
   portal_visible INTEGER DEFAULT 1,
   created_at TEXT NOT NULL,
+  updated_at TEXT,
   creator_agent_id TEXT,
   config_json TEXT
 );
@@ -284,7 +285,7 @@ CREATE INDEX IF NOT EXISTS idx_spaces_creator ON spaces(creator_agent_id);
 CREATE TABLE IF NOT EXISTS space_memberships (
   space_id TEXT NOT NULL,
   agent_id TEXT NOT NULL,
-  role TEXT CHECK(role IN ('member', 'moderator', 'observer')),
+  role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member', 'moderator', 'observer')),
   joined_at TEXT NOT NULL,
   left_at TEXT,
   PRIMARY KEY (space_id, agent_id),
@@ -708,6 +709,7 @@ CREATE TABLE IF NOT EXISTS spaces (
   visibility TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
   portal_visible INTEGER DEFAULT 1,
   created_at TEXT NOT NULL,
+  updated_at TEXT,
   creator_agent_id TEXT,
   config_json TEXT
 );
@@ -720,7 +722,7 @@ CREATE INDEX IF NOT EXISTS idx_spaces_creator ON spaces(creator_agent_id);
 CREATE TABLE IF NOT EXISTS space_memberships (
   space_id TEXT NOT NULL,
   agent_id TEXT NOT NULL,
-  role TEXT CHECK(role IN ('member', 'moderator', 'observer')),
+  role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member', 'moderator', 'observer')),
   joined_at TEXT NOT NULL,
   left_at TEXT,
   PRIMARY KEY (space_id, agent_id),

@@ -1132,8 +1132,9 @@ export function registerProofCommRoutes(
     );
 
     if (!result.ok) {
+      // 409 Conflict for NOT_MEMBER: authorized but operation conflicts with current state
       const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
-        : result.error.code === 'NOT_MEMBER' ? 403
+        : result.error.code === 'NOT_MEMBER' ? 409
         : 400;
       return reply.code(statusCode).send({
         error: {

@@ -71,6 +71,7 @@ export class SpacesStore {
       visibility: row.visibility,
       portalVisible: row.portal_visible === 1,
       createdAt: row.created_at,
+      ...(row.updated_at != null && { updatedAt: row.updated_at }),
       ...(row.creator_agent_id != null && { creatorAgentId: row.creator_agent_id }),
       ...(config != null && { config }),
     };
@@ -187,6 +188,10 @@ export class SpacesStore {
     if (setClauses.length === 0) {
       return false;
     }
+
+    // Always set updated_at when updating
+    setClauses.push('updated_at = ?');
+    values.push(new Date().toISOString());
 
     values.push(spaceId);
 
