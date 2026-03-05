@@ -933,8 +933,8 @@ export function registerProofCommRoutes(
       body: {
         type: 'object',
         properties: {
-          name: { type: 'string', minLength: 1, maxLength: 100 },
-          description: { type: 'string', maxLength: 500 },
+          name: { type: 'string', minLength: 1, maxLength: 200 },
+          description: { type: 'string', maxLength: 1000 },
           visibility: { type: 'string', enum: ['public', 'private'] },
           portal_visible: { type: 'boolean' },
           config: { type: 'object' },

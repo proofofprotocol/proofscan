@@ -448,8 +448,9 @@ async function handleSpaceRequest(
   // Phase 9.3 MVP: Records intent but doesn't actually send (future: real A2A dispatch)
   const dispatchToAgent: (agentId: string, message: A2AMessage) => Promise<{ success: boolean; error?: string }> =
     async (_agentId, _message) => {
-      // TODO: Phase 9.4 - Implement actual A2A message delivery to agents
-      // For now, we consider all deliveries successful (intent recorded)
+      // TODO: Phase 9.4 - Implement actual A2A message delivery to agents.
+      // Note: Until real delivery is implemented, the delivery_failed event path
+      // in SpaceManager.broadcastToSpace is unreachable in production (tested via mocks).
       return { success: true };
     };
 
