@@ -807,6 +807,7 @@ export function registerProofCommRoutes(
       visibility: result.value.visibility,
       portal_visible: result.value.portalVisible,
       creator_agent_id: result.value.creatorAgentId,
+      config: result.value.config,
       created_at: result.value.createdAt,
       route: buildSpaceRoute(result.value.spaceId),
     });
@@ -911,6 +912,7 @@ export function registerProofCommRoutes(
       creator_agent_id: space.creatorAgentId,
       config: space.config,
       created_at: space.createdAt,
+      updated_at: space.updatedAt,
       member_count: spaceManager.memberCount(space_id),
       route: buildSpaceRoute(space_id),
     });
@@ -1006,6 +1008,8 @@ export function registerProofCommRoutes(
       creator_agent_id: result.value.creatorAgentId,
       config: result.value.config,
       created_at: result.value.createdAt,
+      updated_at: result.value.updatedAt,
+      route: buildSpaceRoute(result.value.spaceId),
     });
   });
 
