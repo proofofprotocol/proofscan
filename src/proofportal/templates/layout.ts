@@ -3,6 +3,10 @@
  * Phase 4: ProofPortal MVP
  */
 
+import { getAgentListStyles } from './components/AgentList.js';
+import { getThreadPanelStyles } from './components/ThreadPanel.js';
+import { getSpaceViewStyles } from './components/SpaceView.js';
+
 /**
  * Escape HTML special characters
  */
@@ -293,7 +297,24 @@ export function getPortalStyles(): string {
       color: var(--text-primary);
       font-weight: 500;
     }
+
+    /* Empty state hint */
+    .empty-state-text {
+      margin-bottom: 4px;
+    }
+
+    .empty-state-hint {
+      font-size: 11px;
+      opacity: 0.7;
+    }
   `;
+}
+
+/**
+ * Get all component styles combined
+ */
+export function getComponentStyles(): string {
+  return getAgentListStyles() + getThreadPanelStyles() + getSpaceViewStyles();
 }
 
 /**
@@ -312,6 +333,7 @@ export function renderLayout(options: {
   <title>${escapeHtml(options.title)}</title>
   <style>
 ${getPortalStyles()}
+${getComponentStyles()}
   </style>
 </head>
 <body data-app="portal">
