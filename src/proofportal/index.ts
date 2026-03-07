@@ -1,9 +1,10 @@
 /**
  * ProofPortal - Agent Communication Visualization
- * Phase 4: ProofPortal MVP
+ * Phase 5: ProofGuild
  *
  * Real-time visualization UI for ProofComm agent communication.
  * Consumes SSE events and provides read-only monitoring.
+ * Displays agents as Guild members with roles, levels, and visual states.
  *
  * Usage:
  *   import { registerPortalRoutes } from './proofportal/index.js';
@@ -18,6 +19,7 @@ export { registerPortalRoutes, type PortalRoutesOptions } from './routes.js';
 
 // Types
 export {
+  // Portal types
   type PortalState,
   type ThreadState,
   type SpaceState,
@@ -30,6 +32,22 @@ export {
   createInitialState,
   toDisplayEvent,
   applyEvent,
+  // Guild types (Phase 5)
+  type GuildRole,
+  type GuildVisualState,
+  type GuildMembershipStatus,
+  type GuildMember,
+  type GuildSpaceRoom,
+  type GuildState,
+  // Guild helpers
+  calcLevel,
+  getVisualState,
+  getMembershipStatus,
+  getGuildRole,
+  toGuildMember,
+  deriveGuildState,
+  SPEAKING_THRESHOLD_MS,
+  ACTIVE_THRESHOLD_MS,
 } from './types.js';
 
 // Templates
