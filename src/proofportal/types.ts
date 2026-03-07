@@ -80,7 +80,8 @@ export interface PortalEventDisplay {
   spaceId: string | null;
   spaceName: string | null;
   preview: string | null;
-  metadata: ProofCommMetadata;
+  /** Metadata from source event, or minimal fallback if source had none */
+  metadata: Partial<ProofCommMetadata> & { action: ProofCommAction };
 }
 
 /**
@@ -170,9 +171,15 @@ export function toDisplayEvent(event: PortalSseEvent): PortalEventDisplay {
 }
 
 /**
- * Update state with a new event
+ * Apply event to state (mutates state in place)
+ *
+ * This function intentionally mutates the state object for performance.
+ * The Maps and Sets are updated in place rather than creating new copies.
+ *
+ * @param state - Portal state to mutate
+ * @param event - SSE event to apply
  */
-export function updateState(state: PortalState, event: PortalSseEvent): PortalState {
+export function applyEvent(state: PortalState, event: PortalSseEvent): void {
   const display = toDisplayEvent(event);
   const now = event.ts;
 
@@ -251,6 +258,4 @@ export function updateState(state: PortalState, event: PortalSseEvent): PortalSt
   // Update global state
   state.lastEventTs = now;
   state.eventCount++;
-
-  return state;
 }

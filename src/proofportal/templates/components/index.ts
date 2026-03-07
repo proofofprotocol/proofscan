@@ -35,7 +35,6 @@ export {
   type SpaceDisplayData,
   formatMemberCount,
   formatMessageCount,
-  getVisibilityBadge,
   truncateSpaceId,
   renderMemberBadge,
   renderSpaceCard,

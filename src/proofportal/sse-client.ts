@@ -4,10 +4,22 @@
  *
  * This module generates inline JavaScript for browser-side SSE consumption.
  * The generated code runs in the browser to receive real-time events from Gateway.
+ *
+ * Note: Utility functions (formatTime, formatRelativeTime, truncateId, etc.)
+ * are intentionally duplicated here from the server-side component files.
+ * This duplication is architecturally unavoidable because:
+ * - Server-side: TypeScript modules used for SSR
+ * - Browser-side: Inline JavaScript with no module system
+ * The functions must be kept in sync manually.
  */
 
 /**
  * Get browser-side SSE client script
+ *
+ * WARNING: The returned script is embedded directly in the HTML page.
+ * Only trusted, hardcoded content should be used. Never pass user-controlled
+ * data to this function as it would create an XSS vulnerability.
+ *
  * This is embedded as inline JavaScript in the HTML page.
  */
 export function getSseClientScript(): string {
@@ -23,6 +35,11 @@ export function getSseClientScript(): string {
     'proofcomm_route'
   ];
 
+  // State size limits (LRU eviction when exceeded)
+  const MAX_THREADS = 100;
+  const MAX_SPACES = 50;
+  const MAX_AGENTS = 100;
+
   // State
   const state = {
     threads: new Map(),
@@ -37,6 +54,24 @@ export function getSseClientScript(): string {
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 10;
   const RECONNECT_DELAY = 3000;
+
+  /**
+   * Evict oldest entries from a Map to maintain size limit (LRU)
+   * Entries are evicted based on lastActivityAt or lastSeenAt field
+   */
+  function evictOldest(map, maxSize, timeField) {
+    if (map.size <= maxSize) return;
+
+    // Convert to array and sort by time (oldest first)
+    const entries = Array.from(map.entries())
+      .sort((a, b) => (a[1][timeField] || 0) - (b[1][timeField] || 0));
+
+    // Remove oldest entries until we're under the limit
+    const toRemove = map.size - maxSize;
+    for (let i = 0; i < toRemove; i++) {
+      map.delete(entries[i][0]);
+    }
+  }
 
   // DOM elements
   const connectionStatus = document.getElementById('connectionStatus');
@@ -167,6 +202,11 @@ export function getSseClientScript(): string {
       thread.lastActivityAt = now;
       if (agentId) thread.participants.add(agentId);
     }
+
+    // LRU eviction to prevent unbounded memory growth
+    evictOldest(state.agents, MAX_AGENTS, 'lastSeenAt');
+    evictOldest(state.spaces, MAX_SPACES, 'lastActivityAt');
+    evictOldest(state.threads, MAX_THREADS, 'lastActivityAt');
 
     // Update UI
     renderAgentList();

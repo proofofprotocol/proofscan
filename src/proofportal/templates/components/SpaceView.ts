@@ -21,6 +21,10 @@ export interface SpaceMemberData {
 
 /**
  * Space display data
+ *
+ * Note: visibility field was removed as it's not currently available
+ * from ProofComm events. Can be added back when Space metadata includes
+ * visibility information.
  */
 export interface SpaceDisplayData {
   spaceId: string;
@@ -29,7 +33,6 @@ export interface SpaceDisplayData {
   memberCount: number;
   messageCount: number;
   lastActivityAt: number;
-  visibility: 'public' | 'private' | 'unknown';
 }
 
 /**
@@ -46,19 +49,9 @@ export function formatMessageCount(count: number): string {
   return count === 1 ? '1 message' : `${count} messages`;
 }
 
-/**
- * Get visibility badge
- */
-export function getVisibilityBadge(visibility: string): string {
-  switch (visibility) {
-    case 'public':
-      return '<span class="visibility-badge public">🌐 public</span>';
-    case 'private':
-      return '<span class="visibility-badge private">🔒 private</span>';
-    default:
-      return '';
-  }
-}
+// Note: getVisibilityBadge was removed as visibility is not currently
+// available from ProofComm events. The function can be restored when
+// Space metadata includes visibility information.
 
 /**
  * Truncate space ID for display
@@ -89,7 +82,6 @@ export function renderMemberBadge(member: SpaceMemberData): string {
  */
 export function renderSpaceCard(space: SpaceDisplayData): string {
   const displayName = space.spaceName || truncateSpaceId(space.spaceId);
-  const visibilityBadge = getVisibilityBadge(space.visibility);
   const memberBadges = space.members
     .slice(0, 5)
     .map(m => renderMemberBadge(m))
@@ -103,7 +95,6 @@ export function renderSpaceCard(space: SpaceDisplayData): string {
           <span class="space-icon">🏠</span>
           <span class="space-name" title="${escapeHtml(space.spaceId)}">${escapeHtml(displayName)}</span>
         </div>
-        ${visibilityBadge}
       </div>
       <div class="space-stats">
         <div class="space-stat">
@@ -177,22 +168,6 @@ export function getSpaceViewStyles(): string {
       font-size: 13px;
       font-weight: 600;
       color: var(--text-primary);
-    }
-
-    .visibility-badge {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 10px;
-    }
-
-    .visibility-badge.public {
-      background: rgba(63, 185, 80, 0.15);
-      color: var(--accent-green);
-    }
-
-    .visibility-badge.private {
-      background: rgba(210, 153, 34, 0.15);
-      color: var(--accent-yellow);
     }
 
     .space-stats {

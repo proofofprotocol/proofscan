@@ -29,7 +29,7 @@ export {
   PROOFCOMM_EVENT_KINDS,
   createInitialState,
   toDisplayEvent,
-  updateState,
+  applyEvent,
 } from './types.js';
 
 // Templates

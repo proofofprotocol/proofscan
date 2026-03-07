@@ -8,7 +8,7 @@ import { renderDashboard } from '../templates/dashboard.js';
 import { escapeHtml, renderLayout } from '../templates/layout.js';
 import {
   createInitialState,
-  updateState,
+  applyEvent,
   toDisplayEvent,
   type PortalSseEvent,
 } from '../types.js';
@@ -152,9 +152,9 @@ describe('ProofPortal state management', () => {
     });
   });
 
-  describe('updateState', () => {
+  describe('applyEvent', () => {
     it('should update thread state', () => {
-      let state = createInitialState();
+      const state = createInitialState();
       const event: PortalSseEvent = {
         event_kind: 'proofcomm_space',
         client_id: 'client-1',
@@ -167,14 +167,14 @@ describe('ProofPortal state management', () => {
         },
       };
 
-      state = updateState(state, event);
+      applyEvent(state, event);
 
       expect(state.threads.size).toBe(1);
       expect(state.threads.get('trace-1')?.participants.has('agent-1')).toBe(true);
     });
 
     it('should update space state on join', () => {
-      let state = createInitialState();
+      const state = createInitialState();
       const event: PortalSseEvent = {
         event_kind: 'proofcomm_space',
         client_id: 'client-1',
@@ -187,17 +187,17 @@ describe('ProofPortal state management', () => {
         },
       };
 
-      state = updateState(state, event);
+      applyEvent(state, event);
 
       expect(state.spaces.size).toBe(1);
       expect(state.spaces.get('space-1')?.members.has('agent-1')).toBe(true);
     });
 
     it('should update space state on leave', () => {
-      let state = createInitialState();
+      const state = createInitialState();
 
       // First join
-      state = updateState(state, {
+      applyEvent(state, {
         event_kind: 'proofcomm_space',
         client_id: 'client-1',
         ts: 1704067200000,
@@ -210,7 +210,7 @@ describe('ProofPortal state management', () => {
       });
 
       // Then leave
-      state = updateState(state, {
+      applyEvent(state, {
         event_kind: 'proofcomm_space',
         client_id: 'client-1',
         ts: 1704067201000,
@@ -226,7 +226,7 @@ describe('ProofPortal state management', () => {
     });
 
     it('should increment message count', () => {
-      let state = createInitialState();
+      const state = createInitialState();
       const event: PortalSseEvent = {
         event_kind: 'proofcomm_space',
         client_id: 'client-1',
@@ -238,14 +238,14 @@ describe('ProofPortal state management', () => {
         },
       };
 
-      state = updateState(state, event);
-      state = updateState(state, { ...event, request_id: 'req-2' });
+      applyEvent(state, event);
+      applyEvent(state, { ...event, request_id: 'req-2' });
 
       expect(state.spaces.get('space-1')?.messageCount).toBe(2);
     });
 
     it('should update agent state', () => {
-      let state = createInitialState();
+      const state = createInitialState();
       const event: PortalSseEvent = {
         event_kind: 'proofcomm_space',
         client_id: 'client-1',
@@ -259,7 +259,7 @@ describe('ProofPortal state management', () => {
         },
       };
 
-      state = updateState(state, event);
+      applyEvent(state, event);
 
       expect(state.agents.size).toBe(1);
       const agent = state.agents.get('agent-1');
@@ -269,7 +269,7 @@ describe('ProofPortal state management', () => {
     });
 
     it('should increment global event count', () => {
-      let state = createInitialState();
+      const state = createInitialState();
       const event: PortalSseEvent = {
         event_kind: 'proofcomm_space',
         client_id: 'client-1',
@@ -278,11 +278,60 @@ describe('ProofPortal state management', () => {
         metadata: { action: 'message' },
       };
 
-      state = updateState(state, event);
-      state = updateState(state, { ...event, request_id: 'req-2' });
-      state = updateState(state, { ...event, request_id: 'req-3' });
+      applyEvent(state, event);
+      applyEvent(state, { ...event, request_id: 'req-2' });
+      applyEvent(state, { ...event, request_id: 'req-3' });
 
       expect(state.eventCount).toBe(3);
+    });
+  });
+});
+
+describe('ProofPortal routes', () => {
+  // Note: Full route testing requires Fastify server setup.
+  // These tests verify the route registration function exists and has correct exports.
+
+  describe('registerPortalRoutes', () => {
+    it('should be exported from index', async () => {
+      const { registerPortalRoutes } = await import('../index.js');
+      expect(typeof registerPortalRoutes).toBe('function');
+    });
+  });
+
+  describe('PortalRoutesOptions', () => {
+    it('should allow basePath option', async () => {
+      const { registerPortalRoutes } = await import('../routes.js');
+
+      // Mock Fastify instance
+      const routes: Array<{ method: string; path: string }> = [];
+      const mockFastify = {
+        get: (path: string, _handler: unknown) => {
+          routes.push({ method: 'GET', path });
+        },
+      };
+
+      registerPortalRoutes(mockFastify as never, { basePath: '/custom-portal' });
+
+      expect(routes).toContainEqual({ method: 'GET', path: '/custom-portal' });
+      expect(routes).toContainEqual({ method: 'GET', path: '/custom-portal/' });
+      expect(routes).toContainEqual({ method: 'GET', path: '/custom-portal/api/status' });
+    });
+
+    it('should use default basePath /portal', async () => {
+      const { registerPortalRoutes } = await import('../routes.js');
+
+      const routes: Array<{ method: string; path: string }> = [];
+      const mockFastify = {
+        get: (path: string, _handler: unknown) => {
+          routes.push({ method: 'GET', path });
+        },
+      };
+
+      registerPortalRoutes(mockFastify as never);
+
+      expect(routes).toContainEqual({ method: 'GET', path: '/portal' });
+      expect(routes).toContainEqual({ method: 'GET', path: '/portal/' });
+      expect(routes).toContainEqual({ method: 'GET', path: '/portal/api/status' });
     });
   });
 });
