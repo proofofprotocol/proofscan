@@ -1,6 +1,6 @@
 /**
  * ProofPortal - SSE Client (Browser-side)
- * Phase 4: ProofPortal MVP
+ * Phase 5: ProofGuild
  *
  * This module generates inline JavaScript for browser-side SSE consumption.
  * The generated code runs in the browser to receive real-time events from Gateway.
@@ -11,6 +11,11 @@
  * - Server-side: TypeScript modules used for SSR
  * - Browser-side: Inline JavaScript with no module system
  * The functions must be kept in sync manually.
+ *
+ * Phase 5 additions:
+ * - Guild state tracking (name, XP, level, visualState)
+ * - currentSpaceId tracking for Room placement
+ * - Speaking/Active/Idle state calculation
  */
 
 /**
@@ -39,6 +44,20 @@ export function getSseClientScript(): string {
   const MAX_THREADS = 100;
   const MAX_SPACES = 50;
   const MAX_AGENTS = 100;
+
+  // Guild thresholds (Phase 5)
+  const SPEAKING_THRESHOLD_MS = 10000;  // 10 seconds for 'speaking' state
+  const ACTIVE_THRESHOLD_MS = 60000;    // 60 seconds for 'active' state
+
+  // XP values per action
+  const XP_VALUES = {
+    joined: 2,
+    message: 5,
+    match: 10,
+    context_updated: 8,
+    dispatched: 6,
+    registered: 3
+  };
 
   // State
   const state = {
@@ -80,6 +99,9 @@ export function getSseClientScript(): string {
   const agentListEl = document.getElementById('agentList');
   const threadListEl = document.getElementById('threadList');
   const spaceListEl = document.getElementById('spaceList');
+  // Guild DOM elements (Phase 5)
+  const guildPanelEl = document.getElementById('guildPanel');
+  const guildMapEl = document.getElementById('guildMap');
 
   /**
    * Update connection status display
@@ -128,6 +150,59 @@ export function getSseClientScript(): string {
       .replace(/"/g, '&quot;');
   }
 
+  // ============================================================================
+  // Guild Helper Functions (Phase 5)
+  // ============================================================================
+
+  /**
+   * Calculate level from XP
+   */
+  function calcLevel(xp) {
+    return Math.floor(Math.sqrt(xp / 10)) + 1;
+  }
+
+  /**
+   * Get visual state based on timestamps
+   */
+  function getVisualState(agent, now) {
+    if (agent.lastMessageAt && (now - agent.lastMessageAt) < SPEAKING_THRESHOLD_MS) {
+      return 'speaking';
+    }
+    if ((now - agent.lastSeenAt) < ACTIVE_THRESHOLD_MS) {
+      return 'active';
+    }
+    return 'idle';
+  }
+
+  /**
+   * Get membership status
+   */
+  function getMembershipStatus(agent, now) {
+    if ((now - agent.lastSeenAt) < ACTIVE_THRESHOLD_MS) {
+      return 'active';
+    }
+    if (agent.spaceIds.size > 0) {
+      return 'joined';
+    }
+    return 'candidate';
+  }
+
+  /**
+   * Get display name for agent
+   */
+  function getAgentDisplayName(agent) {
+    return agent.name || truncateId(agent.agentId, 12);
+  }
+
+  /**
+   * Truncate message preview for bubble display
+   */
+  function truncatePreview(str, maxLen) {
+    if (!str) return '';
+    if (str.length <= maxLen) return str;
+    return str.slice(0, maxLen - 1) + '…';
+  }
+
   /**
    * Process incoming SSE event
    */
@@ -150,7 +225,14 @@ export function getSseClientScript(): string {
           traceIds: new Set(),
           spaceIds: new Set(),
           eventCount: 0,
-          lastSeenAt: now
+          lastSeenAt: now,
+          // Guild fields (Phase 5)
+          name: null,
+          experience: 0,
+          lastMessagePreview: null,
+          lastMessageAt: null,
+          currentSpaceId: null,
+          currentSpaceName: null
         };
         state.agents.set(agentId, agent);
       }
@@ -158,6 +240,39 @@ export function getSseClientScript(): string {
       agent.lastSeenAt = now;
       if (traceId) agent.traceIds.add(traceId);
       if (spaceId) agent.spaceIds.add(spaceId);
+
+      // Guild updates (Phase 5)
+      // Extract agent_name from metadata
+      if (metadata.agent_name) {
+        agent.name = metadata.agent_name;
+      }
+
+      // Track currentSpaceId and XP based on action
+      const action = metadata.action;
+      if (action === 'joined' && spaceId) {
+        agent.currentSpaceId = spaceId;
+        agent.currentSpaceName = metadata.space_name || null;
+        agent.experience += XP_VALUES.joined || 0;
+      } else if (action === 'message' && spaceId) {
+        agent.currentSpaceId = spaceId;
+        agent.currentSpaceName = metadata.space_name || null;
+        agent.lastMessagePreview = truncatePreview(metadata.message_preview, 40);
+        agent.lastMessageAt = now;
+        agent.experience += XP_VALUES.message || 0;
+      } else if (action === 'left' && spaceId) {
+        if (agent.currentSpaceId === spaceId) {
+          agent.currentSpaceId = null;
+          agent.currentSpaceName = null;
+        }
+      } else if (action === 'match') {
+        agent.experience += XP_VALUES.match || 0;
+      } else if (action === 'context_updated') {
+        agent.experience += XP_VALUES.context_updated || 0;
+      } else if (action === 'dispatched') {
+        agent.experience += XP_VALUES.dispatched || 0;
+      } else if (action === 'registered') {
+        agent.experience += XP_VALUES.registered || 0;
+      }
     }
 
     // Update space state
@@ -212,6 +327,8 @@ export function getSseClientScript(): string {
     renderAgentList();
     renderSpaceList();
     renderThreadList();
+    renderGuildPanel();
+    renderGuildMap();
     updateEventCount();
   }
 
@@ -395,6 +512,156 @@ export function getSseClientScript(): string {
     if (header) header.textContent = state.threads.size;
   }
 
+  // ============================================================================
+  // Guild Rendering (Phase 5)
+  // ============================================================================
+
+  /**
+   * Get visual state class name
+   */
+  function getVisualStateClass(visualState) {
+    return 'visual-state-' + visualState;
+  }
+
+  /**
+   * Format level display
+   */
+  function formatLevel(level) {
+    return 'Lv.' + level;
+  }
+
+  /**
+   * Format membership status for display
+   */
+  function formatMembershipStatus(status) {
+    if (status === 'active') return 'Active';
+    if (status === 'joined') return 'Joined';
+    return 'Candidate';
+  }
+
+  /**
+   * Render Guild Panel (member list)
+   */
+  function renderGuildPanel() {
+    if (!guildPanelEl) return;
+
+    const now = Date.now();
+
+    if (state.agents.size === 0) {
+      guildPanelEl.innerHTML = '<div class="guild-empty">No guild members yet</div>';
+      return;
+    }
+
+    const agents = Array.from(state.agents.values())
+      .sort(function(a, b) { return b.lastSeenAt - a.lastSeenAt; })
+      .slice(0, 20);
+
+    guildPanelEl.innerHTML = agents.map(function(agent) {
+      const visualState = getVisualState(agent, now);
+      const membershipStatus = getMembershipStatus(agent, now);
+      const level = calcLevel(agent.experience);
+      const displayName = getAgentDisplayName(agent);
+
+      return '<div class="guild-member ' + getVisualStateClass(visualState) + '" data-agent-id="' + escapeHtml(agent.agentId) + '">' +
+        '<div class="guild-member-avatar">' + displayName.charAt(0).toUpperCase() + '</div>' +
+        '<div class="guild-member-info">' +
+          '<div class="guild-member-name">' + escapeHtml(displayName) + '</div>' +
+          '<div class="guild-member-meta">' +
+            '<span class="guild-member-level" title="Session Level (XP: ' + agent.experience + ')">Session ' + formatLevel(level) + '</span>' +
+            '<span class="guild-member-status ' + membershipStatus + '">' + formatMembershipStatus(membershipStatus) + '</span>' +
+          '</div>' +
+          '<div class="guild-member-id" title="' + escapeHtml(agent.agentId) + '">' + truncateId(agent.agentId, 16) + '</div>' +
+        '</div>' +
+        (agent.lastMessagePreview ? '<div class="guild-member-bubble">' + escapeHtml(agent.lastMessagePreview) + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  /**
+   * Render Guild Map (rooms with members)
+   */
+  function renderGuildMap() {
+    if (!guildMapEl) return;
+
+    const now = Date.now();
+
+    // Collect rooms from spaces
+    const rooms = [];
+    const lobbyMembers = [];
+
+    // Build room list from spaces
+    state.spaces.forEach(function(space) {
+      rooms.push({
+        spaceId: space.spaceId,
+        spaceName: space.spaceName || truncateId(space.spaceId, 12),
+        members: []
+      });
+    });
+
+    // Place agents in rooms based on currentSpaceId
+    state.agents.forEach(function(agent) {
+      const visualState = getVisualState(agent, now);
+      const level = calcLevel(agent.experience);
+      const memberData = {
+        agentId: agent.agentId,
+        name: getAgentDisplayName(agent),
+        level: level,
+        visualState: visualState,
+        lastMessagePreview: agent.lastMessagePreview
+      };
+
+      if (agent.currentSpaceId) {
+        const room = rooms.find(function(r) { return r.spaceId === agent.currentSpaceId; });
+        if (room) {
+          room.members.push(memberData);
+        } else {
+          // Room not found, put in lobby
+          lobbyMembers.push(memberData);
+        }
+      } else {
+        // No current space, put in lobby
+        lobbyMembers.push(memberData);
+      }
+    });
+
+    // Add lobby room if there are members
+    if (lobbyMembers.length > 0) {
+      rooms.unshift({
+        spaceId: '__lobby__',
+        spaceName: 'Lobby',
+        members: lobbyMembers
+      });
+    }
+
+    // Render rooms
+    if (rooms.length === 0) {
+      guildMapEl.innerHTML = '<div class="guild-map-empty">No rooms yet</div>';
+      return;
+    }
+
+    guildMapEl.innerHTML = rooms.map(function(room) {
+      const memberHtml = room.members.map(function(member) {
+        return '<div class="guild-map-member ' + getVisualStateClass(member.visualState) + '" ' +
+          'data-agent-id="' + escapeHtml(member.agentId) + '" ' +
+          'title="' + escapeHtml(member.name) + ' (' + formatLevel(member.level) + ')">' +
+          '<div class="guild-map-member-avatar">' + member.name.charAt(0).toUpperCase() + '</div>' +
+          '<div class="guild-map-member-name">' + escapeHtml(member.name) + '</div>' +
+          (member.visualState === 'speaking' && member.lastMessagePreview ?
+            '<div class="guild-map-bubble">' + escapeHtml(member.lastMessagePreview) + '</div>' : '') +
+        '</div>';
+      }).join('');
+
+      return '<div class="guild-map-room" data-space-id="' + escapeHtml(room.spaceId) + '">' +
+        '<div class="guild-map-room-header">' +
+          '<span class="guild-map-room-icon">' + (room.spaceId === '__lobby__' ? '🏠' : '🚪') + '</span>' +
+          '<span class="guild-map-room-name">' + escapeHtml(room.spaceName) + '</span>' +
+          '<span class="guild-map-room-count">' + room.members.length + '</span>' +
+        '</div>' +
+        '<div class="guild-map-room-members">' + memberHtml + '</div>' +
+      '</div>';
+    }).join('');
+  }
+
   /**
    * Connect to SSE stream
    */
@@ -456,6 +723,8 @@ export function getSseClientScript(): string {
   renderAgentList();
   renderSpaceList();
   renderThreadList();
+  renderGuildPanel();
+  renderGuildMap();
   connect();
 
   // Cleanup on page unload

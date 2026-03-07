@@ -29,6 +29,10 @@ import { buildDocumentRoute, buildSpaceRoute } from '../proofcomm/routing.js';
 import { emitDocumentEvent, emitSkillEvent } from '../proofcomm/events.js';
 import type { AuditLogger } from './audit.js';
 import type { SpaceVisibility, MemberRole } from '../db/types.js';
+import {
+  registerGuildAgent,
+  type GuildRegisterRequest,
+} from '../proofcomm/guild/index.js';
 
 /**
  * Document registration request body
@@ -1268,5 +1272,51 @@ export function registerProofCommRoutes(
     }
 
     return reply.code(204).send();
+  });
+
+  // ============================================================================
+  // Guild Registration (Phase 5: ProofGuild)
+  // ============================================================================
+
+  // POST /proofcomm/guild/register - Self-register an external agent
+  fastify.post<{
+    Body: GuildRegisterRequest;
+  }>('/proofcomm/guild/register', {
+    // Note: No preHandler auth - this endpoint allows unauthenticated registration
+    schema: {
+      body: {
+        type: 'object',
+        required: ['url'],
+        properties: {
+          url: { type: 'string', minLength: 1 },
+          name: { type: 'string' },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const clientIp = request.ip || 'unknown';
+
+    const result = await registerGuildAgent(request.body, {
+      targetsStore,
+      auditLogger: options.auditLogger,
+      clientIp,
+      baseOptions: {
+        requestId: request.requestId,
+        traceId: request.headers['x-trace-id'] as string | undefined,
+        clientId: clientIp, // Use IP as client ID for unauthenticated requests
+      },
+      allowLocal: process.env.NODE_ENV === 'development',
+    });
+
+    if (!result.ok) {
+      return reply.code(result.statusCode || 500).send({
+        error: {
+          code: 'REGISTRATION_FAILED',
+          message: result.error,
+        },
+      });
+    }
+
+    return reply.code(201).send(result.response);
   });
 }

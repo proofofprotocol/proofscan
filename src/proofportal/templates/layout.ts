@@ -6,6 +6,8 @@
 import { getAgentListStyles } from './components/AgentList.js';
 import { getThreadPanelStyles } from './components/ThreadPanel.js';
 import { getSpaceViewStyles } from './components/SpaceView.js';
+import { getGuildPanelStyles } from './components/GuildPanel.js';
+import { getGuildMapStyles } from './components/GuildMap.js';
 
 /**
  * Escape HTML special characters
@@ -276,6 +278,83 @@ export function getPortalStyles(): string {
       opacity: 0.5;
     }
 
+    /* Guild layout (Phase 5) */
+    .main-guild {
+      display: grid;
+      grid-template-columns: 280px 1fr 320px;
+      gap: 1px;
+      background: var(--border-color);
+      min-height: calc(100vh - 180px);
+    }
+
+    .panel-column {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--border-color);
+    }
+
+    .panel-column .panel {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .left-column .guild-map-panel {
+      flex: 2;
+    }
+
+    .left-column .agents-panel {
+      flex: 1;
+      max-height: 200px;
+    }
+
+    .center-column .panel,
+    .right-column .panel {
+      height: 100%;
+    }
+
+    /* Guild panel bar (bottom) */
+    .guild-panel-bar {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
+      max-height: 120px;
+      overflow: hidden;
+    }
+
+    .guild-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .guild-panel-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .guild-panel-hint {
+      font-size: 10px;
+      color: var(--text-tertiary);
+      font-style: italic;
+    }
+
+    .guild-panel-content {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px 16px;
+      overflow-x: auto;
+    }
+
+    /* CSS variable for text-tertiary */
+    :root {
+      --text-tertiary: #6e7681;
+    }
+
     /* Stats bar */
     .stats-bar {
       display: flex;
@@ -314,7 +393,8 @@ export function getPortalStyles(): string {
  * Get all component styles combined
  */
 export function getComponentStyles(): string {
-  return getAgentListStyles() + getThreadPanelStyles() + getSpaceViewStyles();
+  return getAgentListStyles() + getThreadPanelStyles() + getSpaceViewStyles() +
+    getGuildPanelStyles() + getGuildMapStyles();
 }
 
 /**

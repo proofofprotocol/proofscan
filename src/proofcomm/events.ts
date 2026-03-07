@@ -43,6 +43,8 @@ export type ProofCommAction =
   | 'delivery_failed'
   | 'deleted'
   | 'updated'
+  // guild (Phase 5)
+  | 'registered'
   // skill
   | 'search'
   | 'match'
@@ -173,15 +175,15 @@ export function emitProofCommEvent(
  */
 export function emitSpaceEvent(
   auditLogger: AuditLogger,
-  action: 'created' | 'joined' | 'left' | 'message' | 'delivery_failed' | 'deleted' | 'updated',
-  metadata: Omit<ProofCommMetadata, 'action'> & { space_id: string },
+  action: 'created' | 'joined' | 'left' | 'message' | 'delivery_failed' | 'deleted' | 'updated' | 'registered',
+  metadata: Omit<ProofCommMetadata, 'action'> & { space_id?: string; agent_id?: string },
   baseOptions: ProofCommEventBaseOptions
 ): string {
   return emitProofCommEvent(
     auditLogger,
     'proofcomm_space',
     { ...metadata, action },
-    { ...baseOptions, target: baseOptions.target ?? metadata.space_id }
+    { ...baseOptions, target: baseOptions.target ?? metadata.space_id ?? metadata.agent_id }
   );
 }
 
@@ -288,7 +290,7 @@ export function isProofCommEventKind(kind: string): kind is ProofCommEventKind {
  */
 export function isValidAction(kind: ProofCommEventKind, action: string): boolean {
   const validActions: Record<ProofCommEventKind, string[]> = {
-    proofcomm_space: ['created', 'joined', 'left', 'message', 'delivery_failed', 'deleted', 'updated'],
+    proofcomm_space: ['created', 'joined', 'left', 'message', 'delivery_failed', 'deleted', 'updated', 'registered'],
     proofcomm_skill: ['search', 'match', 'refresh'],
     proofcomm_document: ['activated', 'deactivated', 'context_updated'],
     proofcomm_route: ['resolved', 'dispatched'],
