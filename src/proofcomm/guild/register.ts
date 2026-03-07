@@ -8,7 +8,7 @@
  * Security: Registration requires GUILD_API_KEY for authentication.
  */
 
-import { randomBytes, createHmac } from 'crypto';
+import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 import { fetchAgentCard, type FetchAgentCardResult } from '../../a2a/agent-card.js';
 import { TargetsStore, type TargetWithConfig } from '../../db/targets-store.js';
 import { emitSpaceEvent, type ProofCommEventBaseOptions } from '../events.js';
@@ -73,7 +73,7 @@ interface TokenEntry {
 const GUILD_API_KEY = process.env.GUILD_API_KEY;
 
 /**
- * Validate API key from Authorization header
+ * Validate API key from Authorization header using timing-safe comparison
  * @returns true if valid, false otherwise
  */
 export function validateApiKey(authHeader: string | undefined): boolean {
@@ -89,7 +89,15 @@ export function validateApiKey(authHeader: string | undefined): boolean {
   if (!match) {
     return false;
   }
-  return match[1] === GUILD_API_KEY;
+  const providedKey = match[1];
+  // Use timing-safe comparison to prevent timing attacks
+  if (providedKey.length !== GUILD_API_KEY.length) {
+    return false;
+  }
+  return timingSafeEqual(
+    Buffer.from(providedKey, 'utf-8'),
+    Buffer.from(GUILD_API_KEY, 'utf-8')
+  );
 }
 
 /**
@@ -112,12 +120,23 @@ const guildTokensByHash = new Map<string, TokenEntry>();
 /**
  * Secret for signing tokens (must be set via environment variable in production)
  */
-const GUILD_TOKEN_SECRET = process.env.GUILD_TOKEN_SECRET || 'proofguild-dev-secret';
-
-// Production check for token secret
-if (!process.env.GUILD_TOKEN_SECRET && process.env.NODE_ENV === 'production') {
-  console.error('[ProofGuild] WARNING: GUILD_TOKEN_SECRET not set in production!');
+function getTokenSecret(): string {
+  const secret = process.env.GUILD_TOKEN_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('[ProofGuild] GUILD_TOKEN_SECRET must be set in production');
+    }
+    return 'proofguild-dev-secret';
+  }
+  return secret;
 }
+
+const GUILD_TOKEN_SECRET = getTokenSecret();
+
+/**
+ * Token TTL in milliseconds (30 days)
+ */
+const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
  * Generate a random token
@@ -162,6 +181,69 @@ export function validateGuildToken(token: string): string | null {
  */
 export function getGuildTokenCount(): number {
   return guildTokensByHash.size;
+}
+
+// ============================================================================
+// SSRF Protection
+// ============================================================================
+
+/**
+ * Private/internal IP ranges that should be blocked for SSRF protection
+ */
+const PRIVATE_IP_PATTERNS = [
+  /^127\./,                          // Loopback (127.0.0.0/8)
+  /^10\./,                           // Private Class A (10.0.0.0/8)
+  /^172\.(1[6-9]|2\d|3[01])\./,      // Private Class B (172.16.0.0/12)
+  /^192\.168\./,                     // Private Class C (192.168.0.0/16)
+  /^169\.254\./,                     // Link-local (169.254.0.0/16)
+  /^0\./,                            // Current network (0.0.0.0/8)
+  /^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./, // Carrier-grade NAT (100.64.0.0/10)
+  /^192\.0\.0\./,                    // IETF Protocol Assignments (192.0.0.0/24)
+  /^192\.0\.2\./,                    // TEST-NET-1 (192.0.2.0/24)
+  /^198\.51\.100\./,                 // TEST-NET-2 (198.51.100.0/24)
+  /^203\.0\.113\./,                  // TEST-NET-3 (203.0.113.0/24)
+  /^::1$/,                           // IPv6 loopback
+  /^fc00:/i,                         // IPv6 unique local
+  /^fe80:/i,                         // IPv6 link-local
+];
+
+/**
+ * Common localhost hostnames
+ */
+const LOCALHOST_HOSTNAMES = new Set([
+  'localhost',
+  'localhost.localdomain',
+  '0.0.0.0',
+  '::1',
+  '[::1]',
+]);
+
+/**
+ * Check if a URL points to an internal/private address (SSRF protection)
+ * @returns true if the URL is safe (external), false if internal
+ */
+export function isExternalUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    const hostname = url.hostname.toLowerCase();
+
+    // Check localhost names
+    if (LOCALHOST_HOSTNAMES.has(hostname)) {
+      return false;
+    }
+
+    // Check private IP patterns
+    for (const pattern of PRIVATE_IP_PATTERNS) {
+      if (pattern.test(hostname)) {
+        return false;
+      }
+    }
+
+    return true;
+  } catch {
+    // Invalid URL - treat as unsafe
+    return false;
+  }
 }
 
 // ============================================================================
@@ -255,6 +337,15 @@ export async function registerGuildAgent(
     };
   }
 
+  // SSRF protection: Block internal/private IP addresses (unless allowLocal is set)
+  if (!allowLocal && !isExternalUrl(url)) {
+    return {
+      ok: false,
+      error: 'Invalid URL: internal/private addresses are not allowed',
+      statusCode: 400,
+    };
+  }
+
   // Fetch AgentCard
   const cardResult: FetchAgentCardResult = await fetchAgentCard(url, {
     allowLocal,
@@ -309,17 +400,18 @@ export async function registerGuildAgent(
     };
   }
 
-  // Generate token
+  // Generate token with TTL
   const token = generateToken();
   const tokenHash = hashToken(token);
-  const now = new Date().toISOString();
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + TOKEN_TTL_MS);
 
   // Store token by hash for O(1) lookup
   guildTokensByHash.set(tokenHash, {
     agentId,
     name: agentName,
-    createdAt: now,
-    // No expiration for MVP
+    createdAt: now.toISOString(),
+    expiresAt: expiresAt.toISOString(),
   });
 
   // Emit 'registered' event
@@ -342,6 +434,7 @@ export async function registerGuildAgent(
       agent_id: agentId,
       token,
       name: agentName,
+      expires_at: expiresAt.toISOString(),
     },
   };
 }

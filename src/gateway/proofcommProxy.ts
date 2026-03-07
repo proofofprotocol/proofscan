@@ -1332,7 +1332,7 @@ export function registerProofCommRoutes(
     });
 
     if (!result.ok) {
-      return reply.code(result.statusCode || 500).send({
+      return reply.code(result.statusCode ?? 500).send({
         error: {
           code: 'REGISTRATION_FAILED',
           message: result.error,

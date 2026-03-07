@@ -10,6 +10,7 @@ import {
   isApiKeyConfigured,
   getGuildTokenCount,
   cleanupGuildTokens,
+  isExternalUrl,
 } from '../register.js';
 
 describe('ProofGuild Registration', () => {
@@ -64,6 +65,54 @@ describe('ProofGuild Registration', () => {
   describe('cleanupGuildTokens', () => {
     it('should not throw when called', () => {
       expect(() => cleanupGuildTokens()).not.toThrow();
+    });
+  });
+
+  describe('isExternalUrl (SSRF protection)', () => {
+    it('should return true for external URLs', () => {
+      expect(isExternalUrl('https://example.com')).toBe(true);
+      expect(isExternalUrl('https://api.openai.com/v1')).toBe(true);
+      expect(isExternalUrl('http://github.com')).toBe(true);
+    });
+
+    it('should return false for localhost', () => {
+      expect(isExternalUrl('http://localhost:8080')).toBe(false);
+      expect(isExternalUrl('http://localhost')).toBe(false);
+      expect(isExternalUrl('https://localhost.localdomain')).toBe(false);
+    });
+
+    it('should return false for loopback IP (127.x.x.x)', () => {
+      expect(isExternalUrl('http://127.0.0.1:8080')).toBe(false);
+      expect(isExternalUrl('http://127.1.2.3')).toBe(false);
+    });
+
+    it('should return false for private Class A (10.x.x.x)', () => {
+      expect(isExternalUrl('http://10.0.0.1')).toBe(false);
+      expect(isExternalUrl('http://10.255.255.255')).toBe(false);
+    });
+
+    it('should return false for private Class B (172.16-31.x.x)', () => {
+      expect(isExternalUrl('http://172.16.0.1')).toBe(false);
+      expect(isExternalUrl('http://172.31.255.255')).toBe(false);
+    });
+
+    it('should return false for private Class C (192.168.x.x)', () => {
+      expect(isExternalUrl('http://192.168.0.1')).toBe(false);
+      expect(isExternalUrl('http://192.168.1.1')).toBe(false);
+    });
+
+    it('should return false for link-local (169.254.x.x)', () => {
+      expect(isExternalUrl('http://169.254.0.1')).toBe(false);
+      expect(isExternalUrl('http://169.254.169.254')).toBe(false);
+    });
+
+    it('should return false for IPv6 loopback', () => {
+      expect(isExternalUrl('http://[::1]:8080')).toBe(false);
+    });
+
+    it('should return false for invalid URLs', () => {
+      expect(isExternalUrl('not-a-url')).toBe(false);
+      expect(isExternalUrl('')).toBe(false);
     });
   });
 });

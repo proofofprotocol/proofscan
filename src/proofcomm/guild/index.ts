@@ -16,4 +16,5 @@ export {
   validateGuildToken,
   getGuildTokenCount,
   cleanupGuildTokens,
+  isExternalUrl,
 } from './register.js';
