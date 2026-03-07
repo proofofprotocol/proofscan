@@ -4,6 +4,7 @@
  * Phase 8.2: Bearer Token Authentication
  * Phase 8.3: MCP Proxy
  * Phase 8.4: A2A Proxy
+ * Phase 4: ProofPortal integration
  */
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -16,6 +17,7 @@ import { createA2AProxyHandler, A2AProxyRequest } from './a2aProxy.js';
 import { createAuditLogger, AuditLogger } from './audit.js';
 import { sseStreamHandler, getSseManager } from './sse.js';
 import { registerProofCommRoutes } from './proofcommProxy.js';
+import { registerPortalRoutes } from '../proofportal/index.js';
 
 export interface GatewayServer {
   /** Fastify instance */
@@ -206,6 +208,11 @@ export function createGatewayServer(
     });
 
     log.info({ event: 'proofcomm_routes_enabled', configDir });
+
+    // ProofPortal routes (Phase 4)
+    // Read-only SSE-based visualization UI
+    registerPortalRoutes(server);
+    log.info({ event: 'portal_routes_enabled', path: '/portal' });
   }
 
   // Graceful shutdown handlers
