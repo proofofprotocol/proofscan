@@ -17,12 +17,15 @@ import { GatewayLimits } from './config.js';
 import { TargetsStore } from '../db/targets-store.js';
 import { DocumentsStore } from '../db/documents-store.js';
 import { SkillsStore } from '../db/skills-store.js';
+import { SpacesStore } from '../db/spaces-store.js';
 import { SkillRegistry } from '../proofcomm/skill-registry.js';
+import { SpaceManager, type SpaceBroadcastRequest } from '../proofcomm/spaces/index.js';
 import { createA2AClient } from '../a2a/client.js';
 import type { A2AMessage, TaskState } from '../a2a/types.js';
 import { ErrorCodes } from './mcpProxy.js';
 import { parseAgentField, isDocumentTarget, isSpaceTarget, isSkillTarget, VALID_ID_PATTERN } from '../proofcomm/routing.js';
 import { DocumentResponder, type DocumentMessage } from '../proofcomm/document/index.js';
+import { createAuditLogger, type AuditLogger } from './audit.js';
 
 /**
  * A2A Proxy request body
@@ -387,6 +390,107 @@ async function handleDocumentRequest(
 }
 
 /**
+ * Handle space request (space/ prefix routing)
+ *
+ * Space routing implements G3 (Representative Event) pattern:
+ * - Single event emitted for the broadcast operation
+ * - Individual deliveries to agents have no audit
+ *
+ * Request format (pure A2A Message, no method/params):
+ * { agent: "space/<space_id>", message: { role: "user", parts: [...] } }
+ *
+ * NOTE: The gateway client_id is used as the senderAgentId for membership validation.
+ * This conflates gateway client identity with A2A agent identity. For broadcast to work,
+ * the client_id must be enrolled as a member of the target space (via the join API).
+ */
+async function handleSpaceRequest(
+  spaceId: string,
+  method: string,
+  params: unknown,
+  spaceManager: SpaceManager,
+  requestId: string,
+  clientId: string,
+  traceId: string | undefined,
+  reply: FastifyReply
+): Promise<A2AProxyResponse> {
+
+  // Only message/send is supported for spaces
+  if (method !== 'message/send') {
+    return reply.code(400).send(
+      createErrorResponse(
+        ErrorCodes.BAD_REQUEST,
+        `Method not supported for spaces: ${method}. Use message/send.`,
+        requestId
+      )
+    );
+  }
+
+  // Validate params structure (space existence and membership validated by broadcastToSpace)
+  if (!params || typeof params !== 'object' || !('message' in params)) {
+    return reply.code(400).send(
+      createErrorResponse(ErrorCodes.BAD_REQUEST, 'Invalid params: message field required', requestId)
+    );
+  }
+
+  const messageParams = params as { message: string | A2AMessage };
+  const message = messageParams.message;
+
+  // Build broadcast request
+  const broadcastRequest: SpaceBroadcastRequest = {
+    spaceId,
+    senderAgentId: clientId,
+    message: typeof message === 'string'
+      ? { role: 'user', parts: [{ text: message }] }
+      : message,
+  };
+
+  // Dispatch function for broadcasting to individual agents
+  // Phase 9.3 MVP: Records intent but doesn't actually send (future: real A2A dispatch)
+  const dispatchToAgent: (agentId: string, message: A2AMessage) => Promise<{ success: boolean; error?: string }> =
+    async (_agentId, _message) => {
+      // TODO: Phase 9.4 - Implement actual A2A message delivery to agents.
+      // Note: Until real delivery is implemented, the delivery_failed event path
+      // in SpaceManager.broadcastToSpace is unreachable in production (tested via mocks).
+      return { success: true };
+    };
+
+  // Broadcast to space (validates space existence and sender membership internally)
+  const result = await spaceManager.broadcastToSpace(
+    broadcastRequest,
+    dispatchToAgent,
+    {
+      requestId,
+      traceId,
+      clientId,
+    },
+  );
+
+  if (!result.ok) {
+    const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
+      : result.error.code === 'NOT_MEMBER' ? 403
+      : 400;
+    return reply.code(statusCode).send(
+      createErrorResponse(result.error.code, result.error.message, requestId)
+    );
+  }
+
+  // Return broadcast result
+  // Phase 9.3 MVP: Intent is recorded but messages are not actually delivered yet
+  // Phase 9.4 will implement actual A2A message delivery (status will change to "delivered")
+  return {
+    result: {
+      space_id: spaceId,
+      status: 'intent_recorded',
+      recipients: result.value.recipientCount,
+      // Note: delivered/failed counts are 0 in intent_recorded mode
+      // They will reflect actual delivery results in Phase 9.4
+      delivered: 0,
+      failed: 0,
+    },
+  };
+}
+
+/**
  * A2A Proxy handler result
  */
 export interface A2AProxyHandlerResult {
@@ -403,6 +507,9 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
   const documentsStore = new DocumentsStore(configDir);
   const skillsStore = new SkillsStore(configDir);
   const skillRegistry = new SkillRegistry(skillsStore);
+  const spacesStore = new SpacesStore(configDir);
+  const auditLogger = createAuditLogger(configDir);
+  const spaceManager = new SpaceManager(spacesStore, auditLogger);
   const queueManager = new ConnectorQueueManager<
     { method: string; params: unknown; agentId: string },
     { result?: unknown; error?: { code: number; message: string } }
@@ -522,14 +629,17 @@ export function createA2AProxyHandler(options: A2AProxyOptions): A2AProxyHandler
       );
     }
 
-    // 2b. Handle space targets (G2: space/ prefix routing) - Not yet implemented
+    // 2b. Handle space targets (G2: space/ prefix routing)
     if (isSpaceTarget(routingTarget)) {
-      return reply.code(501).send(
-        createErrorResponse(
-          ErrorCodes.NOT_IMPLEMENTED,
-          `Space routing is not yet implemented: ${routingTarget.original}`,
-          requestId
-        )
+      return handleSpaceRequest(
+        routingTarget.id,
+        method,
+        params,
+        spaceManager,
+        requestId,
+        auth.client_id,
+        request.headers['x-trace-id'] as string | undefined,
+        reply
       );
     }
 

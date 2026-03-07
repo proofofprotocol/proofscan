@@ -311,3 +311,55 @@ export interface SkillSearchResult {
   skill: SkillCacheEntry;
   score: number;  // Higher is more relevant
 }
+
+// ==================== Spaces (Phase 9.3: Autonomous Spaces) ====================
+
+// Space visibility type
+export type SpaceVisibility = 'public' | 'private';
+
+// Space membership role
+export type MemberRole = 'member' | 'moderator' | 'observer';
+
+// Space table (DB record, snake_case)
+export interface Space {
+  space_id: string;
+  name: string;
+  description: string | null;
+  visibility: SpaceVisibility;
+  portal_visible: number;  // 0 or 1 (SQLite boolean)
+  created_at: string;      // ISO8601
+  updated_at: string | null; // ISO8601, set on update
+  creator_agent_id: string | null;
+  config_json: string | null;
+}
+
+// Space membership table (DB record, snake_case)
+export interface SpaceMembership {
+  space_id: string;
+  agent_id: string;
+  role: MemberRole;
+  joined_at: string;       // ISO8601
+  left_at: string | null;  // ISO8601, soft delete marker
+}
+
+// Parsed space entry (for external use, camelCase)
+export interface SpaceEntry {
+  spaceId: string;
+  name: string;
+  description?: string;
+  visibility: SpaceVisibility;
+  portalVisible: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  creatorAgentId?: string;
+  config?: Record<string, unknown>;
+}
+
+// Parsed space membership entry (for external use, camelCase)
+export interface SpaceMembershipEntry {
+  spaceId: string;
+  agentId: string;
+  role: MemberRole;
+  joinedAt: string;
+  leftAt?: string;
+}

@@ -10,9 +10,10 @@
  * Phase 8.5: Schema version 9 with gateway_events table for audit logging
  * Phase 9.0: Schema version 11 with ProofComm events, resident_documents table, and UNIQUE constraint on document_path
  * Phase 9.2: Schema version 12 with skills_cache table for Skill Routing
+ * Phase 9.3: Schema version 13 with spaces and space_memberships tables for Autonomous Spaces
  */
 
-export const EVENTS_DB_VERSION = 12;
+export const EVENTS_DB_VERSION = 13;
 export const PROOFS_DB_VERSION = 2;
 
 // events.db schema
@@ -260,6 +261,38 @@ CREATE TABLE IF NOT EXISTS skills_cache (
 CREATE INDEX IF NOT EXISTS idx_skills_cache_agent ON skills_cache(agent_id);
 CREATE INDEX IF NOT EXISTS idx_skills_cache_name ON skills_cache(name);
 CREATE INDEX IF NOT EXISTS idx_skills_cache_expires ON skills_cache(expires_at);
+
+-- Spaces table (Phase 9.3: Autonomous Spaces)
+-- space_id is ULID for ordering and uniqueness
+CREATE TABLE IF NOT EXISTS spaces (
+  space_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  visibility TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
+  portal_visible INTEGER DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  creator_agent_id TEXT,
+  config_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_spaces_visibility ON spaces(visibility);
+CREATE INDEX IF NOT EXISTS idx_spaces_creator ON spaces(creator_agent_id);
+
+-- Space memberships table (Phase 9.3: Autonomous Spaces)
+-- Tracks which agents are members of which spaces
+-- Uses soft delete (left_at) to preserve history
+CREATE TABLE IF NOT EXISTS space_memberships (
+  space_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member', 'moderator', 'observer')),
+  joined_at TEXT NOT NULL,
+  left_at TEXT,
+  PRIMARY KEY (space_id, agent_id),
+  FOREIGN KEY (space_id) REFERENCES spaces(space_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_space_memberships_agent ON space_memberships(agent_id);
 `;
 
 /**
@@ -661,6 +694,42 @@ CREATE INDEX IF NOT EXISTS idx_skills_cache_agent ON skills_cache(agent_id);
 CREATE INDEX IF NOT EXISTS idx_skills_cache_name ON skills_cache(name);
 
 CREATE INDEX IF NOT EXISTS idx_skills_cache_expires ON skills_cache(expires_at);
+`;
+
+/**
+ * Migration from version 12 to version 13
+ * Phase 9.3: Adds spaces and space_memberships tables for Autonomous Spaces
+ */
+export const EVENTS_DB_MIGRATION_12_TO_13 = `
+-- Create spaces table
+CREATE TABLE IF NOT EXISTS spaces (
+  space_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  visibility TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
+  portal_visible INTEGER DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  creator_agent_id TEXT,
+  config_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_spaces_visibility ON spaces(visibility);
+
+CREATE INDEX IF NOT EXISTS idx_spaces_creator ON spaces(creator_agent_id);
+
+-- Create space_memberships table
+CREATE TABLE IF NOT EXISTS space_memberships (
+  space_id TEXT NOT NULL,
+  agent_id TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member', 'moderator', 'observer')),
+  joined_at TEXT NOT NULL,
+  left_at TEXT,
+  PRIMARY KEY (space_id, agent_id),
+  FOREIGN KEY (space_id) REFERENCES spaces(space_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_space_memberships_agent ON space_memberships(agent_id);
 `;
 
 // proofs.db schema (version 2: added plans and runs tables)

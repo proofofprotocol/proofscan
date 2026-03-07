@@ -18,8 +18,12 @@
  * - Skill cache (db/skills-store.ts)
  * - Skill registry with Pull-type caching (skill-registry.ts)
  *
+ * Phase 9.3: Autonomous Spaces
+ * - space/ prefix routing (routing.ts)
+ * - Space store (db/spaces-store.ts)
+ * - Space manager with G3 broadcast (spaces/space-manager.ts)
+ *
  * Future Phases:
- * - Phase 3: Autonomous Spaces
  * - Phase 4: ProofPortal MVP
  */
 
@@ -128,3 +132,17 @@ export {
   DocumentMemoryManager,
   DocumentResponder,
 } from './document/index.js';
+
+// ==================== Spaces (Phase 9.3) ====================
+export {
+  // Types
+  type SpaceError,
+  type SpaceErrorCode,
+  type SpaceResult,
+  type BroadcastResult,
+  type SpaceBroadcastRequest,
+  type DispatchToAgentFn,
+  type MessagePart as SpaceMessagePart,  // Alias to avoid conflict with document MessagePart
+  // Classes
+  SpaceManager,
+} from './spaces/index.js';

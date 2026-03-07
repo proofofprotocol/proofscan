@@ -103,10 +103,11 @@ export function buildA2APermission(
  * Examples:
  *   - "proofcomm:skills:write:agent-1" - write skills for agent-1
  *   - "proofcomm:skills:read" - read any skills
+ *   - "proofcomm:spaces:write:space-1" - write to specific space
  *   - "proofcomm:*" - full proofcomm access
  */
 export function buildProofCommPermission(
-  resource: 'skills' | 'documents',
+  resource: 'skills' | 'documents' | 'spaces',
   action: 'read' | 'write',
   target?: string
 ): string {

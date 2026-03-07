@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { mkdirSync, statSync } from 'fs';
-import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, EVENTS_DB_MIGRATION_5_TO_6_DATA, EVENTS_DB_MIGRATION_6_TO_7, EVENTS_DB_MIGRATION_7_TO_8, EVENTS_DB_MIGRATION_8_TO_9, EVENTS_DB_MIGRATION_9_TO_10, EVENTS_DB_MIGRATION_10_TO_11, EVENTS_DB_MIGRATION_11_TO_12, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
+import { EVENTS_DB_SCHEMA, PROOFS_DB_SCHEMA, EVENTS_DB_VERSION, PROOFS_DB_VERSION, EVENTS_DB_MIGRATION_1_TO_2, EVENTS_DB_MIGRATION_2_TO_3, EVENTS_DB_MIGRATION_3_TO_4, EVENTS_DB_MIGRATION_4_TO_5, EVENTS_DB_MIGRATION_5_TO_6, EVENTS_DB_MIGRATION_5_TO_6_DATA, EVENTS_DB_MIGRATION_6_TO_7, EVENTS_DB_MIGRATION_7_TO_8, EVENTS_DB_MIGRATION_8_TO_9, EVENTS_DB_MIGRATION_9_TO_10, EVENTS_DB_MIGRATION_10_TO_11, EVENTS_DB_MIGRATION_11_TO_12, EVENTS_DB_MIGRATION_12_TO_13, PROOFS_DB_MIGRATION_1_TO_2 } from './schema.js';
 import { getDefaultConfigDir } from '../utils/config-path.js';
 
 let eventsDb: Database.Database | null = null;
@@ -436,6 +436,12 @@ function runEventsMigrations(db: Database.Database, fromVersion: number): void {
   // Note: Uses IF NOT EXISTS, so no per-statement error handling needed
   if (fromVersion < 12) {
     db.exec(EVENTS_DB_MIGRATION_11_TO_12);
+  }
+
+  // Migration 12 → 13: Add spaces and space_memberships tables (Phase 9.3)
+  // Note: Uses IF NOT EXISTS, so no per-statement error handling needed
+  if (fromVersion < 13) {
+    db.exec(EVENTS_DB_MIGRATION_12_TO_13);
   }
 }
 
