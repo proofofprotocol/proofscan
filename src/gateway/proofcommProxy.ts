@@ -31,6 +31,8 @@ import type { AuditLogger } from './audit.js';
 import type { SpaceVisibility, MemberRole } from '../db/types.js';
 import {
   registerGuildAgent,
+  validateApiKey,
+  isApiKeyConfigured,
   type GuildRegisterRequest,
 } from '../proofcomm/guild/index.js';
 
@@ -1278,11 +1280,11 @@ export function registerProofCommRoutes(
   // Guild Registration (Phase 5: ProofGuild)
   // ============================================================================
 
-  // POST /proofcomm/guild/register - Self-register an external agent
+  // POST /proofcomm/guild/register - Register an external agent (requires API key)
   fastify.post<{
     Body: GuildRegisterRequest;
   }>('/proofcomm/guild/register', {
-    // Note: No preHandler auth - this endpoint allows unauthenticated registration
+    // Requires GUILD_API_KEY authentication
     schema: {
       body: {
         type: 'object',
@@ -1294,6 +1296,27 @@ export function registerProofCommRoutes(
       },
     },
   }, async (request, reply) => {
+    // Check if API key is configured
+    if (!isApiKeyConfigured()) {
+      return reply.code(503).send({
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Guild registration is not enabled. Set GUILD_API_KEY to enable.',
+        },
+      });
+    }
+
+    // Validate API key
+    const authHeader = request.headers.authorization;
+    if (!validateApiKey(authHeader)) {
+      return reply.code(401).send({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid or missing API key. Use Authorization: Bearer <GUILD_API_KEY>',
+        },
+      });
+    }
+
     const clientIp = request.ip || 'unknown';
 
     const result = await registerGuildAgent(request.body, {

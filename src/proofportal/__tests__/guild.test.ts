@@ -16,7 +16,6 @@ import {
   SPEAKING_THRESHOLD_MS,
   ACTIVE_THRESHOLD_MS,
   type AgentState,
-  type SpaceState,
   type PortalSseEvent,
 } from '../types.js';
 
@@ -163,9 +162,8 @@ describe('ProofGuild - Guild Role', () => {
         lastSeenAt: Date.now(),
         experience: 0,
       };
-      const spaces = new Map<string, SpaceState>();
 
-      expect(getGuildRole(agent, spaces)).toBe('visitor');
+      expect(getGuildRole(agent)).toBe('visitor');
     });
 
     it('should return member if has space membership', () => {
@@ -177,9 +175,8 @@ describe('ProofGuild - Guild Role', () => {
         lastSeenAt: Date.now(),
         experience: 0,
       };
-      const spaces = new Map<string, SpaceState>();
 
-      expect(getGuildRole(agent, spaces)).toBe('member');
+      expect(getGuildRole(agent)).toBe('member');
     });
   });
 });
@@ -201,9 +198,8 @@ describe('ProofGuild - Guild Member Derivation', () => {
         lastMessagePreview: 'Hello world',
         lastMessageAt: now - 2000,
       };
-      const spaces = new Map<string, SpaceState>();
 
-      const member = toGuildMember(agent, spaces, now);
+      const member = toGuildMember(agent, now);
 
       expect(member.agentId).toBe('test-agent-123');
       expect(member.name).toBe('TestBot');
@@ -227,9 +223,8 @@ describe('ProofGuild - Guild Member Derivation', () => {
         lastSeenAt: now - 1000,
         experience: 0,
       };
-      const spaces = new Map<string, SpaceState>();
 
-      const member = toGuildMember(agent, spaces, now);
+      const member = toGuildMember(agent, now);
 
       expect(member.name).toBe('agent-abc-123');
     });

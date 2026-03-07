@@ -2,7 +2,7 @@
  * ProofGuild Module
  * Phase 5: ProofGuild
  *
- * Agent self-registration and Guild membership management.
+ * Agent registration with API key authentication.
  */
 
 export {
@@ -11,6 +11,8 @@ export {
   type GuildRegisterResult,
   type RegisterAgentOptions,
   registerGuildAgent,
+  validateApiKey,
+  isApiKeyConfigured,
   validateGuildToken,
   getGuildTokenCount,
   cleanupGuildTokens,

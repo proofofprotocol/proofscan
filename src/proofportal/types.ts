@@ -447,10 +447,9 @@ export function getMembershipStatus(
 
 /**
  * Get highest role from space membership
- * Note: This requires SpaceState to track roles, which is a simplification.
- * For now, we return 'member' for any space membership.
+ * For MVP, we return 'member' for any space membership.
  */
-export function getGuildRole(agent: AgentState, spaces: Map<string, SpaceState>): GuildRole {
+export function getGuildRole(agent: AgentState): GuildRole {
   if (agent.spaceIds.size === 0) {
     return 'visitor';
   }
@@ -464,13 +463,12 @@ export function getGuildRole(agent: AgentState, spaces: Map<string, SpaceState>)
  */
 export function toGuildMember(
   agent: AgentState,
-  spaces: Map<string, SpaceState>,
   now: number
 ): GuildMember {
   return {
     agentId: agent.agentId,
     name: agent.name ?? agent.agentId,
-    role: getGuildRole(agent, spaces),
+    role: getGuildRole(agent),
     membershipStatus: getMembershipStatus(agent, now),
     level: calcLevel(agent.experience),
     experience: agent.experience,
@@ -492,7 +490,7 @@ export function deriveGuildState(state: PortalState, now: number): GuildState {
 
   // Derive members from agents
   for (const agent of state.agents.values()) {
-    members.set(agent.agentId, toGuildMember(agent, state.spaces, now));
+    members.set(agent.agentId, toGuildMember(agent, now));
   }
 
   // Derive rooms from spaces

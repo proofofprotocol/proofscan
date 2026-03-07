@@ -1,9 +1,11 @@
 /**
- * ProofGuild - Agent Self-Registration
+ * ProofGuild - Agent Registration (API Key Protected)
  * Phase 5: ProofGuild
  *
- * Allows external agents (OpenClaw, PicoClaw, etc.) to self-register
- * with the Guild and receive a Bearer token for subsequent API calls.
+ * Allows external agents (OpenClaw, PicoClaw, etc.) to register
+ * with the Guild using API key authentication.
+ *
+ * Security: Registration requires GUILD_API_KEY for authentication.
  */
 
 import { randomBytes, createHmac } from 'crypto';
@@ -56,10 +58,45 @@ export interface GuildRegisterResult {
  */
 interface TokenEntry {
   agentId: string;
-  tokenHash: string;
   name: string;
   createdAt: string;
   expiresAt?: string;
+}
+
+// ============================================================================
+// API Key Authentication
+// ============================================================================
+
+/**
+ * API key for guild registration (required)
+ */
+const GUILD_API_KEY = process.env.GUILD_API_KEY;
+
+/**
+ * Validate API key from Authorization header
+ * @returns true if valid, false otherwise
+ */
+export function validateApiKey(authHeader: string | undefined): boolean {
+  if (!GUILD_API_KEY) {
+    // No API key configured - reject all requests
+    return false;
+  }
+  if (!authHeader) {
+    return false;
+  }
+  // Expected format: "Bearer <key>"
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return false;
+  }
+  return match[1] === GUILD_API_KEY;
+}
+
+/**
+ * Check if API key is configured
+ */
+export function isApiKeyConfigured(): boolean {
+  return !!GUILD_API_KEY;
 }
 
 // ============================================================================
@@ -67,15 +104,20 @@ interface TokenEntry {
 // ============================================================================
 
 /**
- * In-memory token store for registered agents
+ * In-memory token store - keyed by token hash for O(1) lookup
  * Note: This is lost on server restart. For production, consider persisting to DB.
  */
-const guildTokens = new Map<string, TokenEntry>();
+const guildTokensByHash = new Map<string, TokenEntry>();
 
 /**
- * Secret for signing tokens (should be set via environment variable)
+ * Secret for signing tokens (must be set via environment variable in production)
  */
 const GUILD_TOKEN_SECRET = process.env.GUILD_TOKEN_SECRET || 'proofguild-dev-secret';
+
+// Production check for token secret
+if (!process.env.GUILD_TOKEN_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('[ProofGuild] WARNING: GUILD_TOKEN_SECRET not set in production!');
+}
 
 /**
  * Generate a random token
@@ -94,28 +136,32 @@ function hashToken(token: string): string {
 }
 
 /**
- * Validate a token and return the associated agent ID
+ * Validate a token and return the associated agent ID (O(1) lookup)
  */
 export function validateGuildToken(token: string): string | null {
+  if (!token) return null;
+
   const tokenHash = hashToken(token);
-  for (const [agentId, entry] of guildTokens) {
-    if (entry.tokenHash === tokenHash) {
-      // Check expiration
-      if (entry.expiresAt && new Date(entry.expiresAt) < new Date()) {
-        guildTokens.delete(agentId);
-        return null;
-      }
-      return agentId;
-    }
+  const entry = guildTokensByHash.get(tokenHash);
+
+  if (!entry) {
+    return null;
   }
-  return null;
+
+  // Check expiration
+  if (entry.expiresAt && new Date(entry.expiresAt) < new Date()) {
+    guildTokensByHash.delete(tokenHash);
+    return null;
+  }
+
+  return entry.agentId;
 }
 
 /**
- * Get all registered guild tokens (for debugging)
+ * Get all registered guild tokens count (for debugging)
  */
 export function getGuildTokenCount(): number {
-  return guildTokens.size;
+  return guildTokensByHash.size;
 }
 
 // ============================================================================
@@ -164,6 +210,8 @@ export interface RegisterAgentOptions {
 
 /**
  * Register an external agent with the Guild
+ *
+ * Prerequisites: API key must be validated before calling this function.
  *
  * Flow:
  * 1. Rate limit check
@@ -266,10 +314,9 @@ export async function registerGuildAgent(
   const tokenHash = hashToken(token);
   const now = new Date().toISOString();
 
-  // Store token
-  guildTokens.set(agentId, {
+  // Store token by hash for O(1) lookup
+  guildTokensByHash.set(tokenHash, {
     agentId,
-    tokenHash,
     name: agentName,
     createdAt: now,
     // No expiration for MVP
@@ -306,9 +353,9 @@ export function cleanupGuildTokens(): void {
   const now = Date.now();
 
   // Clean up expired tokens
-  for (const [agentId, entry] of guildTokens) {
+  for (const [hash, entry] of guildTokensByHash) {
     if (entry.expiresAt && new Date(entry.expiresAt).getTime() < now) {
-      guildTokens.delete(agentId);
+      guildTokensByHash.delete(hash);
     }
   }
 
@@ -319,3 +366,7 @@ export function cleanupGuildTokens(): void {
     }
   }
 }
+
+// Start periodic cleanup (every 5 minutes)
+const cleanupInterval = setInterval(cleanupGuildTokens, 5 * 60 * 1000);
+cleanupInterval.unref(); // Don't block process exit
