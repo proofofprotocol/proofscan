@@ -198,6 +198,10 @@ function hashToken(token: string): string {
 
 /**
  * Validate a token and return the associated agent ID (O(1) lookup)
+ *
+ * Note: This function is exported for Phase 6 when external agents will
+ * authenticate to guild endpoints (e.g., join spaces, send messages).
+ * Currently, registration returns a token but no endpoint consumes it yet.
  */
 export function validateGuildToken(token: string): string | null {
   if (!token) return null;
@@ -321,6 +325,12 @@ export function isExternalUrl(urlString: string): boolean {
 
 /**
  * Simple in-memory rate limiter
+ *
+ * Note: In-memory state is not shared across processes/workers.
+ * If running behind a proxy/load balancer, ensure:
+ * - Fastify `trustProxy` is configured correctly
+ * - `x-forwarded-for` headers are parsed to get real client IP
+ * - Otherwise all requests share one rate limit bucket (the proxy IP)
  */
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute

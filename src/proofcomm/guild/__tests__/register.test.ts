@@ -19,7 +19,13 @@ vi.mock('../../../a2a/agent-card.js', () => ({
   fetchAgentCard: vi.fn(),
 }));
 
+// Mock emitSpaceEvent
+vi.mock('../../events.js', () => ({
+  emitSpaceEvent: vi.fn(),
+}));
+
 import { fetchAgentCard } from '../../../a2a/agent-card.js';
+import { emitSpaceEvent } from '../../events.js';
 
 describe('ProofGuild Registration', () => {
   describe('validateGuildToken', () => {
@@ -421,6 +427,34 @@ describe('ProofGuild Registration', () => {
         }),
         expect.objectContaining({
           id: expect.any(String),
+        })
+      );
+    });
+
+    it('should emit registered audit event on success', async () => {
+      const testUrl = 'https://example.com/audit-test-agent';
+      vi.mocked(fetchAgentCard).mockResolvedValue({
+        ok: true,
+        agentCard: { name: 'Audit Test Agent', url: testUrl, version: '1.0' },
+      });
+      mockTargetsStore.add.mockReturnValue({ id: 'audit-test-agent-id' });
+
+      // Use unique IP to avoid rate limit from previous tests
+      const options = { ...baseOptions, clientIp: '198.51.100.101' };
+      const result = await registerGuildAgent({ url: testUrl }, options);
+
+      expect(result.ok).toBe(true);
+      expect(vi.mocked(emitSpaceEvent)).toHaveBeenCalledWith(
+        mockAuditLogger,
+        'registered',
+        expect.objectContaining({
+          agent_id: expect.any(String),
+          agent_name: 'Audit Test Agent',
+        }),
+        expect.objectContaining({
+          requestId: 'test-req-id',
+          clientId: 'test-client',
+          target: expect.any(String),
         })
       );
     });
