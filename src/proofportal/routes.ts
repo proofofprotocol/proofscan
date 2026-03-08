@@ -44,7 +44,8 @@ export function registerPortalRoutes(
   const securityHeaders = {
     'Cache-Control': 'no-store',
     // Allow inline scripts (required for SSE client) but restrict other sources
-    'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'",
+    // connect-src allows SSE connections from any origin (needed for IP-based access)
+    'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src *",
   };
 
   // GET /portal - Main dashboard
