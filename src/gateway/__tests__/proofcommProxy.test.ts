@@ -3,7 +3,7 @@
  * Phase 9.2: Skill Routing
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
 import { registerProofCommRoutes } from '../proofcommProxy.js';
 import { tmpdir } from 'os';
@@ -14,6 +14,8 @@ import { TargetsStore } from '../../db/targets-store.js';
 import { SkillsStore } from '../../db/skills-store.js';
 import { createAuditLogger } from '../audit.js';
 import { closeAllDbs } from '../../db/connection.js';
+import { SpacesStore } from '../../db/spaces-store.js';
+import * as guildModule from '../../proofcomm/guild/index.js';
 
 describe('ProofComm Proxy - Skill Endpoints', () => {
   let server: FastifyInstance;
@@ -1074,6 +1076,166 @@ describe('ProofComm Proxy - Space Endpoints', () => {
       });
 
       expect(response.statusCode).toBe(403);
+    });
+  });
+
+  describe('POST /proofcomm/spaces/:space_id/broadcast', () => {
+    it('should return 401 without authorization header', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/broadcast',
+        payload: {
+          message: { parts: [{ text: 'Hello!' }] },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('should return 401 with invalid token', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/broadcast',
+        headers: {
+          authorization: 'Bearer invalid-token-12345',
+        },
+        payload: {
+          message: { parts: [{ text: 'Hello!' }] },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('INVALID_TOKEN');
+    });
+
+    // Schema validation tests: Fastify's ajv validates the request body BEFORE
+    // the handler runs, so 400 is returned before the auth check. The token
+    // value doesn't matter here because the request never reaches the handler.
+    it('should return 400 with invalid message format', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/broadcast',
+        headers: {
+          authorization: 'Bearer some-token',
+        },
+        payload: {
+          message: { invalid: 'format' },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 with empty parts array', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/broadcast',
+        headers: {
+          authorization: 'Bearer some-token',
+        },
+        payload: {
+          message: { parts: [] },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    describe('with valid guild token', () => {
+      let spacesStore: SpacesStore;
+      let testSpaceId: string;
+      const testAgentId = 'test-guild-agent';
+      const validToken = 'valid-test-token-12345';
+
+      beforeEach(() => {
+        // Mock validateGuildToken to return our test agent ID
+        vi.spyOn(guildModule, 'validateGuildToken').mockImplementation((token: string) => {
+          if (token === validToken) {
+            return testAgentId;
+          }
+          return null;
+        });
+
+        // Set up spaces store and create a test space
+        spacesStore = new SpacesStore(configDir);
+        const space = spacesStore.create({
+          name: 'Test Broadcast Space',
+          visibility: 'private',
+          creatorAgentId: testAgentId,
+        });
+        testSpaceId = space.spaceId;
+        // Add the test agent as a member (SpacesStore.create doesn't auto-join)
+        spacesStore.join(testSpaceId, testAgentId, 'moderator');
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('should return 200 for successful broadcast', async () => {
+        const response = await server.inject({
+          method: 'POST',
+          url: `/proofcomm/spaces/${testSpaceId}/broadcast`,
+          headers: {
+            authorization: `Bearer ${validToken}`,
+          },
+          payload: {
+            message: { parts: [{ text: 'Hello space members!' }] },
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.payload);
+        expect(body).toHaveProperty('delivered');
+        expect(body).toHaveProperty('failed');
+        expect(body).toHaveProperty('recipient_count');
+        expect(body).toHaveProperty('message_id');
+      });
+
+      it('should return 404 when space does not exist', async () => {
+        const nonExistentSpaceId = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+        const response = await server.inject({
+          method: 'POST',
+          url: `/proofcomm/spaces/${nonExistentSpaceId}/broadcast`,
+          headers: {
+            authorization: `Bearer ${validToken}`,
+          },
+          payload: {
+            message: { parts: [{ text: 'Hello!' }] },
+          },
+        });
+
+        expect(response.statusCode).toBe(404);
+        const body = JSON.parse(response.payload);
+        expect(body.error.code).toBe('SPACE_NOT_FOUND');
+      });
+
+      it('should return 403 when sender is not a space member', async () => {
+        // Create a space owned by a different agent
+        const otherSpace = spacesStore.create({
+          name: 'Other Agent Space',
+          visibility: 'private',
+          creatorAgentId: 'other-agent-id',
+        });
+
+        const response = await server.inject({
+          method: 'POST',
+          url: `/proofcomm/spaces/${otherSpace.spaceId}/broadcast`,
+          headers: {
+            authorization: `Bearer ${validToken}`,
+          },
+          payload: {
+            message: { parts: [{ text: 'Hello!' }] },
+          },
+        });
+
+        expect(response.statusCode).toBe(403);
+        const body = JSON.parse(response.payload);
+        expect(body.error.code).toBe('NOT_MEMBER');
+      });
     });
   });
 });
