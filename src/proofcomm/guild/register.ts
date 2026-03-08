@@ -255,6 +255,12 @@ const LOCALHOST_HOSTNAMES = new Set([
 ]);
 
 /**
+ * Allowed URL schemes for external agent registration
+ * Defense-in-depth: block file://, javascript://, data://, etc.
+ */
+const ALLOWED_SCHEMES = new Set(['http:', 'https:']);
+
+/**
  * Check if a URL points to an internal/private address (SSRF protection)
  * @returns true if the URL is safe (external), false if internal
  *
@@ -269,6 +275,13 @@ const LOCALHOST_HOSTNAMES = new Set([
 export function isExternalUrl(urlString: string): boolean {
   try {
     const url = new URL(urlString);
+
+    // Defense-in-depth: only allow http/https schemes
+    // Blocks file://, javascript://, data://, etc.
+    if (!ALLOWED_SCHEMES.has(url.protocol)) {
+      return false;
+    }
+
     const hostname = url.hostname.toLowerCase();
 
     // Check localhost names (exact match)
@@ -427,8 +440,15 @@ export async function registerGuildAgent(
   const agentCard = cardResult.agentCard;
   const agentName = request.name || agentCard.name;
 
-  // Register agent in targets store
+  // Generate token and ID BEFORE DB write to avoid partial failure state
+  // If token generation fails, we don't leave an orphaned agent in the DB
   const agentId = ulid();
+  const token = generateToken();
+  const tokenHash = hashToken(token);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + TOKEN_TTL_MS);
+
+  // Register agent in targets store
   try {
     targetsStore.add({
       type: 'agent',
@@ -439,7 +459,7 @@ export async function registerGuildAgent(
         schema_version: 1,
         url,
         source: 'guild_register',
-        registered_at: new Date().toISOString(),
+        registered_at: now.toISOString(),
       },
     }, { id: agentId });
   } catch (err) {
@@ -450,13 +470,8 @@ export async function registerGuildAgent(
     };
   }
 
-  // Generate token with TTL
-  const token = generateToken();
-  const tokenHash = hashToken(token);
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + TOKEN_TTL_MS);
-
   // Store token by hash for O(1) lookup
+  // This happens after DB write succeeds, so agent + token are consistent
   guildTokensByHash.set(tokenHash, {
     agentId,
     name: agentName,

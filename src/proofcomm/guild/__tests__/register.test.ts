@@ -213,6 +213,14 @@ describe('ProofGuild Registration', () => {
       expect(isExternalUrl('not-a-url')).toBe(false);
       expect(isExternalUrl('')).toBe(false);
     });
+
+    it('should return false for non-http/https schemes (defense-in-depth)', () => {
+      // Block dangerous schemes even if they pass hostname checks
+      expect(isExternalUrl('file:///etc/passwd')).toBe(false);
+      expect(isExternalUrl('javascript:alert(1)')).toBe(false);
+      expect(isExternalUrl('data:text/html,<script>alert(1)</script>')).toBe(false);
+      expect(isExternalUrl('ftp://example.com')).toBe(false);
+    });
   });
 
   describe('registerGuildAgent', () => {

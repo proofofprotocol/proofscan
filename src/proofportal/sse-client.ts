@@ -583,6 +583,9 @@ export function getSseClientScript(): string {
   function renderGuildMap() {
     if (!guildMapEl) return;
 
+    var MAX_MAP_AGENTS = 50; // Cap to prevent unbounded DOM growth
+    var LOBBY_SPACE_ID = '_proofguild_lobby_'; // Namespaced sentinel to avoid collision with real space IDs
+
     const now = Date.now();
 
     // Collect rooms from spaces
@@ -598,8 +601,14 @@ export function getSseClientScript(): string {
       });
     });
 
-    // Place agents in rooms based on currentSpaceId
-    state.agents.forEach(function(agent) {
+    // Place agents in rooms based on currentSpaceId (cap to MAX_MAP_AGENTS)
+    var agentCount = 0;
+    var agents = Array.from(state.agents.values())
+      .sort(function(a, b) { return b.lastSeenAt - a.lastSeenAt; });
+
+    for (var i = 0; i < agents.length && agentCount < MAX_MAP_AGENTS; i++) {
+      var agent = agents[i];
+      agentCount++;
       const visualState = getVisualState(agent, now);
       const level = calcLevel(agent.experience);
       const memberData = {
@@ -622,12 +631,12 @@ export function getSseClientScript(): string {
         // No current space, put in lobby
         lobbyMembers.push(memberData);
       }
-    });
+    }
 
     // Add lobby room if there are members
     if (lobbyMembers.length > 0) {
       rooms.unshift({
-        spaceId: '__lobby__',
+        spaceId: LOBBY_SPACE_ID,
         spaceName: 'Lobby',
         members: lobbyMembers
       });
@@ -653,7 +662,7 @@ export function getSseClientScript(): string {
 
       return '<div class="guild-map-room" data-space-id="' + escapeHtml(room.spaceId) + '">' +
         '<div class="guild-map-room-header">' +
-          '<span class="guild-map-room-icon">' + (room.spaceId === '__lobby__' ? '🏠' : '🚪') + '</span>' +
+          '<span class="guild-map-room-icon">' + (room.spaceId === LOBBY_SPACE_ID ? '🏠' : '🚪') + '</span>' +
           '<span class="guild-map-room-name">' + escapeHtml(room.spaceName) + '</span>' +
           '<span class="guild-map-room-count">' + room.members.length + '</span>' +
         '</div>' +
