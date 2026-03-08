@@ -11,7 +11,15 @@ import {
   getGuildTokenCount,
   cleanupGuildTokens,
   isExternalUrl,
+  registerGuildAgent,
 } from '../register.js';
+
+// Mock fetchAgentCard
+vi.mock('../../../a2a/agent-card.js', () => ({
+  fetchAgentCard: vi.fn(),
+}));
+
+import { fetchAgentCard } from '../../../a2a/agent-card.js';
 
 describe('ProofGuild Registration', () => {
   describe('validateGuildToken', () => {
@@ -143,6 +151,154 @@ describe('ProofGuild Registration', () => {
     it('should return false for invalid URLs', () => {
       expect(isExternalUrl('not-a-url')).toBe(false);
       expect(isExternalUrl('')).toBe(false);
+    });
+  });
+
+  describe('registerGuildAgent', () => {
+    const mockTargetsStore = {
+      add: vi.fn(),
+      list: vi.fn(),
+    };
+
+    const mockAuditLogger = {
+      logEvent: vi.fn(),
+    };
+
+    const baseOptions = {
+      targetsStore: mockTargetsStore as any,
+      auditLogger: mockAuditLogger as any,
+      clientIp: '203.0.113.1',
+      baseOptions: {
+        requestId: 'test-req-id',
+        clientId: 'test-client',
+      },
+      allowLocal: false,
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockTargetsStore.list.mockReturnValue([]);
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('should reject missing URL', async () => {
+      const result = await registerGuildAgent({ url: '' }, baseOptions);
+
+      expect(result.ok).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(result.error).toContain('Missing required field');
+    });
+
+    it('should reject invalid URL scheme', async () => {
+      const result = await registerGuildAgent({ url: 'ftp://example.com' }, baseOptions);
+
+      expect(result.ok).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(result.error).toContain('must start with http');
+    });
+
+    it('should reject private IP addresses (SSRF protection)', async () => {
+      const result = await registerGuildAgent(
+        { url: 'http://169.254.169.254/latest/meta-data/' },
+        baseOptions
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.statusCode).toBe(400);
+      expect(result.error).toContain('internal/private');
+    });
+
+    it('should reject duplicate URL registration', async () => {
+      const existingUrl = 'https://example.com/agent';
+      mockTargetsStore.list.mockReturnValue([
+        { type: 'agent', config: { url: existingUrl } },
+      ]);
+
+      vi.mocked(fetchAgentCard).mockResolvedValue({
+        ok: true,
+        agentCard: { name: 'Test Agent', url: existingUrl, version: '1.0' },
+      });
+
+      const result = await registerGuildAgent(
+        { url: existingUrl },
+        baseOptions
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.statusCode).toBe(409);
+      expect(result.error).toContain('already registered');
+    });
+
+    it('should reject when AgentCard fetch fails', async () => {
+      vi.mocked(fetchAgentCard).mockResolvedValue({
+        ok: false,
+        error: 'Connection refused',
+      });
+
+      const result = await registerGuildAgent(
+        { url: 'https://example.com/agent' },
+        baseOptions
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.statusCode).toBe(422);
+      expect(result.error).toContain('Connection refused');
+    });
+
+    it('should successfully register agent and return token', async () => {
+      vi.mocked(fetchAgentCard).mockResolvedValue({
+        ok: true,
+        agentCard: { name: 'Test Agent', url: 'https://example.com/agent', version: '1.0' },
+      });
+      mockTargetsStore.add.mockReturnValue({ id: 'test-agent-id' });
+
+      const result = await registerGuildAgent(
+        { url: 'https://example.com/agent' },
+        baseOptions
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.response).toBeDefined();
+      expect(result.response?.agent_id).toBeDefined();
+      expect(result.response?.token).toBeDefined();
+      expect(result.response?.name).toBe('Test Agent');
+      expect(result.response?.expires_at).toBeDefined();
+      expect(mockTargetsStore.add).toHaveBeenCalledOnce();
+    });
+
+    it('should use custom name when provided', async () => {
+      vi.mocked(fetchAgentCard).mockResolvedValue({
+        ok: true,
+        agentCard: { name: 'Default Name', url: 'https://example.com/agent', version: '1.0' },
+      });
+      mockTargetsStore.add.mockReturnValue({ id: 'test-agent-id' });
+
+      const result = await registerGuildAgent(
+        { url: 'https://example.com/agent', name: 'Custom Name' },
+        baseOptions
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.response?.name).toBe('Custom Name');
+    });
+
+    it('should allow local URLs when allowLocal is true', async () => {
+      vi.mocked(fetchAgentCard).mockResolvedValue({
+        ok: true,
+        agentCard: { name: 'Local Agent', url: 'http://localhost:8080', version: '1.0' },
+      });
+      mockTargetsStore.add.mockReturnValue({ id: 'local-agent-id' });
+
+      const result = await registerGuildAgent(
+        { url: 'http://localhost:8080' },
+        { ...baseOptions, allowLocal: true }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.response?.name).toBe('Local Agent');
     });
   });
 });

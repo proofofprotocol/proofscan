@@ -10,7 +10,7 @@
 
 import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 import { fetchAgentCard, type FetchAgentCardResult } from '../../a2a/agent-card.js';
-import { TargetsStore, type TargetWithConfig } from '../../db/targets-store.js';
+import { TargetsStore } from '../../db/targets-store.js';
 import { emitSpaceEvent, type ProofCommEventBaseOptions } from '../events.js';
 import type { AuditLogger } from '../../gateway/audit.js';
 import { ulid } from 'ulid';
@@ -77,7 +77,15 @@ function getApiKey(): string | undefined {
 
 /**
  * Compute HMAC digest for timing-safe comparison
- * Using HMAC ensures constant-length comparison regardless of input length
+ *
+ * Using HMAC ensures constant-length output (32 bytes for SHA-256) regardless
+ * of input length, which is necessary for timingSafeEqual to work correctly.
+ *
+ * The hardcoded key 'api-key-comparison' provides no cryptographic strength -
+ * it only serves to normalize input lengths. This is intentional: we are not
+ * trying to hide the API key (both parties already know it), just prevent
+ * timing-based length inference during comparison. The key does not need
+ * rotation as it has no security function beyond length normalization.
  */
 function hmacDigest(value: string): Buffer {
   return createHmac('sha256', 'api-key-comparison')
@@ -406,9 +414,8 @@ export async function registerGuildAgent(
 
   // Register agent in targets store
   const agentId = ulid();
-  let target: TargetWithConfig;
   try {
-    target = targetsStore.add({
+    targetsStore.add({
       type: 'agent',
       protocol: 'a2a',
       name: agentName,

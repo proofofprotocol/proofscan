@@ -214,6 +214,10 @@ export interface AgentState {
 
 /**
  * Portal state root
+ *
+ * Note: Guild state is not stored here. Use deriveGuildState() as a pure
+ * projection function when guild data is needed. This avoids stale state
+ * since deriveGuildState computes the guild view from current agents/spaces.
  */
 export interface PortalState {
   /** Events grouped by trace_id */
@@ -228,8 +232,6 @@ export interface PortalState {
   lastEventTs: number;
   /** Total event count */
   eventCount: number;
-  /** Phase 5: Guild derived state */
-  guild: GuildState;
 }
 
 /**
@@ -243,10 +245,6 @@ export function createInitialState(): PortalState {
     connected: false,
     lastEventTs: 0,
     eventCount: 0,
-    guild: {
-      members: new Map(),
-      rooms: new Map(),
-    },
   };
 }
 
@@ -388,6 +386,8 @@ export function applyEvent(state: PortalState, event: PortalSseEvent): void {
     agent.experience += 8; // XP for document context update
   } else if (display.action === 'dispatched') {
     agent.experience += 6; // XP for route dispatch
+  } else if (display.action === 'registered') {
+    agent.experience += 3; // XP for guild registration
   }
 
   // Update global state
