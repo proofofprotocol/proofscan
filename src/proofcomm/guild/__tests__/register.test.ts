@@ -148,6 +148,13 @@ describe('ProofGuild Registration', () => {
       expect(isExternalUrl('http://[::1]:8080')).toBe(false);
     });
 
+    it('should return false for IPv6 unique local (fc00::/7)', () => {
+      // fc00::/7 includes both fc and fd prefixes
+      expect(isExternalUrl('http://[fc00::1]')).toBe(false);
+      expect(isExternalUrl('http://[fd00::1]')).toBe(false);
+      expect(isExternalUrl('http://[fd12:3456:789a::1]')).toBe(false);
+    });
+
     it('should return false for invalid URLs', () => {
       expect(isExternalUrl('not-a-url')).toBe(false);
       expect(isExternalUrl('')).toBe(false);

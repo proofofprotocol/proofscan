@@ -162,6 +162,14 @@ function getTokenSecret(): string {
 }
 
 /**
+ * Reset cached token secret (for test isolation)
+ * Exported for testing only - allows vi.stubEnv to take effect
+ */
+export function resetCachedTokenSecret(): void {
+  cachedTokenSecret = null;
+}
+
+/**
  * Token TTL in milliseconds (30 days)
  */
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -231,8 +239,8 @@ const PRIVATE_IP_PATTERNS = [
   /^198\.51\.100\./,                 // TEST-NET-2 (198.51.100.0/24)
   /^203\.0\.113\./,                  // TEST-NET-3 (203.0.113.0/24)
   /^::1$/,                           // IPv6 loopback
-  /^fc00:/i,                         // IPv6 unique local
-  /^fe80:/i,                         // IPv6 link-local
+  /^\[?f[cd][0-9a-f]{2}:/i,          // IPv6 unique local (fc00::/7 includes fc and fd prefixes)
+  /^\[?fe80:/i,                      // IPv6 link-local
 ];
 
 /**
@@ -382,6 +390,20 @@ export async function registerGuildAgent(
     };
   }
 
+  // Check if agent is already registered (by URL) - do this BEFORE fetchAgentCard
+  // to avoid unnecessary outbound HTTP calls on re-registration attempts
+  const existingTargets = targetsStore.list({ type: 'agent' });
+  for (const target of existingTargets) {
+    const config = target.config as { url?: string } | undefined;
+    if (config?.url === url) {
+      return {
+        ok: false,
+        error: 'Agent already registered with this URL',
+        statusCode: 409,
+      };
+    }
+  }
+
   // Fetch AgentCard
   const cardResult: FetchAgentCardResult = await fetchAgentCard(url, {
     allowLocal,
@@ -398,19 +420,6 @@ export async function registerGuildAgent(
 
   const agentCard = cardResult.agentCard;
   const agentName = request.name || agentCard.name;
-
-  // Check if agent is already registered (by URL)
-  const existingTargets = targetsStore.list({ type: 'agent' });
-  for (const target of existingTargets) {
-    const config = target.config as { url?: string } | undefined;
-    if (config?.url === url) {
-      return {
-        ok: false,
-        error: 'Agent already registered with this URL',
-        statusCode: 409,
-      };
-    }
-  }
 
   // Register agent in targets store
   const agentId = ulid();

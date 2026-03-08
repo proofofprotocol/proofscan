@@ -17,4 +17,5 @@ export {
   getGuildTokenCount,
   cleanupGuildTokens,
   isExternalUrl,
+  resetCachedTokenSecret,
 } from './register.js';
