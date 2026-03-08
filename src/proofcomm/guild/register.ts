@@ -271,8 +271,14 @@ export function isExternalUrl(urlString: string): boolean {
     const url = new URL(urlString);
     const hostname = url.hostname.toLowerCase();
 
-    // Check localhost names
+    // Check localhost names (exact match)
     if (LOCALHOST_HOSTNAMES.has(hostname)) {
+      return false;
+    }
+
+    // Check localhost subdomains (e.g., foo.localhost, bar.localhost)
+    // Per RFC 6761, .localhost is reserved for loopback
+    if (hostname.endsWith('.localhost')) {
       return false;
     }
 
