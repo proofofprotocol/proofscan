@@ -29,6 +29,12 @@ import { buildDocumentRoute, buildSpaceRoute } from '../proofcomm/routing.js';
 import { emitDocumentEvent, emitSkillEvent } from '../proofcomm/events.js';
 import type { AuditLogger } from './audit.js';
 import type { SpaceVisibility, MemberRole } from '../db/types.js';
+import {
+  registerGuildAgent,
+  validateApiKey,
+  isApiKeyConfigured,
+  type GuildRegisterRequest,
+} from '../proofcomm/guild/index.js';
 
 /**
  * Document registration request body
@@ -1268,5 +1274,72 @@ export function registerProofCommRoutes(
     }
 
     return reply.code(204).send();
+  });
+
+  // ============================================================================
+  // Guild Registration (Phase 5: ProofGuild)
+  // ============================================================================
+
+  // POST /proofcomm/guild/register - Register an external agent (requires API key)
+  fastify.post<{
+    Body: GuildRegisterRequest;
+  }>('/proofcomm/guild/register', {
+    // Requires GUILD_API_KEY authentication
+    schema: {
+      body: {
+        type: 'object',
+        required: ['url'],
+        properties: {
+          url: { type: 'string', minLength: 1, maxLength: 2048 },
+          name: { type: 'string', maxLength: 128 },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    // Check if API key is configured
+    if (!isApiKeyConfigured()) {
+      return reply.code(503).send({
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Guild registration is not enabled. Set GUILD_API_KEY to enable.',
+        },
+      });
+    }
+
+    // Validate API key
+    const authHeader = request.headers.authorization;
+    if (!validateApiKey(authHeader)) {
+      return reply.code(401).send({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid or missing API key. Use Authorization: Bearer <GUILD_API_KEY>',
+        },
+      });
+    }
+
+    const clientIp = request.ip || 'unknown';
+
+    const result = await registerGuildAgent(request.body, {
+      targetsStore,
+      auditLogger: options.auditLogger,
+      clientIp,
+      baseOptions: {
+        requestId: request.requestId,
+        traceId: request.headers['x-trace-id'] as string | undefined,
+        clientId: clientIp, // Use IP as client ID for external agent (API-key authenticated)
+      },
+      allowLocal: process.env.NODE_ENV === 'development',
+    });
+
+    if (!result.ok) {
+      return reply.code(result.statusCode ?? 500).send({
+        error: {
+          code: 'REGISTRATION_FAILED',
+          message: result.error,
+        },
+      });
+    }
+
+    return reply.code(201).send(result.response);
   });
 }

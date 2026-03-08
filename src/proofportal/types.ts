@@ -1,9 +1,12 @@
 /**
  * ProofPortal - Type definitions
- * Phase 4: ProofPortal MVP
+ * Phase 5: ProofGuild
  *
  * State management types for real-time agent communication visualization.
  * State keys follow vault 3040 specification: trace_id / space_id / agent_id
+ *
+ * ProofGuild extends ProofPortal to treat agents as guild members with
+ * roles, levels, and visual states.
  */
 
 import type { GatewayEventKind } from '../db/types.js';
@@ -29,7 +32,9 @@ export type ProofCommAction =
   // document
   | 'activated' | 'deactivated' | 'context_updated'
   // route
-  | 'resolved' | 'dispatched';
+  | 'resolved' | 'dispatched'
+  // guild (Phase 5)
+  | 'registered';
 
 /**
  * SSE event data received from Gateway
@@ -65,6 +70,85 @@ export interface ProofCommMetadata {
   recipient_count?: number;
   failed_count?: number;
 }
+
+// ============================================================================
+// Guild Types (Phase 5: ProofGuild)
+// ============================================================================
+
+/**
+ * Guild role derived from Space membership
+ *
+ * Note: 'moderator' and 'observer' are reserved for future phases when
+ * Space membership includes role information. Currently getGuildRole()
+ * only returns 'member' or 'visitor' based on Space presence.
+ */
+export type GuildRole =
+  | 'moderator'   // Space moderator (future)
+  | 'member'      // Space member
+  | 'observer'    // Space observer (future)
+  | 'visitor';    // No space membership
+
+/**
+ * Visual state for guild members
+ */
+export type GuildVisualState =
+  | 'speaking'    // Message within last 10 seconds
+  | 'active'      // Event within last 60 seconds
+  | 'idle';       // Otherwise
+
+/**
+ * Membership status for guild members
+ * Note: 'joined' is used instead of 'member' to avoid confusion with GuildRole
+ */
+export type GuildMembershipStatus =
+  | 'active'      // Recent events (UI: "Active")
+  | 'joined'      // Space membership (UI: "Joined")
+  | 'candidate';  // Registered only (UI: "Candidate")
+
+/**
+ * Guild member representation for UI
+ */
+export interface GuildMember {
+  agentId: string;
+  /** Display name (agent_name from events, or agentId as fallback) */
+  name: string;
+  role: GuildRole;
+  membershipStatus: GuildMembershipStatus;
+  /** Session-only level (resets on page reload) */
+  level: number;
+  /** Session-only experience points */
+  experience: number;
+  /** Current space (last join/message space) */
+  currentSpaceId?: string;
+  currentSpaceName?: string;
+  visualState: GuildVisualState;
+  /** Truncated to 40 chars for bubble display */
+  lastMessagePreview?: string;
+  lastActiveAt?: number;
+  eventCount: number;
+}
+
+/**
+ * Space as a Guild "room" for visualization
+ */
+export interface GuildSpaceRoom {
+  spaceId: string;
+  spaceName: string;
+  /** Agent IDs currently in this room */
+  memberIds: string[];
+}
+
+/**
+ * Guild derived state (computed from PortalState)
+ */
+export interface GuildState {
+  members: Map<string, GuildMember>;
+  rooms: Map<string, GuildSpaceRoom>;
+}
+
+// ============================================================================
+// Portal Event Types
+// ============================================================================
 
 /**
  * Display-friendly event for UI rendering
@@ -109,6 +193,7 @@ export interface SpaceState {
 
 /**
  * Agent state - activity grouped by agent_id
+ * Extended in Phase 5 for Guild support
  */
 export interface AgentState {
   agentId: string;
@@ -116,10 +201,27 @@ export interface AgentState {
   spaceIds: Set<string>;
   eventCount: number;
   lastSeenAt: number;
+  // Phase 5: Guild fields
+  /** Agent name from event metadata */
+  name?: string;
+  /** Last message preview for bubble display */
+  lastMessagePreview?: string;
+  /** Timestamp of last message (for speaking state) */
+  lastMessageAt?: number;
+  /** Current space ID (last join/message space) */
+  currentSpaceId?: string;
+  /** Current space name */
+  currentSpaceName?: string;
+  /** Session XP (not persisted) */
+  experience: number;
 }
 
 /**
  * Portal state root
+ *
+ * Note: Guild state is not stored here. Use deriveGuildState() as a pure
+ * projection function when guild data is needed. This avoids stale state
+ * since deriveGuildState computes the guild view from current agents/spaces.
  */
 export interface PortalState {
   /** Events grouped by trace_id */
@@ -243,6 +345,7 @@ export function applyEvent(state: PortalState, event: PortalSseEvent): void {
       spaceIds: new Set(),
       eventCount: 0,
       lastSeenAt: now,
+      experience: 0,
     };
     state.agents.set(agentId, agent);
   }
@@ -255,7 +358,161 @@ export function applyEvent(state: PortalState, event: PortalSseEvent): void {
     agent.spaceIds.add(display.spaceId);
   }
 
+  // Phase 5: Guild fields
+  // Extract agent_name from metadata
+  const metadata = event.metadata;
+  if (metadata?.agent_name) {
+    agent.name = metadata.agent_name;
+  }
+
+  // Track currentSpaceId and award XP based on action
+  // IMPORTANT: Keep XP values in sync with XP_VALUES in src/proofportal/sse-client.ts
+  if (display.action === 'joined' && display.spaceId) {
+    agent.currentSpaceId = display.spaceId;
+    agent.currentSpaceName = display.spaceName ?? undefined;
+    agent.experience += 2; // XP for joining
+  } else if (display.action === 'message' && display.spaceId) {
+    agent.currentSpaceId = display.spaceId;
+    agent.currentSpaceName = display.spaceName ?? undefined;
+    agent.lastMessagePreview = display.preview
+      ? display.preview.slice(0, 40)
+      : undefined;
+    agent.lastMessageAt = now;
+    agent.experience += 5; // XP for message
+  } else if (display.action === 'left' && display.spaceId) {
+    // Clear currentSpaceId if leaving current space
+    if (agent.currentSpaceId === display.spaceId) {
+      agent.currentSpaceId = undefined;
+      agent.currentSpaceName = undefined;
+    }
+  } else if (display.action === 'match') {
+    agent.experience += 10; // XP for skill match
+  } else if (display.action === 'context_updated') {
+    agent.experience += 8; // XP for document context update
+  } else if (display.action === 'dispatched') {
+    agent.experience += 6; // XP for route dispatch
+  } else if (display.action === 'registered') {
+    agent.experience += 3; // XP for guild registration
+  }
+
   // Update global state
   state.lastEventTs = now;
   state.eventCount++;
+}
+
+// ============================================================================
+// Guild Helper Functions
+// ============================================================================
+
+/**
+ * Calculate level from XP
+ * Level 1 at 0 XP, Level 2 at 10 XP, etc.
+ */
+export function calcLevel(xp: number): number {
+  return Math.floor(Math.sqrt(xp / 10)) + 1;
+}
+
+/** Speaking threshold: 10 seconds */
+export const SPEAKING_THRESHOLD_MS = 10_000;
+/** Active threshold: 60 seconds */
+export const ACTIVE_THRESHOLD_MS = 60_000;
+
+/**
+ * Determine visual state based on timestamps
+ */
+export function getVisualState(
+  lastMessageAt: number | undefined,
+  lastSeenAt: number,
+  now: number
+): GuildVisualState {
+  if (lastMessageAt && now - lastMessageAt < SPEAKING_THRESHOLD_MS) {
+    return 'speaking';
+  }
+  if (now - lastSeenAt < ACTIVE_THRESHOLD_MS) {
+    return 'active';
+  }
+  return 'idle';
+}
+
+/**
+ * Determine membership status based on activity and space membership
+ */
+export function getMembershipStatus(
+  agent: AgentState,
+  now: number
+): GuildMembershipStatus {
+  if (now - agent.lastSeenAt < ACTIVE_THRESHOLD_MS) {
+    return 'active';
+  }
+  if (agent.spaceIds.size > 0) {
+    return 'joined';
+  }
+  return 'candidate';
+}
+
+/**
+ * Get highest role from space membership
+ * For MVP, we return 'member' for any space membership.
+ */
+export function getGuildRole(agent: AgentState): GuildRole {
+  if (agent.spaceIds.size === 0) {
+    return 'visitor';
+  }
+  // For MVP, assume 'member' role for any space membership
+  // Full role tracking would require storing membership role in SpaceState
+  return 'member';
+}
+
+/**
+ * Derive GuildMember from AgentState
+ */
+export function toGuildMember(
+  agent: AgentState,
+  now: number
+): GuildMember {
+  return {
+    agentId: agent.agentId,
+    name: agent.name ?? agent.agentId,
+    role: getGuildRole(agent),
+    membershipStatus: getMembershipStatus(agent, now),
+    level: calcLevel(agent.experience),
+    experience: agent.experience,
+    currentSpaceId: agent.currentSpaceId,
+    currentSpaceName: agent.currentSpaceName,
+    visualState: getVisualState(agent.lastMessageAt, agent.lastSeenAt, now),
+    lastMessagePreview: agent.lastMessagePreview,
+    lastActiveAt: agent.lastSeenAt,
+    eventCount: agent.eventCount,
+  };
+}
+
+/**
+ * Derive full GuildState from PortalState
+ */
+export function deriveGuildState(state: PortalState, now: number): GuildState {
+  const members = new Map<string, GuildMember>();
+  const rooms = new Map<string, GuildSpaceRoom>();
+
+  // Derive members from agents
+  for (const agent of state.agents.values()) {
+    members.set(agent.agentId, toGuildMember(agent, now));
+  }
+
+  // Derive rooms from spaces
+  for (const space of state.spaces.values()) {
+    const memberIds: string[] = [];
+    // Find agents whose currentSpaceId matches this space
+    for (const member of members.values()) {
+      if (member.currentSpaceId === space.spaceId) {
+        memberIds.push(member.agentId);
+      }
+    }
+    rooms.set(space.spaceId, {
+      spaceId: space.spaceId,
+      spaceName: space.spaceName ?? space.spaceId,
+      memberIds,
+    });
+  }
+
+  return { members, rooms };
 }

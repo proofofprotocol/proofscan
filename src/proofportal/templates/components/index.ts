@@ -41,3 +41,28 @@ export {
   renderSpaceEmptyState,
   getSpaceViewStyles,
 } from './SpaceView.js';
+
+// GuildPanel (Phase 5)
+export {
+  type GuildMemberDisplayData,
+  truncateGuildId,
+  getVisualStateClass,
+  formatMembershipStatus,
+  formatLevel,
+  renderGuildMemberCard,
+  renderGuildEmptyState,
+  getGuildPanelStyles,
+} from './GuildPanel.js';
+
+// GuildMap (Phase 5)
+export {
+  type RoomMemberData,
+  type RoomDisplayData,
+  getMapVisualStateClass,
+  formatMapLevel,
+  truncateSpaceIdForRoom,
+  renderRoomMember,
+  renderRoomCard,
+  renderGuildMapEmptyState,
+  getGuildMapStyles,
+} from './GuildMap.js';
