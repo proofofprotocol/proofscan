@@ -27,6 +27,10 @@ describe('ProofGuild Registration', () => {
   });
 
   describe('validateApiKey', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
     it('should return false for missing auth header', () => {
       expect(validateApiKey(undefined)).toBe(false);
     });
@@ -43,14 +47,40 @@ describe('ProofGuild Registration', () => {
       expect(validateApiKey('Bearer')).toBe(false);
     });
 
-    // Note: Cannot test valid API key without setting GUILD_API_KEY env var
-    // which would require mocking process.env
+    it('should return true for valid API key', () => {
+      vi.stubEnv('GUILD_API_KEY', 'my-secret-key');
+      expect(validateApiKey('Bearer my-secret-key')).toBe(true);
+    });
+
+    it('should return false for wrong API key', () => {
+      vi.stubEnv('GUILD_API_KEY', 'my-secret-key');
+      expect(validateApiKey('Bearer wrong-key')).toBe(false);
+    });
+
+    it('should return false for different length API key', () => {
+      vi.stubEnv('GUILD_API_KEY', 'short');
+      expect(validateApiKey('Bearer much-longer-key')).toBe(false);
+    });
+
+    it('should return false when no API key is configured', () => {
+      vi.stubEnv('GUILD_API_KEY', '');
+      expect(validateApiKey('Bearer any-key')).toBe(false);
+    });
   });
 
   describe('isApiKeyConfigured', () => {
-    it('should return boolean', () => {
-      const result = isApiKeyConfigured();
-      expect(typeof result).toBe('boolean');
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('should return true when API key is set', () => {
+      vi.stubEnv('GUILD_API_KEY', 'my-secret-key');
+      expect(isApiKeyConfigured()).toBe(true);
+    });
+
+    it('should return false when API key is not set', () => {
+      vi.stubEnv('GUILD_API_KEY', '');
+      expect(isApiKeyConfigured()).toBe(false);
     });
   });
 

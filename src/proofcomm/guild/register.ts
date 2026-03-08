@@ -68,16 +68,31 @@ interface TokenEntry {
 // ============================================================================
 
 /**
- * API key for guild registration (required)
+ * Get API key at call time (not captured at module load)
+ * This allows setting the env var after module initialization
  */
-const GUILD_API_KEY = process.env.GUILD_API_KEY;
+function getApiKey(): string | undefined {
+  return process.env.GUILD_API_KEY;
+}
+
+/**
+ * Compute HMAC digest for timing-safe comparison
+ * Using HMAC ensures constant-length comparison regardless of input length
+ */
+function hmacDigest(value: string): Buffer {
+  return createHmac('sha256', 'api-key-comparison')
+    .update(value)
+    .digest();
+}
 
 /**
  * Validate API key from Authorization header using timing-safe comparison
+ * Uses HMAC comparison to prevent length-based timing attacks
  * @returns true if valid, false otherwise
  */
 export function validateApiKey(authHeader: string | undefined): boolean {
-  if (!GUILD_API_KEY) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     // No API key configured - reject all requests
     return false;
   }
@@ -90,21 +105,16 @@ export function validateApiKey(authHeader: string | undefined): boolean {
     return false;
   }
   const providedKey = match[1];
-  // Use timing-safe comparison to prevent timing attacks
-  if (providedKey.length !== GUILD_API_KEY.length) {
-    return false;
-  }
-  return timingSafeEqual(
-    Buffer.from(providedKey, 'utf-8'),
-    Buffer.from(GUILD_API_KEY, 'utf-8')
-  );
+  // Use HMAC comparison to ensure constant-length timing-safe check
+  // This prevents length leakage that would occur with direct length comparison
+  return timingSafeEqual(hmacDigest(providedKey), hmacDigest(apiKey));
 }
 
 /**
- * Check if API key is configured
+ * Check if API key is configured (read at call time)
  */
 export function isApiKeyConfigured(): boolean {
-  return !!GUILD_API_KEY;
+  return !!getApiKey();
 }
 
 // ============================================================================
@@ -118,20 +128,30 @@ export function isApiKeyConfigured(): boolean {
 const guildTokensByHash = new Map<string, TokenEntry>();
 
 /**
- * Secret for signing tokens (must be set via environment variable in production)
+ * Cached token secret (lazy initialization)
+ */
+let cachedTokenSecret: string | null = null;
+
+/**
+ * Get token secret at first use (deferred evaluation)
+ * This allows setting the env var after module initialization
+ * and ensures production check runs when the feature is actually used
  */
 function getTokenSecret(): string {
+  if (cachedTokenSecret !== null) {
+    return cachedTokenSecret;
+  }
   const secret = process.env.GUILD_TOKEN_SECRET;
   if (!secret) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('[ProofGuild] GUILD_TOKEN_SECRET must be set in production');
     }
-    return 'proofguild-dev-secret';
+    cachedTokenSecret = 'proofguild-dev-secret';
+  } else {
+    cachedTokenSecret = secret;
   }
-  return secret;
+  return cachedTokenSecret;
 }
-
-const GUILD_TOKEN_SECRET = getTokenSecret();
 
 /**
  * Token TTL in milliseconds (30 days)
@@ -146,10 +166,10 @@ function generateToken(): string {
 }
 
 /**
- * Hash a token for storage
+ * Hash a token for storage (uses lazy-loaded secret)
  */
 function hashToken(token: string): string {
-  return createHmac('sha256', GUILD_TOKEN_SECRET)
+  return createHmac('sha256', getTokenSecret())
     .update(token)
     .digest('hex');
 }
@@ -221,6 +241,14 @@ const LOCALHOST_HOSTNAMES = new Set([
 /**
  * Check if a URL points to an internal/private address (SSRF protection)
  * @returns true if the URL is safe (external), false if internal
+ *
+ * Note: This validates the URL string, not the resolved IP address.
+ * DNS rebinding attacks (where a hostname resolves to a private IP after validation)
+ * are not fully prevented by this check alone. fetchAgentCard has additional
+ * SSRF protection via isPrivateUrl, but for high-security deployments, consider:
+ * - HTTP client-level IP validation after DNS resolution
+ * - Network-level egress filtering
+ * - DNS pinning or resolution validation
  */
 export function isExternalUrl(urlString: string): boolean {
   try {

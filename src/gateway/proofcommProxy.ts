@@ -1326,7 +1326,7 @@ export function registerProofCommRoutes(
       baseOptions: {
         requestId: request.requestId,
         traceId: request.headers['x-trace-id'] as string | undefined,
-        clientId: clientIp, // Use IP as client ID for unauthenticated requests
+        clientId: clientIp, // Use IP as client ID for external agent (API-key authenticated)
       },
       allowLocal: process.env.NODE_ENV === 'development',
     });
