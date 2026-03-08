@@ -184,6 +184,8 @@ export function createGatewayServer(
 
     // ProofComm Management Routes (Phase 9.0)
     const auditLogger = createAuditLogger(configDir);
+    // Wire SSE manager to audit logger for real-time event broadcasting
+    auditLogger.setSseManager(getSseManager());
 
     // Wire allowedDocumentRoot from GatewayConfig
     const allowedDocumentRoot = fullConfig.allowedDocumentRoot;

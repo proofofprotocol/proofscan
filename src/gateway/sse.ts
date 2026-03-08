@@ -246,12 +246,6 @@ export async function sseStreamHandler(
       validKinds.includes(kind as GatewayEventKind)
     ) as GatewayEventKind[];
 
-    // Set SSE headers
-    reply.header('Content-Type', 'text/event-stream');
-    reply.header('Cache-Control', 'no-cache');
-    reply.header('Connection', 'keep-alive');
-    reply.header('X-Accel-Buffering', 'no'); // Disable nginx buffering
-
     // Check if reply.raw is writable
     if (!reply.raw || !reply.raw.writable) {
       return reply.code(500).send({
@@ -262,7 +256,16 @@ export async function sseStreamHandler(
       });
     }
 
-    // Send SSE headers
+    // Send headers explicitly using raw response (Fastify's reply.header doesn't work with raw.write)
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    // Send SSE connection comment
     try {
       reply.raw.write(': connected\n\n');
     } catch (error) {
