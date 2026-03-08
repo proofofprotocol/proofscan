@@ -10,6 +10,7 @@
  */
 
 import type { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
+import { randomUUID } from 'crypto';
 import { ulid } from 'ulid';
 import type { AuthInfo } from './authMiddleware.js';
 import { hasPermission, buildProofCommPermission } from './permissions.js';
@@ -1338,6 +1339,9 @@ export function registerProofCommRoutes(
       const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
         : result.error.code === 'NOT_MEMBER' ? 403
         : 500; // Unknown errors are server-side, not client errors
+      if (statusCode === 500) {
+        request.log.error({ error: result.error }, 'broadcast failed with unexpected error');
+      }
       return reply.code(statusCode).send({
         error: {
           code: result.error.code,
@@ -1350,8 +1354,7 @@ export function registerProofCommRoutes(
       delivered: result.value.deliveredCount,
       failed: result.value.failedCount,
       recipient_count: result.value.recipientCount,
-      // TODO: Phase 5.2 - Generate proper message ID instead of reusing request ID
-      message_id: request.requestId,
+      message_id: randomUUID(),
     });
   });
 

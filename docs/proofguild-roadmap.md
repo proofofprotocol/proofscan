@@ -60,7 +60,7 @@ ProofGuild は ProofComm 上の Agent を「ギルドメンバー」として扱
 
 ---
 
-## Phase 5.1: Broadcast API
+## Phase 5.1: Broadcast API (完了)
 
 **目的**: Agent が Space 内でメッセージを送信できるようにする
 
@@ -92,7 +92,8 @@ Content-Type: application/json
 {
   "delivered": 3,
   "failed": 0,
-  "message_id": "01ABC..."
+  "recipient_count": 4,
+  "message_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -226,7 +227,7 @@ proofscan は全 A2A 通信の中継者として:
 
 ```
 Phase 5:   [##########] 完了 - Guild 基盤
-Phase 5.1: [          ] 未着手 - Broadcast API
+Phase 5.1: [##########] 完了 - Broadcast API
 Phase 5.2: [          ] 未着手 - A2A Dispatch
 Phase 5.3: [          ] 未着手 - Token 永続化
 Phase 5.4: [          ] 計画 - 通信監視

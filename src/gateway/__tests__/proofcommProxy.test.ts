@@ -1111,6 +1111,9 @@ describe('ProofComm Proxy - Space Endpoints', () => {
       expect(body.error.code).toBe('INVALID_TOKEN');
     });
 
+    // Schema validation tests: Fastify's ajv validates the request body BEFORE
+    // the handler runs, so 400 is returned before the auth check. The token
+    // value doesn't matter here because the request never reaches the handler.
     it('should return 400 with invalid message format', async () => {
       const response = await server.inject({
         method: 'POST',
