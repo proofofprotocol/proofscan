@@ -1076,4 +1076,67 @@ describe('ProofComm Proxy - Space Endpoints', () => {
       expect(response.statusCode).toBe(403);
     });
   });
+
+  describe('POST /proofcomm/spaces/:space_id/broadcast', () => {
+    it('should return 401 without authorization header', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/broadcast',
+        payload: {
+          message: { parts: [{ text: 'Hello!' }] },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('UNAUTHORIZED');
+    });
+
+    it('should return 401 with invalid token', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/broadcast',
+        headers: {
+          authorization: 'Bearer invalid-token-12345',
+        },
+        payload: {
+          message: { parts: [{ text: 'Hello!' }] },
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      const body = JSON.parse(response.payload);
+      expect(body.error.code).toBe('INVALID_TOKEN');
+    });
+
+    it('should return 400 with invalid message format', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/broadcast',
+        headers: {
+          authorization: 'Bearer some-token',
+        },
+        payload: {
+          message: { invalid: 'format' },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 with empty parts array', async () => {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/proofcomm/spaces/01ARZ3NDEKTSV4RRFFQ69G5FAV/broadcast',
+        headers: {
+          authorization: 'Bearer some-token',
+        },
+        payload: {
+          message: { parts: [] },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
 });
