@@ -131,7 +131,13 @@ export function isApiKeyConfigured(): boolean {
 
 /**
  * In-memory token store - keyed by token hash for O(1) lookup
- * Note: This is lost on server restart. For production, consider persisting to DB.
+ *
+ * IMPORTANT: Restart behavior
+ * - Tokens are lost on server restart (in-memory only)
+ * - Registered agents persist in targetsStore (DB)
+ * - After restart, agents cannot authenticate (token gone) and cannot re-register (URL conflict 409)
+ * - To recover: manually remove the agent from targets or implement a token renewal endpoint
+ * - For production: consider persisting tokens to DB or implementing token refresh
  */
 const guildTokensByHash = new Map<string, TokenEntry>();
 

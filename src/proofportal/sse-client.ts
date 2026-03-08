@@ -588,19 +588,21 @@ export function getSseClientScript(): string {
     var MAX_MAP_AGENTS = 50; // Cap to prevent unbounded DOM growth
     var LOBBY_SPACE_ID = '_proofguild_lobby_'; // Namespaced sentinel to avoid collision with real space IDs
 
-    const now = Date.now();
+    var now = Date.now();
 
-    // Collect rooms from spaces
-    const rooms = [];
-    const lobbyMembers = [];
+    // Build room Map for O(1) lookup by spaceId
+    var rooms = [];
+    var roomsBySpaceId = new Map();
+    var lobbyMembers = [];
 
-    // Build room list from spaces
     state.spaces.forEach(function(space) {
-      rooms.push({
+      var room = {
         spaceId: space.spaceId,
         spaceName: space.spaceName || truncateId(space.spaceId, 12),
         members: []
-      });
+      };
+      rooms.push(room);
+      roomsBySpaceId.set(space.spaceId, room);
     });
 
     // Place agents in rooms based on currentSpaceId (cap to MAX_MAP_AGENTS)
@@ -611,9 +613,9 @@ export function getSseClientScript(): string {
     for (var i = 0; i < agents.length && agentCount < MAX_MAP_AGENTS; i++) {
       var agent = agents[i];
       agentCount++;
-      const visualState = getVisualState(agent, now);
-      const level = calcLevel(agent.experience);
-      const memberData = {
+      var visualState = getVisualState(agent, now);
+      var level = calcLevel(agent.experience);
+      var memberData = {
         agentId: agent.agentId,
         name: getAgentDisplayName(agent),
         level: level,
@@ -622,7 +624,7 @@ export function getSseClientScript(): string {
       };
 
       if (agent.currentSpaceId) {
-        const room = rooms.find(function(r) { return r.spaceId === agent.currentSpaceId; });
+        var room = roomsBySpaceId.get(agent.currentSpaceId);
         if (room) {
           room.members.push(memberData);
         } else {
@@ -651,7 +653,7 @@ export function getSseClientScript(): string {
     }
 
     guildMapEl.innerHTML = rooms.map(function(room) {
-      const memberHtml = room.members.map(function(member) {
+      var memberHtml = room.members.map(function(member) {
         return '<div class="guild-map-member ' + getVisualStateClass(member.visualState) + '" ' +
           'data-agent-id="' + escapeHtml(member.agentId) + '" ' +
           'title="' + escapeHtml(member.name) + ' (' + formatLevel(member.level) + ')">' +
