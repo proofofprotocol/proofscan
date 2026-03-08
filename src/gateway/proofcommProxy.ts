@@ -1300,6 +1300,8 @@ export function registerProofCommRoutes(
     }
 
     // Build A2AMessage from request body
+    // A2A protocol: 'user' role indicates the message originates from an external agent
+    // (as opposed to 'assistant' which would be a response from the receiving agent)
     const a2aMessage: A2AMessage = {
       role: 'user',
       parts: request.body.message.parts,
@@ -1335,7 +1337,7 @@ export function registerProofCommRoutes(
     if (!result.ok) {
       const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
         : result.error.code === 'NOT_MEMBER' ? 403
-        : 400;
+        : 500; // Unknown errors are server-side, not client errors
       return reply.code(statusCode).send({
         error: {
           code: result.error.code,
@@ -1348,7 +1350,8 @@ export function registerProofCommRoutes(
       delivered: result.value.deliveredCount,
       failed: result.value.failedCount,
       recipient_count: result.value.recipientCount,
-      message_id: request.requestId, // Use request ID as message ID for now
+      // TODO: Phase 5.2 - Generate proper message ID instead of reusing request ID
+      message_id: request.requestId,
     });
   });
 
