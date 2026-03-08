@@ -77,11 +77,15 @@ export interface ProofCommMetadata {
 
 /**
  * Guild role derived from Space membership
+ *
+ * Note: 'moderator' and 'observer' are reserved for future phases when
+ * Space membership includes role information. Currently getGuildRole()
+ * only returns 'member' or 'visitor' based on Space presence.
  */
 export type GuildRole =
-  | 'moderator'   // Space moderator
+  | 'moderator'   // Space moderator (future)
   | 'member'      // Space member
-  | 'observer'    // Space observer
+  | 'observer'    // Space observer (future)
   | 'visitor';    // No space membership
 
 /**
@@ -361,7 +365,8 @@ export function applyEvent(state: PortalState, event: PortalSseEvent): void {
     agent.name = metadata.agent_name;
   }
 
-  // Track currentSpaceId based on join/message/left
+  // Track currentSpaceId and award XP based on action
+  // IMPORTANT: Keep XP values in sync with XP_VALUES in src/proofportal/sse-client.ts
   if (display.action === 'joined' && display.spaceId) {
     agent.currentSpaceId = display.spaceId;
     agent.currentSpaceName = display.spaceName ?? undefined;

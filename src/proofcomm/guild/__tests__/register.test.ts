@@ -111,45 +111,47 @@ describe('ProofGuild Registration', () => {
       const now = Date.now();
       vi.setSystemTime(now);
 
-      // Setup mocks for registration
-      const mockTargetsStore = {
-        add: vi.fn().mockReturnValue({ id: 'cleanup-test-agent' }),
-        list: vi.fn().mockReturnValue([]),
-      };
-      const mockAuditLogger = { logEvent: vi.fn() };
+      try {
+        // Setup mocks for registration
+        const mockTargetsStore = {
+          add: vi.fn().mockReturnValue({ id: 'cleanup-test-agent' }),
+          list: vi.fn().mockReturnValue([]),
+        };
+        const mockAuditLogger = { logEvent: vi.fn() };
 
-      vi.mocked(fetchAgentCard).mockResolvedValue({
-        ok: true,
-        agentCard: { name: 'Cleanup Test Agent', url: 'https://cleanup-test.example.com', version: '1.0' },
-      });
+        vi.mocked(fetchAgentCard).mockResolvedValue({
+          ok: true,
+          agentCard: { name: 'Cleanup Test Agent', url: 'https://cleanup-test.example.com', version: '1.0' },
+        });
 
-      const initialCount = getGuildTokenCount();
+        const initialCount = getGuildTokenCount();
 
-      // Register an agent (creates a token with 30-day TTL)
-      const result = await registerGuildAgent(
-        { url: 'https://cleanup-test.example.com' },
-        {
-          targetsStore: mockTargetsStore as any,
-          auditLogger: mockAuditLogger as any,
-          clientIp: '198.51.100.200', // Unique IP to avoid rate limit
-          baseOptions: { requestId: 'cleanup-test', clientId: 'cleanup-client' },
-          allowLocal: false,
-        }
-      );
+        // Register an agent (creates a token with 30-day TTL)
+        const result = await registerGuildAgent(
+          { url: 'https://cleanup-test.example.com' },
+          {
+            targetsStore: mockTargetsStore as any,
+            auditLogger: mockAuditLogger as any,
+            clientIp: '198.51.100.200', // Unique IP to avoid rate limit
+            baseOptions: { requestId: 'cleanup-test', clientId: 'cleanup-client' },
+            allowLocal: false,
+          }
+        );
 
-      expect(result.ok).toBe(true);
-      expect(getGuildTokenCount()).toBe(initialCount + 1);
+        expect(result.ok).toBe(true);
+        expect(getGuildTokenCount()).toBe(initialCount + 1);
 
-      // Advance time past token expiry (30 days + 1 second)
-      const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-      vi.advanceTimersByTime(TOKEN_TTL_MS + 1000);
+        // Advance time past token expiry (30 days + 1 second)
+        const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+        vi.advanceTimersByTime(TOKEN_TTL_MS + 1000);
 
-      // Cleanup should remove expired token
-      cleanupGuildTokens();
+        // Cleanup should remove expired token
+        cleanupGuildTokens();
 
-      expect(getGuildTokenCount()).toBe(initialCount);
-
-      vi.useRealTimers();
+        expect(getGuildTokenCount()).toBe(initialCount);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

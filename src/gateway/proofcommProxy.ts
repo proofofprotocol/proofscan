@@ -1290,8 +1290,8 @@ export function registerProofCommRoutes(
         type: 'object',
         required: ['url'],
         properties: {
-          url: { type: 'string', minLength: 1 },
-          name: { type: 'string' },
+          url: { type: 'string', minLength: 1, maxLength: 2048 },
+          name: { type: 'string', maxLength: 128 },
         },
       },
     },

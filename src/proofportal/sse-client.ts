@@ -50,6 +50,8 @@ export function getSseClientScript(): string {
   const ACTIVE_THRESHOLD_MS = 60000;    // 60 seconds for 'active' state
 
   // XP values per action
+  // IMPORTANT: Keep in sync with applyEvent() in src/proofportal/types.ts
+  // These values must match the server-side XP calculation
   const XP_VALUES = {
     joined: 2,
     message: 5,
