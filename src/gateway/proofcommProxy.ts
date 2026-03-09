@@ -10,6 +10,7 @@
  */
 
 import type { FastifyRequest, FastifyReply, FastifyInstance } from 'fastify';
+import { randomUUID } from 'crypto';
 import { ulid } from 'ulid';
 import type { AuthInfo } from './authMiddleware.js';
 import { hasPermission, buildProofCommPermission } from './permissions.js';
@@ -17,7 +18,7 @@ import { DocumentsStore, type DocumentConfig } from '../db/documents-store.js';
 import { SkillsStore } from '../db/skills-store.js';
 import { SpacesStore } from '../db/spaces-store.js';
 import { SkillRegistry } from '../proofcomm/skill-registry.js';
-import { SpaceManager } from '../proofcomm/spaces/index.js';
+import { SpaceManager, type DispatchToAgentFn } from '../proofcomm/spaces/index.js';
 import { TargetsStore } from '../db/targets-store.js';
 import {
   validateDocumentPath,
@@ -33,8 +34,10 @@ import {
   registerGuildAgent,
   validateApiKey,
   isApiKeyConfigured,
+  validateGuildToken,
   type GuildRegisterRequest,
 } from '../proofcomm/guild/index.js';
+import type { A2AMessage } from '../db/types.js';
 
 /**
  * Document registration request body
@@ -1222,6 +1225,140 @@ export function registerProofCommRoutes(
         left_at: m.leftAt,
       })),
       count: members.length,
+    });
+  });
+
+  // POST /proofcomm/spaces/:space_id/broadcast - Broadcast message to space members
+  // NOTE: This endpoint uses Guild Token authentication (not Gateway auth).
+  // The token is obtained from POST /proofcomm/guild/register.
+  fastify.post<{
+    Params: { space_id: string };
+    Body: {
+      message: {
+        parts: Array<{ text: string } | { data: string; mimeType: string }>;
+        metadata?: Record<string, unknown>;
+      };
+    };
+  }>('/proofcomm/spaces/:space_id/broadcast', {
+    // No requireAuth - uses Guild Token authentication instead
+    schema: {
+      params: {
+        type: 'object',
+        required: ['space_id'],
+        properties: {
+          space_id: { type: 'string', minLength: 1, maxLength: 26, pattern: '^[0-9A-HJKMNP-TV-Z]{26}$' },
+        },
+      },
+      body: {
+        type: 'object',
+        required: ['message'],
+        properties: {
+          message: {
+            type: 'object',
+            required: ['parts'],
+            properties: {
+              parts: {
+                type: 'array',
+                minItems: 1,
+                items: {
+                  type: 'object',
+                  oneOf: [
+                    { properties: { text: { type: 'string' } }, required: ['text'] },
+                    { properties: { data: { type: 'string' }, mimeType: { type: 'string' } }, required: ['data', 'mimeType'] },
+                  ],
+                },
+              },
+              metadata: { type: 'object' },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { space_id } = request.params;
+
+    // Guild Token authentication
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return reply.code(401).send({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Missing or invalid Authorization header. Use: Bearer <guild_token>',
+        },
+      });
+    }
+
+    const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+    const agentId = validateGuildToken(token);
+
+    if (!agentId) {
+      return reply.code(401).send({
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'Invalid or expired guild token',
+        },
+      });
+    }
+
+    // Generate message ID upfront for traceability across events and response
+    const messageId = randomUUID();
+
+    // Build A2AMessage from request body
+    // A2A protocol: 'user' role indicates the message originates from an external agent
+    // (as opposed to 'assistant' which would be a response from the receiving agent)
+    const a2aMessage: A2AMessage = {
+      role: 'user',
+      parts: request.body.message.parts,
+      messageId,
+      metadata: {
+        ...request.body.message.metadata,
+        space_id,
+        sender_agent_id: agentId,
+      },
+    };
+
+    // Create a stub dispatch function for Phase 5.1
+    // Phase 5.1: Event is emitted by broadcastToSpace, but no actual A2A dispatch yet
+    // Returns success: true because the broadcast operation itself succeeded (message queued)
+    // Phase 5.2 will implement actual A2A JSON-RPC dispatch to each recipient
+    const stubDispatch: DispatchToAgentFn = async (_targetAgentId, _message) => {
+      return { success: true };
+    };
+
+    const result = await spaceManager.broadcastToSpace(
+      {
+        spaceId: space_id,
+        senderAgentId: agentId,
+        message: a2aMessage,
+      },
+      stubDispatch,
+      {
+        requestId: request.requestId,
+        traceId: request.headers['x-trace-id'] as string | undefined,
+        clientId: agentId,
+      },
+    );
+
+    if (!result.ok) {
+      const statusCode = result.error.code === 'SPACE_NOT_FOUND' ? 404
+        : result.error.code === 'NOT_MEMBER' ? 403
+        : 500; // Unknown errors are server-side, not client errors
+      if (statusCode === 500) {
+        request.log.error({ error: result.error }, 'broadcast failed with unexpected error');
+      }
+      return reply.code(statusCode).send({
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+        },
+      });
+    }
+
+    return reply.code(200).send({
+      delivered: result.value.deliveredCount,
+      failed: result.value.failedCount,
+      recipient_count: result.value.recipientCount,
+      message_id: messageId,
     });
   });
 
