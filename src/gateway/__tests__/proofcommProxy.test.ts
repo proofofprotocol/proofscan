@@ -1159,7 +1159,10 @@ describe('ProofComm Proxy - Space Endpoints', () => {
           return null;
         });
 
-        // Set up spaces store and create a test space
+        // Use SpacesStore directly instead of SpaceManager for test isolation:
+        // - SpaceManager.createSpace() emits events and has side effects
+        // - Direct store access lets us set up test data without triggering audit logs
+        // - We manually join() since SpacesStore.create() doesn't auto-join (SpaceManager does)
         spacesStore = new SpacesStore(configDir);
         const space = spacesStore.create({
           name: 'Test Broadcast Space',
@@ -1167,7 +1170,6 @@ describe('ProofComm Proxy - Space Endpoints', () => {
           creatorAgentId: testAgentId,
         });
         testSpaceId = space.spaceId;
-        // Add the test agent as a member (SpacesStore.create doesn't auto-join)
         spacesStore.join(testSpaceId, testAgentId, 'moderator');
       });
 

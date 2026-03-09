@@ -1300,12 +1300,16 @@ export function registerProofCommRoutes(
       });
     }
 
+    // Generate message ID upfront for traceability across events and response
+    const messageId = randomUUID();
+
     // Build A2AMessage from request body
     // A2A protocol: 'user' role indicates the message originates from an external agent
     // (as opposed to 'assistant' which would be a response from the receiving agent)
     const a2aMessage: A2AMessage = {
       role: 'user',
       parts: request.body.message.parts,
+      messageId,
       metadata: {
         ...request.body.message.metadata,
         space_id,
@@ -1314,11 +1318,11 @@ export function registerProofCommRoutes(
     };
 
     // Create a stub dispatch function for Phase 5.1
-    // In Phase 5.2, this will be replaced with actual A2A dispatch
+    // Phase 5.1: Event is emitted by broadcastToSpace, but no actual dispatch yet
+    // Returns success: false so delivered count reflects reality (no actual delivery)
     const stubDispatch: DispatchToAgentFn = async (_targetAgentId, _message) => {
-      // Phase 5.1: Event is emitted by broadcastToSpace, but no actual dispatch yet
       // TODO: Phase 5.2 will implement actual A2A JSON-RPC dispatch
-      return { success: true };
+      return { success: false, error: 'Phase 5.1 stub - no actual dispatch' };
     };
 
     const result = await spaceManager.broadcastToSpace(
@@ -1354,7 +1358,7 @@ export function registerProofCommRoutes(
       delivered: result.value.deliveredCount,
       failed: result.value.failedCount,
       recipient_count: result.value.recipientCount,
-      message_id: randomUUID(),
+      message_id: messageId,
     });
   });
 
