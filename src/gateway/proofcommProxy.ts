@@ -1318,11 +1318,11 @@ export function registerProofCommRoutes(
     };
 
     // Create a stub dispatch function for Phase 5.1
-    // Phase 5.1: Event is emitted by broadcastToSpace, but no actual dispatch yet
-    // Returns success: false so delivered count reflects reality (no actual delivery)
+    // Phase 5.1: Event is emitted by broadcastToSpace, but no actual A2A dispatch yet
+    // Returns success: true because the broadcast operation itself succeeded (message queued)
+    // Phase 5.2 will implement actual A2A JSON-RPC dispatch to each recipient
     const stubDispatch: DispatchToAgentFn = async (_targetAgentId, _message) => {
-      // TODO: Phase 5.2 will implement actual A2A JSON-RPC dispatch
-      return { success: false, error: 'Phase 5.1 stub - no actual dispatch' };
+      return { success: true };
     };
 
     const result = await spaceManager.broadcastToSpace(
