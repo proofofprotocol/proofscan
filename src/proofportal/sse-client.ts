@@ -76,6 +76,9 @@ export function getSseClientScript(): string {
   const MAX_RECONNECT_ATTEMPTS = 10;
   const RECONNECT_DELAY = 3000;
 
+  // Timer for re-rendering when speaking state expires
+  let speakingExpiryTimer = null;
+
   /**
    * Evict oldest entries from a Map to maintain size limit (LRU)
    * Entries are evicted based on lastActivityAt or lastSeenAt field
@@ -261,6 +264,13 @@ export function getSseClientScript(): string {
         agent.lastMessagePreview = truncatePreview(metadata.message_preview, 40);
         agent.lastMessageAt = now;
         agent.experience += XP_VALUES.message || 0;
+
+        // Schedule re-render when speaking state expires (for bubble fade-out)
+        if (speakingExpiryTimer) clearTimeout(speakingExpiryTimer);
+        speakingExpiryTimer = setTimeout(function() {
+          renderGuildPanel();
+          renderGuildMap();
+        }, SPEAKING_THRESHOLD_MS + 100); // Small buffer to ensure state change
       } else if (action === 'left' && spaceId) {
         if (agent.currentSpaceId === spaceId) {
           agent.currentSpaceId = null;

@@ -269,6 +269,18 @@ export function getGuildMapStyles(): string {
       text-overflow: ellipsis;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
       z-index: 10;
+      animation: bubbleAppear 0.3s ease-out;
+    }
+
+    @keyframes bubbleAppear {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
     }
 
     .guild-map-bubble::after {
