@@ -76,8 +76,8 @@ export function getSseClientScript(): string {
   const MAX_RECONNECT_ATTEMPTS = 10;
   const RECONNECT_DELAY = 3000;
 
-  // Timer for re-rendering when speaking state expires
-  let speakingExpiryTimer = null;
+  // Per-agent timers for re-rendering when speaking state expires
+  const speakingExpiryTimers = new Map();
 
   /**
    * Evict oldest entries from a Map to maintain size limit (LRU)
@@ -266,11 +266,14 @@ export function getSseClientScript(): string {
         agent.experience += XP_VALUES.message || 0;
 
         // Schedule re-render when speaking state expires (for bubble fade-out)
-        if (speakingExpiryTimer) clearTimeout(speakingExpiryTimer);
-        speakingExpiryTimer = setTimeout(function() {
+        // Use per-agent timer to handle multiple agents speaking simultaneously
+        var existingTimer = speakingExpiryTimers.get(agentId);
+        if (existingTimer) clearTimeout(existingTimer);
+        speakingExpiryTimers.set(agentId, setTimeout(function() {
+          speakingExpiryTimers.delete(agentId);
           renderGuildPanel();
           renderGuildMap();
-        }, SPEAKING_THRESHOLD_MS + 100); // Small buffer to ensure state change
+        }, SPEAKING_THRESHOLD_MS + 100)); // Small buffer to ensure state change
       } else if (action === 'left' && spaceId) {
         if (agent.currentSpaceId === spaceId) {
           agent.currentSpaceId = null;
@@ -584,7 +587,7 @@ export function getSseClientScript(): string {
           '</div>' +
           '<div class="guild-member-id" title="' + escapeHtml(agent.agentId) + '">' + truncateId(agent.agentId, 16) + '</div>' +
         '</div>' +
-        (agent.lastMessagePreview ? '<div class="guild-member-bubble">' + escapeHtml(agent.lastMessagePreview) + '</div>' : '') +
+        (visualState === 'speaking' && agent.lastMessagePreview ? '<div class="guild-member-bubble">' + escapeHtml(agent.lastMessagePreview) + '</div>' : '') +
       '</div>';
     }).join('');
   }
@@ -755,6 +758,11 @@ export function getSseClientScript(): string {
     if (eventSource) {
       eventSource.close();
     }
+    // Clear all speaking expiry timers
+    speakingExpiryTimers.forEach(function(timer) {
+      clearTimeout(timer);
+    });
+    speakingExpiryTimers.clear();
   });
 })();
 `;
