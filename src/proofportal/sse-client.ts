@@ -268,7 +268,7 @@ export function getSseClientScript(): string {
 
         // Schedule re-render when speaking state expires (for bubble fade-out)
         // Use per-agent timer to handle multiple agents speaking simultaneously
-        var existingTimer = speakingExpiryTimers.get(agentId);
+        const existingTimer = speakingExpiryTimers.get(agentId);
         if (existingTimer) clearTimeout(existingTimer);
         speakingExpiryTimers.set(agentId, setTimeout(function() {
           speakingExpiryTimers.delete(agentId);
@@ -279,6 +279,12 @@ export function getSseClientScript(): string {
         if (agent.currentSpaceId === spaceId) {
           agent.currentSpaceId = null;
           agent.currentSpaceName = null;
+        }
+        // Clear any pending speaking timer for this agent
+        const leftTimer = speakingExpiryTimers.get(agentId);
+        if (leftTimer) {
+          clearTimeout(leftTimer);
+          speakingExpiryTimers.delete(agentId);
         }
       } else if (action === 'match') {
         agent.experience += XP_VALUES.match || 0;

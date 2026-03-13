@@ -251,10 +251,10 @@ export function getGuildPanelStyles(): string {
       overflow: hidden;
       text-overflow: ellipsis;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-      animation: bubbleAppear 0.3s ease-out;
+      animation: bubbleAppearPanel 0.3s ease-out;
     }
 
-    @keyframes bubbleAppear {
+    @keyframes bubbleAppearPanel {
       from {
         opacity: 0;
         transform: translateY(5px);
