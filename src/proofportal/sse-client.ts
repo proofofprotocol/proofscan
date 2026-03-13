@@ -48,7 +48,7 @@ export function getSseClientScript(): string {
   // Guild thresholds (Phase 5)
   const SPEAKING_THRESHOLD_MS = 10000;  // 10 seconds for 'speaking' state
   const ACTIVE_THRESHOLD_MS = 60000;    // 60 seconds for 'active' state
-  const SPEAKING_EXPIRY_BUFFER_MS = 100; // Buffer to ensure state change before re-render
+  const SPEAKING_EXPIRY_BUFFER_MS = 500; // Buffer to ensure state change before re-render (robust under load)
 
   // XP values per action
   // IMPORTANT: Keep in sync with applyEvent() in src/proofportal/types.ts
@@ -760,8 +760,8 @@ export function getSseClientScript(): string {
   renderGuildMap();
   connect();
 
-  // Cleanup on page unload
-  window.addEventListener('beforeunload', function() {
+  // Cleanup on page unload (pagehide is more reliable than beforeunload on mobile)
+  window.addEventListener('pagehide', function() {
     if (eventSource) {
       eventSource.close();
     }
