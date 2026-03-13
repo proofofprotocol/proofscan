@@ -48,6 +48,7 @@ export function getSseClientScript(): string {
   // Guild thresholds (Phase 5)
   const SPEAKING_THRESHOLD_MS = 10000;  // 10 seconds for 'speaking' state
   const ACTIVE_THRESHOLD_MS = 60000;    // 60 seconds for 'active' state
+  const SPEAKING_EXPIRY_BUFFER_MS = 100; // Buffer to ensure state change before re-render
 
   // XP values per action
   // IMPORTANT: Keep in sync with applyEvent() in src/proofportal/types.ts
@@ -273,7 +274,7 @@ export function getSseClientScript(): string {
           speakingExpiryTimers.delete(agentId);
           renderGuildPanel();
           renderGuildMap();
-        }, SPEAKING_THRESHOLD_MS + 100)); // Small buffer to ensure state change
+        }, SPEAKING_THRESHOLD_MS + SPEAKING_EXPIRY_BUFFER_MS));
       } else if (action === 'left' && spaceId) {
         if (agent.currentSpaceId === spaceId) {
           agent.currentSpaceId = null;

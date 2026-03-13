@@ -74,6 +74,7 @@ export function renderGuildMemberCard(member: GuildMemberDisplayData): string {
   const initial = member.name.charAt(0).toUpperCase();
   const displayId = truncateGuildId(member.agentId);
   const statusClass = member.membershipStatus;
+  const isSpeaking = member.visualState === 'speaking';
 
   return `
     <div class="guild-member ${getVisualStateClass(member.visualState)}" data-agent-id="${escapeHtml(member.agentId)}">
@@ -86,7 +87,7 @@ export function renderGuildMemberCard(member: GuildMemberDisplayData): string {
         </div>
         <div class="guild-member-id" title="${escapeHtml(member.agentId)}">${escapeHtml(displayId)}</div>
       </div>
-      ${member.lastMessagePreview ? `<div class="guild-member-bubble">${escapeHtml(member.lastMessagePreview)}</div>` : ''}
+      ${isSpeaking && member.lastMessagePreview ? `<div class="guild-member-bubble">${escapeHtml(member.lastMessagePreview)}</div>` : ''}
     </div>
   `;
 }
@@ -250,6 +251,18 @@ export function getGuildPanelStyles(): string {
       overflow: hidden;
       text-overflow: ellipsis;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      animation: bubbleAppear 0.3s ease-out;
+    }
+
+    @keyframes bubbleAppear {
+      from {
+        opacity: 0;
+        transform: translateY(5px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     .guild-member.visual-state-speaking .guild-member-bubble {
