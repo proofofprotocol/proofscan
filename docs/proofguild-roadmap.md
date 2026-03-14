@@ -228,7 +228,7 @@ proofscan は全 A2A 通信の中継者として:
 ```
 Phase 5:   [##########] 完了 - Guild 基盤
 Phase 5.1: [##########] 完了 - Broadcast API
-Phase 5.2: [          ] 未着手 - A2A Dispatch
+Phase 5.2: [########  ] 進行中 - A2A Dispatch (dispatch実装完了、統合テスト未)
 Phase 5.3: [          ] 未着手 - Token 永続化
 Phase 5.4: [          ] 計画 - 通信監視
 Phase 6:   [          ] 計画 - 高度な機能

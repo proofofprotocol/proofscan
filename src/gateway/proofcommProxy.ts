@@ -38,6 +38,10 @@ import {
   type GuildRegisterRequest,
 } from '../proofcomm/guild/index.js';
 import type { A2AMessage } from '../db/types.js';
+import { A2AClient } from '../a2a/client.js';
+import { fetchAgentCard } from '../a2a/agent-card.js';
+import type { AgentCard } from '../a2a/types.js';
+import { AgentCacheStore } from '../db/agent-cache-store.js';
 
 /**
  * Document registration request body
@@ -122,6 +126,7 @@ export function registerProofCommRoutes(
   const skillsStore = new SkillsStore(options.configDir);
   const skillRegistry = new SkillRegistry(skillsStore);
   const targetsStore = new TargetsStore(options.configDir);
+  const agentCacheStore = new AgentCacheStore(options.configDir);
   const spacesStore = new SpacesStore(options.configDir);
   const spaceManager = new SpaceManager(spacesStore, options.auditLogger);
 
@@ -1317,12 +1322,78 @@ export function registerProofCommRoutes(
       },
     };
 
-    // Create a stub dispatch function for Phase 5.1
-    // Phase 5.1: Event is emitted by broadcastToSpace, but no actual A2A dispatch yet
-    // Returns success: true because the broadcast operation itself succeeded (message queued)
-    // Phase 5.2 will implement actual A2A JSON-RPC dispatch to each recipient
-    const stubDispatch: DispatchToAgentFn = async (_targetAgentId, _message) => {
-      return { success: true };
+    // Get space info for metadata enrichment
+    const space = spaceManager.getSpace(space_id);
+    const spaceName = space?.name ?? space_id;
+
+    // A2A dispatch function - sends message to each recipient agent via JSON-RPC
+    const dispatchToAgent: DispatchToAgentFn = async (targetAgentId, message) => {
+      try {
+        // Look up target agent's URL from targets store
+        const target = targetsStore.get(targetAgentId);
+        if (!target) {
+          return { success: false, error: `Agent not found: ${targetAgentId}` };
+        }
+
+        const config = target.config as { url?: string; allow_local?: boolean } | undefined;
+        if (!config?.url) {
+          return { success: false, error: `Agent has no URL configured: ${targetAgentId}` };
+        }
+
+        // Check cache for AgentCard
+        const cached = agentCacheStore.get(targetAgentId);
+        const now = new Date();
+        let agentCard = cached?.agentCard as AgentCard | undefined;
+
+        // Fetch AgentCard if not cached or expired
+        if (!agentCard || (cached?.expiresAt && new Date(cached.expiresAt) < now)) {
+          const fetchResult = await fetchAgentCard(config.url, {
+            allowLocal: config.allow_local ?? false,
+            timeout: 10_000,
+          });
+
+          if (!fetchResult.ok || !fetchResult.agentCard) {
+            return { success: false, error: `Failed to fetch AgentCard: ${fetchResult.error}` };
+          }
+
+          agentCard = fetchResult.agentCard;
+
+          // Update cache (1 hour TTL)
+          agentCacheStore.set({
+            targetId: targetAgentId,
+            agentCard,
+            agentCardHash: fetchResult.hash,
+            fetchedAt: now.toISOString(),
+            expiresAt: new Date(now.getTime() + 3600_000).toISOString(),
+          });
+        }
+
+        // Create A2AClient and send message
+        const client = new A2AClient(agentCard, { allowLocal: config.allow_local ?? false });
+
+        // Enrich message metadata with space info
+        const enrichedMessage: A2AMessage = {
+          ...message,
+          metadata: {
+            ...message.metadata,
+            space_id,
+            space_name: spaceName,
+            sender_agent_id: agentId,
+          },
+        };
+
+        const sendResult = await client.sendMessage(enrichedMessage, { timeout: 30_000 });
+
+        if (!sendResult.ok) {
+          return { success: false, error: sendResult.error ?? 'Send failed' };
+        }
+
+        return { success: true };
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        request.log.warn({ targetAgentId, error: errorMessage }, 'A2A dispatch failed');
+        return { success: false, error: errorMessage };
+      }
     };
 
     const result = await spaceManager.broadcastToSpace(
@@ -1331,7 +1402,7 @@ export function registerProofCommRoutes(
         senderAgentId: agentId,
         message: a2aMessage,
       },
-      stubDispatch,
+      dispatchToAgent,
       {
         requestId: request.requestId,
         traceId: request.headers['x-trace-id'] as string | undefined,
