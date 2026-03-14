@@ -274,6 +274,8 @@ export function getSseClientScript(): string {
         // Use per-agent timer to handle multiple agents speaking simultaneously
         const existingTimer = speakingExpiryTimers.get(agentId);
         if (existingTimer) clearTimeout(existingTimer);
+        // Cancel any in-progress fade-out animation to prevent double bubble
+        leavingBubbles.delete(agentId);
         speakingExpiryTimers.set(agentId, setTimeout(function() {
           speakingExpiryTimers.delete(agentId);
           // Add to leavingBubbles for fade-out animation
@@ -298,6 +300,8 @@ export function getSseClientScript(): string {
           clearTimeout(leftTimer);
           speakingExpiryTimers.delete(agentId);
         }
+        // Clear any in-progress fade-out animation
+        leavingBubbles.delete(agentId);
       } else if (action === 'match') {
         agent.experience += XP_VALUES.match || 0;
       } else if (action === 'context_updated') {
