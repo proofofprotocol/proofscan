@@ -40,8 +40,14 @@ import {
 import type { A2AMessage } from '../db/types.js';
 import { A2AClient } from '../a2a/client.js';
 import { fetchAgentCard } from '../a2a/agent-card.js';
+import { parseAgentCard } from '../a2a/config.js';
 import type { AgentCard } from '../a2a/types.js';
 import { AgentCacheStore } from '../db/agent-cache-store.js';
+
+// Dispatch timeout constants
+const AGENT_CARD_FETCH_TIMEOUT_MS = 10_000;
+const MESSAGE_SEND_TIMEOUT_MS = 30_000;
+const AGENT_CARD_CACHE_TTL_MS = 3600_000; // 1 hour
 
 /**
  * Document registration request body
@@ -1323,10 +1329,12 @@ export function registerProofCommRoutes(
     };
 
     // Get space info for metadata enrichment
+    // Fallback to space_id if space was deleted between validation and dispatch (rare edge case)
     const space = spaceManager.getSpace(space_id);
     const spaceName = space?.name ?? space_id;
 
     // A2A dispatch function - sends message to each recipient agent via JSON-RPC
+    // Note: A2AClient is stateless (no persistent connections), so creating per-dispatch is fine
     const dispatchToAgent: DispatchToAgentFn = async (targetAgentId, message) => {
       try {
         // Look up target agent's URL from targets store
@@ -1335,21 +1343,34 @@ export function registerProofCommRoutes(
           return { success: false, error: `Agent not found: ${targetAgentId}` };
         }
 
+        // Guild-registered agents store config as { url, source, registered_at, ... }
+        // Type assertion is safe because we check url existence below
         const config = target.config as { url?: string; allow_local?: boolean } | undefined;
         if (!config?.url) {
           return { success: false, error: `Agent has no URL configured: ${targetAgentId}` };
         }
 
         // Check cache for AgentCard
+        // Note: Concurrent requests may race on cache-miss and fetch multiple times;
+        // this is acceptable (last-write-wins) as it only wastes bandwidth, not correctness
         const cached = agentCacheStore.get(targetAgentId);
         const now = new Date();
-        let agentCard = cached?.agentCard as AgentCard | undefined;
 
-        // Fetch AgentCard if not cached or expired
+        // Validate cached AgentCard shape (guards against stale/corrupted cache)
+        let agentCard: AgentCard | undefined;
+        if (cached?.agentCard) {
+          const parseResult = parseAgentCard(cached.agentCard);
+          if (parseResult.ok) {
+            agentCard = parseResult.value;
+          }
+          // If parse fails, treat as cache miss and fetch fresh
+        }
+
+        // Fetch AgentCard if not cached, invalid, or expired
         if (!agentCard || (cached?.expiresAt && new Date(cached.expiresAt) < now)) {
           const fetchResult = await fetchAgentCard(config.url, {
             allowLocal: config.allow_local ?? false,
-            timeout: 10_000,
+            timeout: AGENT_CARD_FETCH_TIMEOUT_MS,
           });
 
           if (!fetchResult.ok || !fetchResult.agentCard) {
@@ -1358,13 +1379,13 @@ export function registerProofCommRoutes(
 
           agentCard = fetchResult.agentCard;
 
-          // Update cache (1 hour TTL)
+          // Update cache
           agentCacheStore.set({
             targetId: targetAgentId,
             agentCard,
             agentCardHash: fetchResult.hash,
             fetchedAt: now.toISOString(),
-            expiresAt: new Date(now.getTime() + 3600_000).toISOString(),
+            expiresAt: new Date(now.getTime() + AGENT_CARD_CACHE_TTL_MS).toISOString(),
           });
         }
 
@@ -1382,12 +1403,13 @@ export function registerProofCommRoutes(
           },
         };
 
-        const sendResult = await client.sendMessage(enrichedMessage, { timeout: 30_000 });
+        const sendResult = await client.sendMessage(enrichedMessage, { timeout: MESSAGE_SEND_TIMEOUT_MS });
 
         if (!sendResult.ok) {
           return { success: false, error: sendResult.error ?? 'Send failed' };
         }
 
+        request.log.debug({ targetAgentId, spaceId: space_id }, 'A2A dispatch succeeded');
         return { success: true };
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
