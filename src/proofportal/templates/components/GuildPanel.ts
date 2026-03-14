@@ -265,6 +265,21 @@ export function getGuildPanelStyles(): string {
       }
     }
 
+    @keyframes bubbleFadeOutPanel {
+      from {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateY(-5px);
+      }
+    }
+
+    .guild-member-bubble.bubble-leaving {
+      animation: bubbleFadeOutPanel 0.3s ease-out forwards;
+    }
+
     .guild-member.visual-state-speaking .guild-member-bubble {
       background: var(--accent-green);
       color: white;

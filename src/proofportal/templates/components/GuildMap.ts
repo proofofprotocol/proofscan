@@ -283,6 +283,21 @@ export function getGuildMapStyles(): string {
       }
     }
 
+    @keyframes bubbleFadeOutMap {
+      from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-10px);
+      }
+    }
+
+    .guild-map-bubble.bubble-leaving {
+      animation: bubbleFadeOutMap 0.3s ease-out forwards;
+    }
+
     .guild-map-bubble::after {
       content: '';
       position: absolute;

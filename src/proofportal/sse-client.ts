@@ -80,6 +80,10 @@ export function getSseClientScript(): string {
   // Per-agent timers for re-rendering when speaking state expires
   const speakingExpiryTimers = new Map();
 
+  // Agents with bubbles currently fading out (for fade-out animation)
+  const leavingBubbles = new Set();
+  const BUBBLE_FADE_DURATION_MS = 300;
+
   /**
    * Evict oldest entries from a Map to maintain size limit (LRU)
    * Entries are evicted based on lastActivityAt or lastSeenAt field
@@ -272,8 +276,16 @@ export function getSseClientScript(): string {
         if (existingTimer) clearTimeout(existingTimer);
         speakingExpiryTimers.set(agentId, setTimeout(function() {
           speakingExpiryTimers.delete(agentId);
+          // Add to leavingBubbles for fade-out animation
+          leavingBubbles.add(agentId);
           renderGuildPanel();
           renderGuildMap();
+          // After fade animation completes, remove and re-render
+          setTimeout(function() {
+            leavingBubbles.delete(agentId);
+            renderGuildPanel();
+            renderGuildMap();
+          }, BUBBLE_FADE_DURATION_MS);
         }, SPEAKING_THRESHOLD_MS + SPEAKING_EXPIRY_BUFFER_MS));
       } else if (action === 'left' && spaceId) {
         if (agent.currentSpaceId === spaceId) {
@@ -595,6 +607,7 @@ export function getSseClientScript(): string {
           '<div class="guild-member-id" title="' + escapeHtml(agent.agentId) + '">' + truncateId(agent.agentId, 16) + '</div>' +
         '</div>' +
         (visualState === 'speaking' && agent.lastMessagePreview ? '<div class="guild-member-bubble">' + escapeHtml(agent.lastMessagePreview) + '</div>' : '') +
+        (leavingBubbles.has(agent.agentId) && agent.lastMessagePreview ? '<div class="guild-member-bubble bubble-leaving">' + escapeHtml(agent.lastMessagePreview) + '</div>' : '') +
       '</div>';
     }).join('');
   }
@@ -681,6 +694,8 @@ export function getSseClientScript(): string {
           '<div class="guild-map-member-name">' + escapeHtml(member.name) + '</div>' +
           (member.visualState === 'speaking' && member.lastMessagePreview ?
             '<div class="guild-map-bubble">' + escapeHtml(member.lastMessagePreview) + '</div>' : '') +
+          (leavingBubbles.has(member.agentId) && member.lastMessagePreview ?
+            '<div class="guild-map-bubble bubble-leaving">' + escapeHtml(member.lastMessagePreview) + '</div>' : '') +
         '</div>';
       }).join('');
 
@@ -770,6 +785,8 @@ export function getSseClientScript(): string {
       clearTimeout(timer);
     });
     speakingExpiryTimers.clear();
+    // Clear leaving bubbles tracking
+    leavingBubbles.clear();
   });
 })();
 `;
