@@ -269,6 +269,33 @@ export function getGuildMapStyles(): string {
       text-overflow: ellipsis;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
       z-index: 10;
+      animation: bubbleAppearMap 0.3s ease-out;
+    }
+
+    @keyframes bubbleAppearMap {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+    }
+
+    @keyframes bubbleFadeOutMap {
+      from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+      to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-10px);
+      }
+    }
+
+    .guild-map-bubble.bubble-leaving {
+      animation: bubbleFadeOutMap 0.3s ease-out forwards;
     }
 
     .guild-map-bubble::after {

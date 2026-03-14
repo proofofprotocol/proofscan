@@ -48,6 +48,7 @@ export function getSseClientScript(): string {
   // Guild thresholds (Phase 5)
   const SPEAKING_THRESHOLD_MS = 10000;  // 10 seconds for 'speaking' state
   const ACTIVE_THRESHOLD_MS = 60000;    // 60 seconds for 'active' state
+  const SPEAKING_EXPIRY_BUFFER_MS = 500; // Buffer to ensure state change before re-render (robust under load)
 
   // XP values per action
   // IMPORTANT: Keep in sync with applyEvent() in src/proofportal/types.ts
@@ -75,6 +76,13 @@ export function getSseClientScript(): string {
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 10;
   const RECONNECT_DELAY = 3000;
+
+  // Per-agent timers for re-rendering when speaking state expires
+  const speakingExpiryTimers = new Map();
+
+  // Agents with bubbles currently fading out (for fade-out animation)
+  const leavingBubbles = new Set();
+  const BUBBLE_FADE_DURATION_MS = 300;
 
   /**
    * Evict oldest entries from a Map to maintain size limit (LRU)
@@ -261,11 +269,39 @@ export function getSseClientScript(): string {
         agent.lastMessagePreview = truncatePreview(metadata.message_preview, 40);
         agent.lastMessageAt = now;
         agent.experience += XP_VALUES.message || 0;
+
+        // Schedule re-render when speaking state expires (for bubble fade-out)
+        // Use per-agent timer to handle multiple agents speaking simultaneously
+        const existingTimer = speakingExpiryTimers.get(agentId);
+        if (existingTimer) clearTimeout(existingTimer);
+        // Cancel any in-progress fade-out animation to prevent double bubble
+        leavingBubbles.delete(agentId);
+        speakingExpiryTimers.set(agentId, setTimeout(function() {
+          speakingExpiryTimers.delete(agentId);
+          // Add to leavingBubbles for fade-out animation
+          leavingBubbles.add(agentId);
+          renderGuildPanel();
+          renderGuildMap();
+          // After fade animation completes, remove and re-render
+          setTimeout(function() {
+            leavingBubbles.delete(agentId);
+            renderGuildPanel();
+            renderGuildMap();
+          }, BUBBLE_FADE_DURATION_MS);
+        }, SPEAKING_THRESHOLD_MS + SPEAKING_EXPIRY_BUFFER_MS));
       } else if (action === 'left' && spaceId) {
         if (agent.currentSpaceId === spaceId) {
           agent.currentSpaceId = null;
           agent.currentSpaceName = null;
         }
+        // Clear any pending speaking timer for this agent
+        const leftTimer = speakingExpiryTimers.get(agentId);
+        if (leftTimer) {
+          clearTimeout(leftTimer);
+          speakingExpiryTimers.delete(agentId);
+        }
+        // Clear any in-progress fade-out animation
+        leavingBubbles.delete(agentId);
       } else if (action === 'match') {
         agent.experience += XP_VALUES.match || 0;
       } else if (action === 'context_updated') {
@@ -574,7 +610,8 @@ export function getSseClientScript(): string {
           '</div>' +
           '<div class="guild-member-id" title="' + escapeHtml(agent.agentId) + '">' + truncateId(agent.agentId, 16) + '</div>' +
         '</div>' +
-        (agent.lastMessagePreview ? '<div class="guild-member-bubble">' + escapeHtml(agent.lastMessagePreview) + '</div>' : '') +
+        (visualState === 'speaking' && agent.lastMessagePreview ? '<div class="guild-member-bubble">' + escapeHtml(agent.lastMessagePreview) + '</div>' : '') +
+        (leavingBubbles.has(agent.agentId) && agent.lastMessagePreview ? '<div class="guild-member-bubble bubble-leaving">' + escapeHtml(agent.lastMessagePreview) + '</div>' : '') +
       '</div>';
     }).join('');
   }
@@ -661,6 +698,8 @@ export function getSseClientScript(): string {
           '<div class="guild-map-member-name">' + escapeHtml(member.name) + '</div>' +
           (member.visualState === 'speaking' && member.lastMessagePreview ?
             '<div class="guild-map-bubble">' + escapeHtml(member.lastMessagePreview) + '</div>' : '') +
+          (leavingBubbles.has(member.agentId) && member.lastMessagePreview ?
+            '<div class="guild-map-bubble bubble-leaving">' + escapeHtml(member.lastMessagePreview) + '</div>' : '') +
         '</div>';
       }).join('');
 
@@ -740,11 +779,18 @@ export function getSseClientScript(): string {
   renderGuildMap();
   connect();
 
-  // Cleanup on page unload
-  window.addEventListener('beforeunload', function() {
+  // Cleanup on page unload (pagehide is more reliable than beforeunload on mobile)
+  window.addEventListener('pagehide', function() {
     if (eventSource) {
       eventSource.close();
     }
+    // Clear all speaking expiry timers
+    speakingExpiryTimers.forEach(function(timer) {
+      clearTimeout(timer);
+    });
+    speakingExpiryTimers.clear();
+    // Clear leaving bubbles tracking
+    leavingBubbles.clear();
   });
 })();
 `;
