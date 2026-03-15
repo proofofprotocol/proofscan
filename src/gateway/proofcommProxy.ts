@@ -1334,21 +1334,28 @@ export function registerProofCommRoutes(
     const spaceName = space?.name ?? space_id;
 
     // A2A dispatch function - sends message to each recipient agent via JSON-RPC
-    // Note: A2AClient is stateless (no persistent connections), so creating per-dispatch is fine
+    // IMPORTANT: This closure captures request-scoped values (space_id, agentId, spaceName).
+    // It is created fresh per-request and must NOT be reused across requests.
+    // A2AClient is stateless (uses fetch internally, no connection pooling) - see A2AClient.sendMessage()
     const dispatchToAgent: DispatchToAgentFn = async (targetAgentId, message) => {
       try {
         // Look up target agent's URL from targets store
         const target = targetsStore.get(targetAgentId);
         if (!target) {
-          return { success: false, error: `Agent not found: ${targetAgentId}` };
+          request.log.debug({ targetAgentId }, 'A2A dispatch: agent not found');
+          return { success: false, error: 'Agent not found' };
         }
 
         // Guild-registered agents store config as { url, source, registered_at, ... }
         // Type assertion is safe because we check url existence below
         const config = target.config as { url?: string; allow_local?: boolean } | undefined;
         if (!config?.url) {
-          return { success: false, error: `Agent has no URL configured: ${targetAgentId}` };
+          request.log.debug({ targetAgentId }, 'A2A dispatch: agent has no URL');
+          return { success: false, error: 'Agent configuration invalid' };
         }
+
+        // Validate allow_local is boolean if present (defense against config corruption)
+        const allowLocal = typeof config.allow_local === 'boolean' ? config.allow_local : false;
 
         // Check cache for AgentCard
         // Note: Concurrent requests may race on cache-miss and fetch multiple times;
@@ -1366,20 +1373,23 @@ export function registerProofCommRoutes(
           // If parse fails, treat as cache miss and fetch fresh
         }
 
-        // Fetch AgentCard if not cached, invalid, or expired
-        if (!agentCard || (cached?.expiresAt && new Date(cached.expiresAt) < now)) {
+        // Fetch AgentCard if not cached, invalid, expired, or missing expiry
+        // (missing expiresAt is treated as expired to ensure we always have a TTL)
+        const isExpired = !cached?.expiresAt || new Date(cached.expiresAt) < now;
+        if (!agentCard || isExpired) {
           const fetchResult = await fetchAgentCard(config.url, {
-            allowLocal: config.allow_local ?? false,
+            allowLocal,
             timeout: AGENT_CARD_FETCH_TIMEOUT_MS,
           });
 
           if (!fetchResult.ok || !fetchResult.agentCard) {
-            return { success: false, error: `Failed to fetch AgentCard: ${fetchResult.error}` };
+            request.log.debug({ targetAgentId, error: fetchResult.error }, 'A2A dispatch: AgentCard fetch failed');
+            return { success: false, error: 'Failed to fetch agent metadata' };
           }
 
           agentCard = fetchResult.agentCard;
 
-          // Update cache
+          // Update cache (always set expiresAt to ensure TTL enforcement)
           agentCacheStore.set({
             targetId: targetAgentId,
             agentCard,
@@ -1390,7 +1400,7 @@ export function registerProofCommRoutes(
         }
 
         // Create A2AClient and send message
-        const client = new A2AClient(agentCard, { allowLocal: config.allow_local ?? false });
+        const client = new A2AClient(agentCard, { allowLocal });
 
         // Enrich message metadata with space info
         const enrichedMessage: A2AMessage = {
@@ -1406,7 +1416,8 @@ export function registerProofCommRoutes(
         const sendResult = await client.sendMessage(enrichedMessage, { timeout: MESSAGE_SEND_TIMEOUT_MS });
 
         if (!sendResult.ok) {
-          return { success: false, error: sendResult.error ?? 'Send failed' };
+          request.log.debug({ targetAgentId, error: sendResult.error }, 'A2A dispatch: send failed');
+          return { success: false, error: 'Message delivery failed' };
         }
 
         request.log.debug({ targetAgentId, spaceId: space_id }, 'A2A dispatch succeeded');
@@ -1414,7 +1425,8 @@ export function registerProofCommRoutes(
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         request.log.warn({ targetAgentId, error: errorMessage }, 'A2A dispatch failed');
-        return { success: false, error: errorMessage };
+        // Return generic error to caller, detailed error is logged above
+        return { success: false, error: 'Dispatch failed' };
       }
     };
 
