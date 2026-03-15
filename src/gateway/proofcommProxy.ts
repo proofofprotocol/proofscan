@@ -1337,12 +1337,17 @@ export function registerProofCommRoutes(
     // IMPORTANT: This closure captures request-scoped values (space_id, agentId, spaceName).
     // It is created fresh per-request and must NOT be reused across requests.
     // A2AClient is stateless (uses fetch internally, no connection pooling) - see A2AClient.sendMessage()
+    //
+    // Partial failure semantics: If dispatch fails for some recipients, broadcastToSpace
+    // continues dispatching to remaining recipients and aggregates results. The broadcast
+    // API returns { delivered, failed, recipient_count } so callers can see partial failures.
+    // Individual failures are logged here at warn level for operator visibility.
     const dispatchToAgent: DispatchToAgentFn = async (targetAgentId, message) => {
       try {
         // Look up target agent's URL from targets store
         const target = targetsStore.get(targetAgentId);
         if (!target) {
-          request.log.debug({ targetAgentId }, 'A2A dispatch: agent not found');
+          request.log.warn({ targetAgentId, spaceId: space_id }, 'A2A dispatch: agent not found');
           return { success: false, error: 'Agent not found' };
         }
 
@@ -1350,7 +1355,7 @@ export function registerProofCommRoutes(
         // Type assertion is safe because we check url existence below
         const config = target.config as { url?: string; allow_local?: boolean } | undefined;
         if (!config?.url) {
-          request.log.debug({ targetAgentId }, 'A2A dispatch: agent has no URL');
+          request.log.warn({ targetAgentId, spaceId: space_id }, 'A2A dispatch: agent has no URL');
           return { success: false, error: 'Agent configuration invalid' };
         }
 
@@ -1383,7 +1388,7 @@ export function registerProofCommRoutes(
           });
 
           if (!fetchResult.ok || !fetchResult.agentCard) {
-            request.log.debug({ targetAgentId, error: fetchResult.error }, 'A2A dispatch: AgentCard fetch failed');
+            request.log.warn({ targetAgentId, spaceId: space_id, error: fetchResult.error }, 'A2A dispatch: AgentCard fetch failed');
             return { success: false, error: 'Failed to fetch agent metadata' };
           }
 
@@ -1416,7 +1421,7 @@ export function registerProofCommRoutes(
         const sendResult = await client.sendMessage(enrichedMessage, { timeout: MESSAGE_SEND_TIMEOUT_MS });
 
         if (!sendResult.ok) {
-          request.log.debug({ targetAgentId, error: sendResult.error }, 'A2A dispatch: send failed');
+          request.log.warn({ targetAgentId, spaceId: space_id, error: sendResult.error }, 'A2A dispatch: send failed');
           return { success: false, error: 'Message delivery failed' };
         }
 
