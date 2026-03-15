@@ -1353,15 +1353,26 @@ export function registerProofCommRoutes(
 
         // Validate config shape at runtime (guards against DB corruption or schema changes)
         const config = target.config;
-        if (!config || typeof config !== 'object' || !('url' in config) || typeof config.url !== 'string' || !config.url) {
+        const hasValidUrl =
+          config &&
+          typeof config === 'object' &&
+          'url' in config &&
+          typeof config.url === 'string' &&
+          config.url;
+
+        if (!hasValidUrl) {
           request.log.warn({ targetAgentId, spaceId: space_id }, 'A2A dispatch: agent has invalid config');
           return { success: false, error: 'Agent configuration invalid' };
         }
 
+        // Extract validated URL (TypeScript needs explicit narrowing after the guard)
+        const agentUrl = config.url as string;
+
         // Validate allow_local is boolean if present (defense against config corruption)
-        const allowLocal = 'allow_local' in config && typeof config.allow_local === 'boolean'
-          ? config.allow_local
-          : false;
+        const allowLocal =
+          'allow_local' in config && typeof config.allow_local === 'boolean'
+            ? config.allow_local
+            : false;
 
         // Check cache for AgentCard
         // Note: Concurrent requests may race on cache-miss and fetch multiple times;
@@ -1386,31 +1397,44 @@ export function registerProofCommRoutes(
         if (needsFetch) {
           // SSRF protection: fetchAgentCard validates URLs against private IP ranges
           // and enforces allowLocal=false by default. See src/a2a/agent-card.ts isPrivateUrl()
-          const fetchResult = await fetchAgentCard(config.url, {
+          const fetchResult = await fetchAgentCard(agentUrl, {
             allowLocal,
             timeout: AGENT_CARD_FETCH_TIMEOUT_MS,
           });
 
           if (!fetchResult.ok || !fetchResult.agentCard) {
-            request.log.warn({ targetAgentId, spaceId: space_id, error: fetchResult.error }, 'A2A dispatch: AgentCard fetch failed');
-            return { success: false, error: 'Failed to fetch agent metadata' };
+            // Stale-while-error: if we have a valid but expired card, use it rather than failing
+            if (agentCard) {
+              request.log.warn(
+                { targetAgentId, spaceId: space_id, error: fetchResult.error },
+                'A2A dispatch: AgentCard fetch failed, using stale cache'
+              );
+              // Continue with stale agentCard (don't update cache with failure)
+            } else {
+              request.log.warn(
+                { targetAgentId, spaceId: space_id, error: fetchResult.error },
+                'A2A dispatch: AgentCard fetch failed'
+              );
+              return { success: false, error: 'Failed to fetch agent metadata' };
+            }
+          } else {
+            agentCard = fetchResult.agentCard;
+
+            // Update cache (always set expiresAt to ensure TTL enforcement)
+            agentCacheStore.set({
+              targetId: targetAgentId,
+              agentCard,
+              agentCardHash: fetchResult.hash,
+              fetchedAt: now.toISOString(),
+              expiresAt: new Date(now.getTime() + AGENT_CARD_CACHE_TTL_MS).toISOString(),
+            });
           }
-
-          agentCard = fetchResult.agentCard;
-
-          // Update cache (always set expiresAt to ensure TTL enforcement)
-          agentCacheStore.set({
-            targetId: targetAgentId,
-            agentCard,
-            agentCardHash: fetchResult.hash,
-            fetchedAt: now.toISOString(),
-            expiresAt: new Date(now.getTime() + AGENT_CARD_CACHE_TTL_MS).toISOString(),
-          });
         }
 
         // At this point agentCard is guaranteed to be defined:
-        // - Either from valid cache (needsFetch was false)
-        // - Or from successful fetch (we return early on failure)
+        // - From valid cache (needsFetch was false)
+        // - From successful fetch
+        // - From stale cache on fetch failure (stale-while-error)
         if (!agentCard) {
           // This should never happen, but guard for type safety
           request.log.error({ targetAgentId, spaceId: space_id }, 'A2A dispatch: unexpected undefined agentCard');
@@ -1442,7 +1466,7 @@ export function registerProofCommRoutes(
         return { success: true };
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        request.log.warn({ targetAgentId, error: errorMessage }, 'A2A dispatch failed');
+        request.log.warn({ targetAgentId, spaceId: space_id, error: errorMessage }, 'A2A dispatch failed');
         // Return generic error to caller, detailed error is logged above
         return { success: false, error: 'Dispatch failed' };
       }
