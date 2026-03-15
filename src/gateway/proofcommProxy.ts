@@ -38,6 +38,16 @@ import {
   type GuildRegisterRequest,
 } from '../proofcomm/guild/index.js';
 import type { A2AMessage } from '../db/types.js';
+import { A2AClient } from '../a2a/client.js';
+import { fetchAgentCard } from '../a2a/agent-card.js';
+import { parseAgentCard } from '../a2a/config.js';
+import type { AgentCard } from '../a2a/types.js';
+import { AgentCacheStore } from '../db/agent-cache-store.js';
+
+// Dispatch timeout constants
+const AGENT_CARD_FETCH_TIMEOUT_MS = 10_000;
+const MESSAGE_SEND_TIMEOUT_MS = 30_000;
+const AGENT_CARD_CACHE_TTL_MS = 3600_000; // 1 hour
 
 /**
  * Document registration request body
@@ -122,6 +132,7 @@ export function registerProofCommRoutes(
   const skillsStore = new SkillsStore(options.configDir);
   const skillRegistry = new SkillRegistry(skillsStore);
   const targetsStore = new TargetsStore(options.configDir);
+  const agentCacheStore = new AgentCacheStore(options.configDir);
   const spacesStore = new SpacesStore(options.configDir);
   const spaceManager = new SpaceManager(spacesStore, options.auditLogger);
 
@@ -1317,12 +1328,148 @@ export function registerProofCommRoutes(
       },
     };
 
-    // Create a stub dispatch function for Phase 5.1
-    // Phase 5.1: Event is emitted by broadcastToSpace, but no actual A2A dispatch yet
-    // Returns success: true because the broadcast operation itself succeeded (message queued)
-    // Phase 5.2 will implement actual A2A JSON-RPC dispatch to each recipient
-    const stubDispatch: DispatchToAgentFn = async (_targetAgentId, _message) => {
-      return { success: true };
+    // Get space info for metadata enrichment
+    // Fallback to space_id if space was deleted between validation and dispatch (rare edge case)
+    const space = spaceManager.getSpace(space_id);
+    const spaceName = space?.name ?? space_id;
+
+    // A2A dispatch function - sends message to each recipient agent via JSON-RPC
+    // IMPORTANT: This closure captures request-scoped values (space_id, agentId, spaceName).
+    // It is created fresh per-request and must NOT be reused across requests.
+    // A2AClient is stateless (uses fetch internally, no connection pooling) - see A2AClient.sendMessage()
+    //
+    // Partial failure semantics: If dispatch fails for some recipients, broadcastToSpace
+    // continues dispatching to remaining recipients and aggregates results. The broadcast
+    // API returns { delivered, failed, recipient_count } so callers can see partial failures.
+    // Individual failures are logged here at warn level for operator visibility.
+    const dispatchToAgent: DispatchToAgentFn = async (targetAgentId, message) => {
+      try {
+        // Look up target agent's URL from targets store
+        const target = targetsStore.get(targetAgentId);
+        if (!target) {
+          request.log.warn({ targetAgentId, spaceId: space_id }, 'A2A dispatch: agent not found');
+          return { success: false, error: 'Agent not found' };
+        }
+
+        // Validate config shape at runtime (guards against DB corruption or schema changes)
+        const config = target.config;
+        const hasValidUrl =
+          config &&
+          typeof config === 'object' &&
+          'url' in config &&
+          typeof config.url === 'string' &&
+          config.url;
+
+        if (!hasValidUrl) {
+          request.log.warn({ targetAgentId, spaceId: space_id }, 'A2A dispatch: agent has invalid config');
+          return { success: false, error: 'Agent configuration invalid' };
+        }
+
+        // Extract validated URL (TypeScript needs explicit narrowing after the guard)
+        const agentUrl = config.url as string;
+
+        // Validate allow_local is boolean if present (defense against config corruption)
+        const allowLocal =
+          'allow_local' in config && typeof config.allow_local === 'boolean'
+            ? config.allow_local
+            : false;
+
+        // Check cache for AgentCard
+        // Note: Concurrent requests may race on cache-miss and fetch multiple times;
+        // this is acceptable (last-write-wins) as it only wastes bandwidth, not correctness
+        const cached = agentCacheStore.get(targetAgentId);
+        const now = new Date();
+
+        // Validate cached AgentCard shape (guards against stale/corrupted cache)
+        let agentCard: AgentCard | undefined;
+        if (cached?.agentCard) {
+          const parseResult = parseAgentCard(cached.agentCard);
+          if (parseResult.ok) {
+            agentCard = parseResult.value;
+          }
+          // If parse fails, treat as cache miss and fetch fresh
+        }
+
+        // Determine if we need to fetch: no valid card, expired, or missing expiry timestamp
+        const isExpired = !cached?.expiresAt || new Date(cached.expiresAt) < now;
+        const needsFetch = !agentCard || isExpired;
+
+        if (needsFetch) {
+          // SSRF protection: fetchAgentCard validates URLs against private IP ranges
+          // and enforces allowLocal=false by default. See src/a2a/agent-card.ts isPrivateUrl()
+          const fetchResult = await fetchAgentCard(agentUrl, {
+            allowLocal,
+            timeout: AGENT_CARD_FETCH_TIMEOUT_MS,
+          });
+
+          if (!fetchResult.ok || !fetchResult.agentCard) {
+            // Stale-while-error: if we have a valid but expired card, use it rather than failing
+            if (agentCard) {
+              request.log.warn(
+                { targetAgentId, spaceId: space_id, error: fetchResult.error },
+                'A2A dispatch: AgentCard fetch failed, using stale cache'
+              );
+              // Continue with stale agentCard (don't update cache with failure)
+            } else {
+              request.log.warn(
+                { targetAgentId, spaceId: space_id, error: fetchResult.error },
+                'A2A dispatch: AgentCard fetch failed'
+              );
+              return { success: false, error: 'Failed to fetch agent metadata' };
+            }
+          } else {
+            agentCard = fetchResult.agentCard;
+
+            // Update cache (always set expiresAt to ensure TTL enforcement)
+            agentCacheStore.set({
+              targetId: targetAgentId,
+              agentCard,
+              agentCardHash: fetchResult.hash,
+              fetchedAt: now.toISOString(),
+              expiresAt: new Date(now.getTime() + AGENT_CARD_CACHE_TTL_MS).toISOString(),
+            });
+          }
+        }
+
+        // At this point agentCard is guaranteed to be defined:
+        // - From valid cache (needsFetch was false)
+        // - From successful fetch
+        // - From stale cache on fetch failure (stale-while-error)
+        if (!agentCard) {
+          // This should never happen, but guard for type safety
+          request.log.error({ targetAgentId, spaceId: space_id }, 'A2A dispatch: unexpected undefined agentCard');
+          return { success: false, error: 'Internal error' };
+        }
+
+        // Create A2AClient and send message
+        const client = new A2AClient(agentCard, { allowLocal });
+
+        // Enrich message metadata with space info
+        const enrichedMessage: A2AMessage = {
+          ...message,
+          metadata: {
+            ...message.metadata,
+            space_id,
+            space_name: spaceName,
+            sender_agent_id: agentId,
+          },
+        };
+
+        const sendResult = await client.sendMessage(enrichedMessage, { timeout: MESSAGE_SEND_TIMEOUT_MS });
+
+        if (!sendResult.ok) {
+          request.log.warn({ targetAgentId, spaceId: space_id, error: sendResult.error }, 'A2A dispatch: send failed');
+          return { success: false, error: 'Message delivery failed' };
+        }
+
+        request.log.debug({ targetAgentId, spaceId: space_id }, 'A2A dispatch succeeded');
+        return { success: true };
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        request.log.warn({ targetAgentId, spaceId: space_id, error: errorMessage }, 'A2A dispatch failed');
+        // Return generic error to caller, detailed error is logged above
+        return { success: false, error: 'Dispatch failed' };
+      }
     };
 
     const result = await spaceManager.broadcastToSpace(
@@ -1331,7 +1478,7 @@ export function registerProofCommRoutes(
         senderAgentId: agentId,
         message: a2aMessage,
       },
-      stubDispatch,
+      dispatchToAgent,
       {
         requestId: request.requestId,
         traceId: request.headers['x-trace-id'] as string | undefined,
