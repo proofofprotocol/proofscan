@@ -1351,16 +1351,17 @@ export function registerProofCommRoutes(
           return { success: false, error: 'Agent not found' };
         }
 
-        // Guild-registered agents store config as { url, source, registered_at, ... }
-        // Type assertion is safe because we check url existence below
-        const config = target.config as { url?: string; allow_local?: boolean } | undefined;
-        if (!config?.url) {
-          request.log.warn({ targetAgentId, spaceId: space_id }, 'A2A dispatch: agent has no URL');
+        // Validate config shape at runtime (guards against DB corruption or schema changes)
+        const config = target.config;
+        if (!config || typeof config !== 'object' || !('url' in config) || typeof config.url !== 'string' || !config.url) {
+          request.log.warn({ targetAgentId, spaceId: space_id }, 'A2A dispatch: agent has invalid config');
           return { success: false, error: 'Agent configuration invalid' };
         }
 
         // Validate allow_local is boolean if present (defense against config corruption)
-        const allowLocal = typeof config.allow_local === 'boolean' ? config.allow_local : false;
+        const allowLocal = 'allow_local' in config && typeof config.allow_local === 'boolean'
+          ? config.allow_local
+          : false;
 
         // Check cache for AgentCard
         // Note: Concurrent requests may race on cache-miss and fetch multiple times;
@@ -1378,10 +1379,13 @@ export function registerProofCommRoutes(
           // If parse fails, treat as cache miss and fetch fresh
         }
 
-        // Fetch AgentCard if not cached, invalid, expired, or missing expiry
-        // (missing expiresAt is treated as expired to ensure we always have a TTL)
+        // Determine if we need to fetch: no valid card, expired, or missing expiry timestamp
         const isExpired = !cached?.expiresAt || new Date(cached.expiresAt) < now;
-        if (!agentCard || isExpired) {
+        const needsFetch = !agentCard || isExpired;
+
+        if (needsFetch) {
+          // SSRF protection: fetchAgentCard validates URLs against private IP ranges
+          // and enforces allowLocal=false by default. See src/a2a/agent-card.ts isPrivateUrl()
           const fetchResult = await fetchAgentCard(config.url, {
             allowLocal,
             timeout: AGENT_CARD_FETCH_TIMEOUT_MS,
@@ -1402,6 +1406,15 @@ export function registerProofCommRoutes(
             fetchedAt: now.toISOString(),
             expiresAt: new Date(now.getTime() + AGENT_CARD_CACHE_TTL_MS).toISOString(),
           });
+        }
+
+        // At this point agentCard is guaranteed to be defined:
+        // - Either from valid cache (needsFetch was false)
+        // - Or from successful fetch (we return early on failure)
+        if (!agentCard) {
+          // This should never happen, but guard for type safety
+          request.log.error({ targetAgentId, spaceId: space_id }, 'A2A dispatch: unexpected undefined agentCard');
+          return { success: false, error: 'Internal error' };
         }
 
         // Create A2AClient and send message
